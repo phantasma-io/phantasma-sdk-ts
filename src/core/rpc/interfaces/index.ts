@@ -42,6 +42,8 @@ export * from './TransactionData.js';
 export * from './Validator.js';
 export * from './CursorPaginatedResult.js';
 export * from './TokenSeriesResult.js';
+export * from './BuildInfoResult.js';
+export * from './PhantasmaVmConfig.js';
 export * from './TokenSchemasResult.js';
 export * from './VmNamedVariableSchemaResult.js';
 export * from './VmStructSchemaResult.js';

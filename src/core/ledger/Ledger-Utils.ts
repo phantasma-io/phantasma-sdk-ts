@@ -37,7 +37,7 @@ export const ErrorDescriptions = {
 };
 
 /**
- * Get's the error message.
+ * Gets the error message.
  * @param responseStr
  * @returns
  */

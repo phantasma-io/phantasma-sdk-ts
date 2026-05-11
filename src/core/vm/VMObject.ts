@@ -1,14 +1,22 @@
-import BigInteger from 'big-integer';
 import { VMType } from './VMType.js';
 import { Timestamp } from '../types/Timestamp.js';
-import { Address, Base16, Describer, PBinaryReader, PBinaryWriter, Serialization } from '../types/index.js';
+import {
+  Address,
+  Base16,
+  Describer,
+  PBinaryReader,
+  PBinaryWriter,
+  Serialization,
+} from '../types/index.js';
 import { ISerializable } from '../interfaces/index.js';
-import { uint8ArrayToBytes, uint8ArrayToStringDefault } from '../utils/index.js';
+import { uint8ArrayToStringDefault } from '../utils/index.js';
 import { Type } from 'typescript';
+import { twosComplementLEToBigInt } from '../types/CarbonSerialization.js';
+import { bigIntToTwosComplementLE_phantasma } from '../types/PhantasmaBigIntSerialization.js';
 
 export class VMObject implements ISerializable {
   public Type: VMType;
-  public Data: object | null | undefined;
+  public Data: any;
   public get IsEmpty(): boolean {
     return this.Data == null || this.Data == undefined;
   }
@@ -40,6 +48,68 @@ export class VMObject implements ISerializable {
     this.Data = null;
   }
 
+  private static bytesFromAny(value: any): Uint8Array {
+    if (value instanceof Uint8Array) {
+      return value;
+    }
+    if (Array.isArray(value)) {
+      return Uint8Array.from(value);
+    }
+    if (typeof Buffer !== 'undefined' && Buffer.isBuffer(value)) {
+      return new Uint8Array(value);
+    }
+    if (typeof value === 'string') {
+      return Base16.decodeUint8Array(value);
+    }
+    throw new Error(`Cannot convert ${typeof value} to bytes`);
+  }
+
+  private static bigIntFromAny(value: any): bigint {
+    if (typeof value === 'bigint') {
+      return value;
+    }
+    if (typeof value === 'number') {
+      return BigInt(value);
+    }
+    if (typeof value === 'string' || value instanceof String) {
+      return BigInt(value.toString());
+    }
+    if (value && typeof value.toString === 'function') {
+      return BigInt(value.toString());
+    }
+    throw new Error(`Cannot convert ${typeof value} to BigInteger`);
+  }
+
+  private static serializeToBytes(value: VMObject): Uint8Array {
+    const writer = new PBinaryWriter();
+    value.SerializeData(writer);
+    return writer.toUint8Array();
+  }
+
+  private static base64Encode(bytes: Uint8Array): string {
+    if (typeof Buffer !== 'undefined') {
+      return Buffer.from(bytes).toString('base64');
+    }
+    let binary = '';
+    for (const byte of bytes) {
+      binary += String.fromCharCode(byte);
+    }
+    return btoa(binary);
+  }
+
+  private GetArrayValue(index: number): VMObject | null {
+    const children = this.GetChildren();
+    if (!children) {
+      return null;
+    }
+    for (const [key, value] of children) {
+      if (key.Type === VMType.Number && key.AsNumber() === BigInt(index)) {
+        return value;
+      }
+    }
+    return null;
+  }
+
   public AsTimestamp(): Timestamp {
     if (this.Type != VMType.Timestamp) {
       throw new Error(`Invalid cast: expected timestamp, got ${this.Type}`);
@@ -51,27 +121,30 @@ export class VMObject implements ISerializable {
   public AsByteArray(): Uint8Array {
     switch (this.Type) {
       case VMType.Bytes:
-        return this.Data as Uint8Array;
+        return VMObject.bytesFromAny(this.Data);
       case VMType.Bool:
         return new Uint8Array([(this.Data as unknown as boolean) ? 1 : 0]);
       case VMType.String:
         return new TextEncoder().encode(this.AsString() as string);
       case VMType.Number:
-      // Here you will have to convert BigInteger to Uint8Array manually
+        return bigIntToTwosComplementLE_phantasma(this.AsNumber());
       case VMType.Enum:
-        var num = this.AsNumber() as unknown as number;
-        var bytes = new Uint8Array(new ArrayBuffer(4));
-        new DataView(bytes.buffer).setUint32(0, num);
+        var num = Number(this.AsNumber());
+        var bytes = new Uint8Array(4);
+        new DataView(bytes.buffer).setUint32(0, num, true);
         return bytes;
       case VMType.Timestamp:
         var time = this.AsTimestamp();
-        var bytes = new Uint8Array(new ArrayBuffer(4));
-        new DataView(bytes.buffer).setUint32(0, time.value);
+        var bytes = new Uint8Array(4);
+        new DataView(bytes.buffer).setUint32(0, time.value, true);
         return bytes;
       case VMType.Struct:
-      // Here you will have to convert struct to Uint8Array manually
+        return VMObject.serializeToBytes(this);
       case VMType.Object:
-      // here you will have to convert ISerializable to Uint8Array manually
+        if (this.Data instanceof Address) {
+          return this.Data.ToByteArray();
+        }
+        return VMObject.bytesFromAny(this.Data);
       default:
         throw new Error(`Invalid cast: expected bytes, got ${this.Type}`);
     }
@@ -82,7 +155,7 @@ export class VMObject implements ISerializable {
       case VMType.String:
         return this.Data?.toString() as string;
       case VMType.Number:
-        return (this.Data as BigInteger).toString();
+        return this.AsNumber().toString();
       case VMType.Bytes:
         return uint8ArrayToStringDefault(this.Data as Uint8Array);
       case VMType.Enum:
@@ -98,25 +171,25 @@ export class VMObject implements ISerializable {
       case VMType.Struct:
         const arrayType = this.GetArrayType();
         if (arrayType === VMType.Number) {
-          // convert array of unicode numbers into a string
+          // Gen2 VM strings can be represented as structs keyed by numeric
+          // indexes. Preserve that observable conversion before falling back
+          // to serialized bytes for non-array structs.
           const children = this.GetChildren();
           let sb = '';
 
           for (let i = 0; i < children!.size; i++) {
-            const key = VMObject.FromObject(i);
-            const val = children?.get(key);
+            const val = this.GetArrayValue(i);
+            if (!val) {
+              throw new Error(`Invalid cast: expected string, got ${this.Type}`);
+            }
 
-            const ch = String.fromCharCode(val!.AsNumber() as unknown as number);
+            const ch = String.fromCharCode(Number(val.AsNumber()));
             sb += ch;
           }
 
           return sb;
-        } else {
-          /*const buffer = new ArrayBuffer(this.Data?.length as number);
-              const view = new DataView(buffer);
-              this.SerializeData(view);
-              return btoa(String.fromCharCode.apply(null, new Uint8Array(buffer)));*/
         }
+        return VMObject.base64Encode(VMObject.serializeToBytes(this));
       case VMType.Bool:
         return this.Data ? 'true' : 'false';
       case VMType.Timestamp:
@@ -131,7 +204,7 @@ export class VMObject implements ISerializable {
       case VMType.String:
         return this.Data as unknown as string;
       case VMType.Number:
-        return (this.Data as BigInteger).toString();
+        return this.AsNumber().toString();
       case VMType.Bytes:
         return new TextDecoder().decode(this.Data as Uint8Array);
       case VMType.Enum:
@@ -147,22 +220,19 @@ export class VMObject implements ISerializable {
       case VMType.Struct:
         const arrayType = this.GetArrayType();
         if (arrayType === VMType.Number) {
-          // convert array of unicode numbers into a string
           const children = this.GetChildren();
           let sb = '';
           for (let i = 0; i < children!.size; i++) {
-            const key = VMObject.FromObject(i);
-            const val = children!.get(key);
-            const ch = String.fromCharCode(val!.AsNumber() as unknown as number);
+            const val = this.GetArrayValue(i);
+            if (!val) {
+              throw new Error(`Invalid cast: expected string, got ${this.Type}`);
+            }
+            const ch = String.fromCharCode(Number(val.AsNumber()));
             sb += ch;
           }
           return sb;
-        } else {
-          /*const stream = new PMemoryStream();
-              const writer = new PBinaryWriter(stream);
-              this.SerializeData(writer);
-              return new TextDecoder().decode(stream.toArray());*/
         }
+        return VMObject.base64Encode(VMObject.serializeToBytes(this));
       case VMType.Bool:
         return this.Data ? 'true' : 'false';
       case VMType.Timestamp:
@@ -172,47 +242,58 @@ export class VMObject implements ISerializable {
     }
   }
 
-  public AsNumber(): number {
-    if (
-      (this.Type === VMType.Object || this.Type === VMType.Timestamp) &&
-      this.Data instanceof Timestamp
-    ) {
-      return (this.Data as Timestamp).value as unknown as number;
-    }
-
+  public AsNumber(): bigint {
     switch (this.Type) {
+      case VMType.None:
+        return 0n;
+
       case VMType.String: {
-        let number: Number = Number(this.Data);
-        if (number.toString() === (this.Data as unknown as string)) {
-          return number as unknown as number;
-        } else {
+        const value = this.Data?.toString() ?? '';
+        if (!/^[+-]?\d+$/.test(value)) {
           throw new Error(`Cannot convert String '${this.Data}' to BigInteger.`);
         }
+        return BigInt(value);
       }
 
       case VMType.Bytes: {
-        const bytes = new Uint8Array(this.Data as ArrayBuffer);
-        const num = BigInt(`0x${bytes.join('')}`);
-        return num as unknown as number;
+        // VM numeric byte casts use the same signed little-endian BigInteger
+        // bytes emitted by the Gen2 C# VM, including empty and negative forms.
+        return twosComplementLEToBigInt(VMObject.bytesFromAny(this.Data));
       }
 
       case VMType.Enum: {
-        const num = Number(this.Data);
-        return BigInt(num) as unknown as number;
+        return BigInt(Number(this.Data));
       }
 
       case VMType.Bool: {
         const val = this.Data as unknown as boolean;
-        return val ? 1 : 0;
+        return val ? 1n : 0n;
       }
 
-      default: {
-        if (this.Type !== VMType.Number) {
+      case VMType.Number:
+        return VMObject.bigIntFromAny(this.Data);
+
+      case VMType.Timestamp:
+        return BigInt((this.Data as Timestamp).value);
+
+      case VMType.Object: {
+        if (this.Data instanceof Timestamp) {
+          return BigInt(this.Data.value);
+        }
+        if (this.Data instanceof Address) {
           throw new Error(`Invalid cast: expected number, got ${this.Type}`);
         }
-
-        return Number(this.Data);
+        const bytes = VMObject.bytesFromAny(this.Data);
+        if (bytes.length === 32) {
+          // Gen2 treats non-address 32-byte objects as VM hash-like numeric
+          // payloads, but actual Address objects must keep rejecting number casts.
+          return twosComplementLEToBigInt(bytes);
+        }
+        throw new Error(`Invalid cast: expected number, got ${this.Type}`);
       }
+
+      default:
+        throw new Error(`Invalid cast: expected number, got ${this.Type}`);
     }
   }
 
@@ -222,7 +303,7 @@ export class VMObject implements ISerializable {
     }
 
     if (this.Type !== VMType.Enum) {
-      this.Data = new Number(this.AsNumber());
+      this.Data = Number(this.AsNumber());
     }
 
     return this.Data as any as T;
@@ -238,17 +319,14 @@ export class VMObject implements ISerializable {
     let result: VMType = VMType.None;
 
     for (let i = 0; i < children!.size; i++) {
-      const key = VMObject.FromObject(i);
-
-      if (!children!.has(key)) {
+      const val = this.GetArrayValue(i);
+      if (!val) {
         return VMType.None;
       }
 
-      const val = children!.get(key);
-
       if (result === VMType.None) {
-        result = val!.Type;
-      } else if (val!.Type !== result) {
+        result = val.Type;
+      } else if (val.Type !== result) {
         return VMType.None;
       }
     }
@@ -312,9 +390,16 @@ export class VMObject implements ISerializable {
   public AsBool(): boolean {
     switch (this.Type) {
       case VMType.String:
-        return (this.Data as unknown as string).toLowerCase() == 'true';
+        throw new Error(`Invalid cast: expected bool, got ${this.Type}`);
       case VMType.Number:
-        return (this.Data as BigInt) != BigInt(0);
+        return this.AsNumber() !== 0n;
+      case VMType.Bytes: {
+        const bytes = VMObject.bytesFromAny(this.Data);
+        if (bytes.length === 1) {
+          return bytes[0] !== 0;
+        }
+        throw new Error(`Invalid cast: expected bool, got ${this.Type}`);
+      }
       case VMType.Bool:
         return (this.Data as unknown as boolean) ? true : false;
       default:
@@ -387,7 +472,7 @@ export class VMObject implements ISerializable {
         throw new Error('source contains an element with invalid array index');
       }
 
-      const temp = child[0].AsNumber();
+      const temp = Number(child[0].AsNumber());
       // TODO use a constant for VM max array size
       if (temp >= 1024) {
         throw new Error('source contains an element with a very large array index');
@@ -405,7 +490,7 @@ export class VMObject implements ISerializable {
     const array: any[] = new Array(length);
 
     for (const child of children) {
-      const temp = child[0].AsNumber();
+      const temp = Number(child[0].AsNumber());
       const index = Math.floor(temp);
 
       let val = child[1].ToObjectType(arrayElementType);
@@ -426,7 +511,7 @@ export class VMObject implements ISerializable {
       } else if (VMObject.isStructOrClass(type)) {
         return this.ToStruct(type);
       } else {
-        throw new Error('some stuff still missing: eg: lists, dictionaries..');
+        throw new Error('Unsupported VM struct conversion target');
       }
     } else {
       const temp = this.ToObject();
@@ -591,6 +676,27 @@ export class VMObject implements ISerializable {
 
   public SetValue(value: any): VMObject {
     this.Data = value;
+    if (value instanceof VMObject) {
+      this.Type = value.Type;
+      this.Data = value.Data;
+    } else if (value instanceof Map) {
+      this.Type = VMType.Struct;
+    } else if (value instanceof Uint8Array || Array.isArray(value)) {
+      this.Type = VMType.Bytes;
+    } else if (value instanceof Timestamp) {
+      this.Type = VMType.Timestamp;
+    } else if (value instanceof Address) {
+      this.Type = VMType.Object;
+    } else if (typeof value === 'bigint' || typeof value === 'number') {
+      this.Type = VMType.Number;
+      this.Data = BigInt(value);
+    } else if (typeof value === 'string' || value instanceof String) {
+      this.Type = VMType.String;
+      this.Data = value.toString();
+    } else if (typeof value === 'boolean' || value instanceof Boolean) {
+      this.Type = VMType.Bool;
+      this.Data = Boolean(value);
+    }
     return this;
   }
 
@@ -603,19 +709,30 @@ export class VMObject implements ISerializable {
         this.Data = val;
         break;
       case VMType.Number:
-        this.Data = val == null ? BigInt(0) : val;
+        this.Data = val == null ? 0n : VMObject.bigIntFromAny(val);
         break;
       case VMType.String:
-        this.Data = new String(val);
+        this.Data = val?.toString() ?? '';
         break;
       case VMType.Enum:
         this.Data = val;
         break;
       case VMType.Timestamp:
-        this.Data = new Timestamp(val.slice(0, 4));
+        if (val instanceof Timestamp) {
+          this.Data = val;
+        } else if (Array.isArray(val) || val instanceof Uint8Array) {
+          const bytes = VMObject.bytesFromAny(val).slice(0, 4);
+          let value = 0;
+          for (let i = bytes.length - 1; i >= 0; i--) {
+            value = value * 256 + bytes[i];
+          }
+          this.Data = new Timestamp(value);
+        } else {
+          this.Data = new Timestamp(Number(val));
+        }
         break;
       case VMType.Bool:
-        this.Data = new Boolean(val[0] === 1);
+        this.Data = Array.isArray(val) || val instanceof Uint8Array ? val[0] !== 0 : Boolean(val);
         break;
       default:
         if (val instanceof Uint8Array) {
@@ -775,36 +892,44 @@ export class VMObject implements ISerializable {
 
       case VMType.String: {
         let result = new VMObject();
-        result.SetValue(srcObj.AsString());
+        result.setValue(srcObj.AsString(), VMType.String);
         return result;
       }
 
       case VMType.Timestamp: {
         let result = new VMObject();
-        result.SetValue(srcObj.AsTimestamp());
+        result.setValue(srcObj.AsTimestamp().value, VMType.Timestamp);
         return result;
       }
 
       case VMType.Bool: {
         let result = new VMObject();
-        result.SetValue(srcObj.AsBool());
+        result.setValue(srcObj.AsBool(), VMType.Bool);
         return result;
       }
 
       case VMType.Bytes: {
         let result = new VMObject();
-        result.SetValue(srcObj.AsByteArray());
+        result.setValue(srcObj.AsByteArray(), VMType.Bytes);
         return result;
       }
 
       case VMType.Number: {
         let result = new VMObject();
-        result.SetValue(srcObj.AsNumber());
+        result.setValue(srcObj.AsNumber(), VMType.Number);
         return result;
       }
 
       case VMType.Struct: {
         switch (srcObj.Type) {
+          case VMType.String: {
+            const text = srcObj.AsString();
+            const values: number[] = [];
+            for (let i = 0; i < text.length; i++) {
+              values.push(text.charCodeAt(i));
+            }
+            return VMObject.FromArray(values);
+          }
           case VMType.Enum: {
             var result = new VMObject();
             result.SetValue(srcObj.AsEnum()); // TODO does this work for all types?
@@ -812,7 +937,7 @@ export class VMObject implements ISerializable {
           }
           case VMType.Object: {
             var result = new VMObject();
-            result.SetValue(srcObj.CastViaReflection(srcObj.Data, 0)); // TODO does this work for all types?
+            result.Copy(srcObj);
             return result;
           }
           default:
@@ -900,8 +1025,6 @@ export class VMObject implements ISerializable {
       return;
     }
 
-    let dataType = typeof this.Data;
-
     switch (this.Type) {
       case VMType.Struct: {
         let children = this.GetChildren();
@@ -922,32 +1045,44 @@ export class VMObject implements ISerializable {
       }
 
       case VMType.Object: {
-        var obj = this.Data as ISerializable;
-
-        if (obj != null) {
-          var bytes = Serialization.Serialize(obj);
-          var uintBytes = uint8ArrayToBytes(bytes);
-          writer.writeByteArray(uintBytes);
+        // Object serialization wraps the inner serialized payload in a VM byte
+        // array. Address values keep their address serializer, while raw object
+        // bytes intentionally roundtrip as Bytes when they are not address-shaped.
+        const inner = new PBinaryWriter();
+        if (this.Data instanceof Address) {
+          this.Data.SerializeData(inner);
+        } else if (this.Data instanceof Uint8Array || Array.isArray(this.Data)) {
+          inner.writeByteArray(VMObject.bytesFromAny(this.Data));
+        } else if (this.Data && typeof this.Data.SerializeData === 'function') {
+          this.Data.SerializeData(inner);
         } else {
-          throw `Objects of type ${dataType} cannot be serialized`;
+          throw new Error(`Objects of type ${typeof this.Data} cannot be serialized`);
         }
-
+        writer.writeByteArray(inner.toUint8Array());
         break;
       }
 
       case VMType.Enum: {
-        let temp2: number = 0;
-        temp2 = this.Data as unknown as number;
-        let uint8array = new Uint8Array(4);
-        writer = new PBinaryWriter(uint8array);
-        writer.writeByte(this.Type as number);
-        writer.writeEnum(temp2);
+        writer.writeVarInt(Number(this.Data));
         break;
       }
-      default:
-        let localBytes = Serialization.Serialize(this.Data);
-        writer.writeByteArray(localBytes);
+      case VMType.Bool:
+        writer.writeBoolean(this.AsBool());
         break;
+      case VMType.Bytes:
+        writer.writeByteArray(this.AsByteArray());
+        break;
+      case VMType.Number:
+        writer.writeBigInteger(this.AsNumber() as any);
+        break;
+      case VMType.String:
+        writer.writeString(this.AsString());
+        break;
+      case VMType.Timestamp:
+        writer.writeTimestamp(this.AsTimestamp());
+        break;
+      default:
+        throw new Error(`Unsupported VMObject serialization type: ${this.Type}`);
     }
 
     return writer.toUint8Array();
@@ -957,8 +1092,6 @@ export class VMObject implements ISerializable {
     if (this.Type == VMType.None) {
       return;
     }
-
-    let dataType = typeof this.Data;
 
     switch (this.Type) {
       case VMType.Struct: {
@@ -977,31 +1110,41 @@ export class VMObject implements ISerializable {
       }
 
       case VMType.Object: {
-        var obj = this.Data as ISerializable;
-
-        if (obj != null) {
-          var bytes = Serialization.Serialize(obj);
-          var uintBytes = uint8ArrayToBytes(bytes);
-          writer.writeByteArray(uintBytes);
+        const inner = new PBinaryWriter();
+        if (this.Data instanceof Address) {
+          this.Data.SerializeData(inner);
+        } else if (this.Data instanceof Uint8Array || Array.isArray(this.Data)) {
+          inner.writeByteArray(VMObject.bytesFromAny(this.Data));
+        } else if (this.Data && typeof this.Data.SerializeData === 'function') {
+          this.Data.SerializeData(inner);
         } else {
-          throw `Objects of type ${dataType} cannot be serialized`;
+          throw new Error(`Objects of type ${typeof this.Data} cannot be serialized`);
         }
-
+        writer.writeByteArray(inner.toUint8Array());
         break;
       }
 
       case VMType.Enum: {
-        let temp2: number = 0;
-        temp2 = this.Data as unknown as number;
-        let uint8array = new Uint8Array(4);
-        writer = new PBinaryWriter(uint8array);
-        writer.writeEnum(temp2);
+        writer.writeVarInt(Number(this.Data));
         break;
       }
-      default:
-        let localBytes = Serialization.Serialize(this.Data);
-        writer.writeByteArray(uint8ArrayToBytes(localBytes));
+      case VMType.Bool:
+        writer.writeBoolean(this.AsBool());
         break;
+      case VMType.Bytes:
+        writer.writeByteArray(this.AsByteArray());
+        break;
+      case VMType.Number:
+        writer.writeBigInteger(this.AsNumber() as any);
+        break;
+      case VMType.String:
+        writer.writeString(this.AsString());
+        break;
+      case VMType.Timestamp:
+        writer.writeTimestamp(this.AsTimestamp());
+        break;
+      default:
+        throw new Error(`Unsupported VMObject serialization type: ${this.Type}`);
     }
 
     return writer.toUint8Array();
@@ -1051,11 +1194,11 @@ export class VMObject implements ISerializable {
     this.Type = reader.readByte() as VMType;
     switch (this.Type) {
       case VMType.Bool:
-        this.Data = Serialization.Unserialize<Boolean>(reader, Boolean);
+        this.Data = reader.readBoolean();
         break;
 
       case VMType.Bytes:
-        this.Data = Serialization.Unserialize<Uint8Array>(reader, Uint8Array);
+        this.Data = VMObject.bytesFromAny(reader.readByteArray());
         break;
 
       case VMType.Number:
@@ -1094,11 +1237,12 @@ export class VMObject implements ISerializable {
         break;
 
       case VMType.Object:
-        let bytes = reader.readByteArray();
+        let bytes = VMObject.bytesFromAny(reader.readByteArray());
 
-        if (bytes.length == 35) {
-          let addr = Serialization.Unserialize<Address>(bytes, Address);
-          this.Data = addr;
+        // Gen2 only restores VM Object when the wrapped payload is an encoded
+        // Address. Other object payloads remain byte arrays after deserialization.
+        if (bytes.length == Address.LengthInBytes + 1 && bytes[0] == Address.LengthInBytes) {
+          this.Data = Address.FromBytes(bytes.slice(1));
           this.Type = VMType.Object;
         } else {
           this.Type = VMType.Bytes;

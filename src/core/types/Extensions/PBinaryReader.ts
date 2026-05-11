@@ -1,10 +1,10 @@
-import BigInteger from 'big-integer';
 import { BinaryWriter, BinaryReader, Encoding } from 'csharp-binary-stream';
 import { ISignature, SignatureKind, Signature } from '../../interfaces/index.js';
 import { bytesToHex, stringToUint8Array } from '../../utils/index.js';
 import { VMType } from '../../vm/index.js';
 import { Ed25519Signature } from '../Ed25519Signature.js';
 import { Timestamp } from '../Timestamp.js';
+import { twosComplementLEToBigInt } from '../CarbonSerialization.js';
 
 export class PBinaryReader {
   reader: BinaryReader;
@@ -95,27 +95,13 @@ export class PBinaryReader {
     return res;
   }
 
-  public readBigInteger(): BigInt {
-    // TO DO: implement negative numbers
+  public readBigInteger(): bigint {
     var len = this.readVarInt();
-    var res = 0;
-    var stringBytes = this.read(len);
-    [...(stringBytes.match(/.{1,2}/g) as any)]
-      .reverse()
-      .forEach((c) => (res = res * 256 + parseInt(c, 16)));
-
-    let bigInt = BigInt(res);
-    return bigInt;
+    return twosComplementLEToBigInt(Uint8Array.from(this.readBytes(len)));
   }
 
   public readBigIntAccurate() {
-    var len = this.readVarInt();
-    var res = BigInteger();
-    var stringBytes = this.read(len);
-    [...(stringBytes.match(/.{1,2}/g) as any)].reverse().forEach((c) => {
-      res = res.times(256).plus(parseInt(c, 16));
-    });
-    return res.toString();
+    return this.readBigInteger().toString();
   }
 
   public readSignatureV2(): Signature {

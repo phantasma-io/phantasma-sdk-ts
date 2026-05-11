@@ -210,7 +210,7 @@ export class ScriptBuilder {
       let temp_regKey = reg + 2;
 
       this.EmitLoad(temp_regVal, element);
-      this.EmitLoad(temp_regKey, i);
+      this.EmitLoad(temp_regKey, BigInt(i));
       this.Emit(Opcode.PUT, [temp_regVal, reg, temp_regKey]);
       //this.EmitLoad(reg, element);
       //this.EmitPush(reg);
@@ -433,8 +433,8 @@ export class ScriptBuilder {
   public AllowGas(
     from: string | Address,
     to: string | Address,
-    gasPrice: number,
-    gasLimit: number
+    gasPrice: number | bigint,
+    gasLimit: number | bigint
   ): this {
     return this.CallContract(Contracts.GasContractName, 'AllowGas', [from, to, gasPrice, gasLimit]);
   }
@@ -443,13 +443,72 @@ export class ScriptBuilder {
     return this.CallContract(Contracts.GasContractName, 'SpendGas', [address]);
   }
 
-  async CallRPC<T>(methodName: string, params: any[]): Promise<T> {
-    return 'bla' as unknown as T;
+  public MintTokens(
+    symbol: string,
+    from: string | Address,
+    to: string | Address,
+    amount: number | bigint
+  ): this {
+    return this.CallInterop('Runtime.MintTokens', [from, to, symbol, amount]);
   }
 
-  async GetAddressTransactionCount(address: string, chainInput: string): Promise<number> {
-    let params = [address, chainInput];
-    return await this.CallRPC<number>('getAddressTransactionCount', params);
+  public TransferTokens(
+    symbol: string,
+    from: string | Address,
+    to: string | Address,
+    amount: number | bigint
+  ): this {
+    return this.CallInterop('Runtime.TransferTokens', [from, to, symbol, amount]);
+  }
+
+  public TransferBalance(symbol: string, from: string | Address, to: string | Address): this {
+    return this.CallInterop('Runtime.TransferBalance', [from, to, symbol]);
+  }
+
+  public TransferNFT(
+    symbol: string,
+    from: string | Address,
+    to: string | Address,
+    tokenId: number | bigint
+  ): this {
+    return this.CallInterop('Runtime.TransferToken', [from, to, symbol, tokenId]);
+  }
+
+  public CrossTransferToken(
+    destinationChain: string | Address,
+    symbol: string,
+    from: string | Address,
+    to: string | Address,
+    amount: number | bigint
+  ): this {
+    return this.CallInterop('Runtime.SendTokens', [destinationChain, from, to, symbol, amount]);
+  }
+
+  public CrossTransferNFT(
+    destinationChain: string | Address,
+    symbol: string,
+    from: string | Address,
+    to: string | Address,
+    tokenId: number | bigint
+  ): this {
+    return this.CallInterop('Runtime.SendToken', [destinationChain, from, to, symbol, tokenId]);
+  }
+
+  public Stake(address: string | Address, amount: number | bigint): this {
+    return this.CallContract('stake', 'Stake', [address, amount]);
+  }
+
+  public Unstake(address: string | Address, amount: number | bigint): this {
+    return this.CallContract('stake', 'Unstake', [address, amount]);
+  }
+
+  public CallNFT(
+    symbol: string,
+    seriesId: number | bigint,
+    method: string,
+    args: any[] = []
+  ): this {
+    return this.CallContract(`${symbol}#${seriesId.toString()}`, method, args);
   }
 
   //#endregion
@@ -489,7 +548,7 @@ export class ScriptBuilder {
       let B = (value & 0x0000ff00) >> 8;
       let A = value & 0x000000ff;
 
-      // TODO check if the endianess is correct, might have to reverse order of appends
+      // VM variable integers append the least significant byte first.
       this.AppendByte(0xfd);
       this.AppendByte(A);
       this.AppendByte(B);
@@ -498,7 +557,7 @@ export class ScriptBuilder {
       let B = (value & 0x0000ff00) >> 8;
       let A = value & 0x000000ff;
 
-      // TODO check if the endianess is correct, might have to reverse order of appends
+      // VM variable integers append the least significant byte first.
       this.AppendByte(0xfe);
       this.AppendByte(A);
       this.AppendByte(B);
@@ -509,7 +568,7 @@ export class ScriptBuilder {
       let B = (value & 0x0000ff00) >> 8;
       let A = value & 0x000000ff;
 
-      // TODO check if the endianess is correct, might have to reverse order of appends
+      // VM variable integers append the least significant byte first.
       this.AppendByte(0xff);
       this.AppendByte(A);
       this.AppendByte(B);
@@ -527,7 +586,7 @@ export class ScriptBuilder {
     let B = (value & 0x0000ff00) >> 8;
     let A = value & 0x000000ff;
 
-    // TODO check if the endianess is correct, might have to reverse order of appends
+    // VM integers append the least significant byte first.
     this.AppendByte(0xff);
     this.AppendByte(A);
     this.AppendByte(B);

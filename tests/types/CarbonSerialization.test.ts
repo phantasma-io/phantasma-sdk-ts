@@ -5,6 +5,7 @@ import { CarbonBinaryWriter, CarbonBinaryReader } from '../../src/core/types/Car
 
 import { Bytes32 } from '../../src/core/types/Carbon/Bytes32';
 import { IntX } from '../../src/core/types/Carbon/IntX';
+import { SmallString } from '../../src/core/types/Carbon/SmallString';
 import { TxTypes } from '../../src/core/types/Carbon/TxTypes';
 
 import { CarbonTokenFlags } from '../../src/core/types/Carbon/Blockchain/CarbonTokenFlags';
@@ -19,7 +20,11 @@ import {
   TxMsgTransferFungible,
   TxMsgTransferFungibleGasPayer,
 } from '../../src/core/types/Carbon/Blockchain';
+import { TxMsgSigner } from '../../src/core/types/Carbon/Blockchain/Extensions/TxMsgSigner';
 import {
+  NftRomBuilder,
+  SeriesInfoBuilder,
+  TokenInfoBuilder,
   TokenMetadataBuilder,
   TokenSchemasBuilder,
 } from '../../src/core/types/Carbon/Blockchain/Modules/Builders';
@@ -31,14 +36,16 @@ import {
   TokenSchemas,
 } from '../../src/core/types/Carbon/Blockchain/Modules';
 import {
+  CreateTokenSeriesTxHelper,
+  CreateTokenTxHelper,
   CreateSeriesFeeOptions,
   CreateTokenFeeOptions,
+  MintNonFungibleTxHelper,
   MintNftFeeOptions,
 } from '../../src/core/types/Carbon/Blockchain/TxHelpers';
 import {
   VmDynamicStruct,
   VmNamedDynamicVariable,
-  VmNamedVariableSchema,
   VmStructSchema,
   VmType,
 } from '../../src/core/types/Carbon/Blockchain/Vm';
@@ -140,7 +147,10 @@ const encodeBlobHex = (blob: { write: (w: CarbonBinaryWriter) => void }): string
   return bytesToHex(w.toUint8Array());
 };
 
-const expectReencodedHex = (blob: { write: (w: CarbonBinaryWriter) => void }, expectedHex: string): void => {
+const expectReencodedHex = (
+  blob: { write: (w: CarbonBinaryWriter) => void },
+  expectedHex: string
+): void => {
   expect(encodeBlobHex(blob).toUpperCase()).toBe(expectedHex.toUpperCase());
 };
 
@@ -172,7 +182,9 @@ const expectStructString = (struct: VmDynamicStruct, name: string, expected: str
 const expectStructBytes = (struct: VmDynamicStruct, name: string, expected: Uint8Array): void => {
   const field = getStructField(struct, name);
   expect(field.value.type).toBe(VmType.Bytes);
-  expect(bytesToHex(field.value.data as Uint8Array).toUpperCase()).toBe(bytesToHex(expected).toUpperCase());
+  expect(bytesToHex(field.value.data as Uint8Array).toUpperCase()).toBe(
+    bytesToHex(expected).toUpperCase()
+  );
 };
 
 const expectStructInt256 = (struct: VmDynamicStruct, name: string, expected: bigint): void => {
@@ -194,8 +206,12 @@ const expectStructInt32 = (struct: VmDynamicStruct, name: string, expected: numb
 };
 
 const expectSchemaMatches = (actual: VmStructSchema, expected: VmStructSchema): void => {
-  expect(actual.fields.map((f) => f.name.data)).toStrictEqual(expected.fields.map((f) => f.name.data));
-  expect(actual.fields.map((f) => f.schema.type)).toStrictEqual(expected.fields.map((f) => f.schema.type));
+  expect(actual.fields.map((f) => f.name.data)).toStrictEqual(
+    expected.fields.map((f) => f.name.data)
+  );
+  expect(actual.fields.map((f) => f.schema.type)).toStrictEqual(
+    expected.fields.map((f) => f.schema.type)
+  );
   expect(actual.flags).toBe(expected.flags);
 };
 
@@ -211,6 +227,145 @@ const toSignedInt256 = (value: bigint): bigint => {
   const signBit = 1n << 255n;
   const v = value & mask;
   return (v & signBit) === 0n ? v : v - (1n << 256n);
+};
+
+const txSender = (): PhantasmaKeys =>
+  PhantasmaKeys.fromWIF('KwPpBSByydVKqStGHAnZzQofCqhDmD2bfRgc9BmZqM3ZmsdWJw4d');
+
+const txReceiver = (): PhantasmaKeys =>
+  PhantasmaKeys.fromWIF('KwVG94yjfVg1YKFyRxAGtug93wdRbmLnqqrFV6Yd2CiA9KZDAp4H');
+
+const standardNftMetadata = (includeRawRom = true): Array<{ name: string; value: unknown }> => {
+  const fields: Array<{ name: string; value: unknown }> = [
+    { name: 'name', value: 'My NFT #1' },
+    { name: 'description', value: 'This is my first NFT!' },
+    { name: 'imageURL', value: 'images-assets.nasa.gov/image/PIA13227/PIA13227~orig.jpg' },
+    { name: 'infoURL', value: 'https://images.nasa.gov/details/PIA13227' },
+    { name: 'royalties', value: 10000000 },
+  ];
+  if (includeRawRom) {
+    fields.push({ name: 'rom', value: new Uint8Array([0x01, 0x42]) });
+  }
+  return fields;
+};
+
+const baseVectorTx = (type: TxTypes, gasFrom: Bytes32): TxMsg =>
+  new TxMsg(type, 1759711416000n, 10000000n, 1000n, gasFrom, new SmallString('test-payload'));
+
+const signedTransferVectorBytes = (): Uint8Array => {
+  const sender = txSender();
+  const receiver = txReceiver();
+  const msg = baseVectorTx(TxTypes.TransferFungible, new Bytes32(sender.PublicKey));
+  msg.msg = new TxMsgTransferFungible(new Bytes32(receiver.PublicKey), 1n, 100000000n);
+  return TxMsgSigner.signAndSerialize(msg, sender);
+};
+
+const carbonVectorTx = (kind: Kind): TxMsg => {
+  const sender = txSender();
+  const receiver = txReceiver();
+  const senderPub = new Bytes32(sender.PublicKey);
+  const receiverPub = new Bytes32(receiver.PublicKey);
+
+  switch (kind) {
+    case 'TX1': {
+      const msg = baseVectorTx(TxTypes.TransferFungible, Bytes32.Empty);
+      msg.msg = new TxMsgTransferFungible(Bytes32.Empty, 1n, 100000000n);
+      return msg;
+    }
+    case 'TX-TRANSFER-FUNGIBLE-GASPAYER': {
+      const msg = baseVectorTx(TxTypes.TransferFungible_GasPayer, senderPub);
+      msg.msg = new TxMsgTransferFungibleGasPayer({
+        to: receiverPub,
+        from: senderPub,
+        tokenId: 1n,
+        amount: 100000000n,
+      });
+      return msg;
+    }
+    case 'TX-BURN-FUNGIBLE-GASPAYER': {
+      const msg = baseVectorTx(TxTypes.BurnFungible_GasPayer, senderPub);
+      msg.msg = new TxMsgBurnFungibleGasPayer({
+        tokenId: 1n,
+        from: senderPub,
+        amount: IntX.fromI64(100000000n),
+      });
+      return msg;
+    }
+    case 'TX-MINT-FUNGIBLE': {
+      const msg = baseVectorTx(TxTypes.MintFungible, senderPub);
+      msg.msg = new TxMsgMintFungible({
+        tokenId: 1n,
+        to: receiverPub,
+        amount: IntX.fromI64(100000000n),
+      });
+      return msg;
+    }
+    case 'TX-CREATE-TOKEN': {
+      const schemas = TokenSchemasBuilder.prepareStandard(false);
+      const metadata = TokenMetadataBuilder.buildAndSerialize({
+        name: 'My test token!',
+        icon: SAMPLE_PNG_ICON_DATA_URI,
+        url: 'http://example.com',
+        description: 'My test token description',
+      });
+      const tokenInfo = TokenInfoBuilder.build(
+        'MYNFT',
+        IntX.fromI64(0n),
+        true,
+        0,
+        senderPub,
+        metadata,
+        schemas
+      );
+      return CreateTokenTxHelper.buildTx(
+        tokenInfo,
+        senderPub,
+        new CreateTokenFeeOptions(10000n, 10000000000n, 10000000000n, 10000n),
+        100000000n,
+        1759711416000n
+      );
+    }
+    case 'TX-CREATE-TOKEN-SERIES': {
+      const schemas = TokenSchemasBuilder.prepareStandard(false);
+      const seriesInfo = SeriesInfoBuilder.build(
+        schemas.seriesMetadata,
+        (1n << 256n) - 1n,
+        0,
+        0,
+        senderPub,
+        []
+      );
+      return CreateTokenSeriesTxHelper.buildTx(
+        (1n << 64n) - 1n,
+        seriesInfo,
+        senderPub,
+        new CreateSeriesFeeOptions(10000n, 2500000000n, 10000n),
+        100000000n,
+        1759711416000n
+      );
+    }
+    case 'TX-MINT-NON-FUNGIBLE': {
+      const schemas = TokenSchemasBuilder.prepareStandard(false);
+      const rom = NftRomBuilder.buildAndSerialize(
+        schemas.rom,
+        (1n << 256n) - 1n,
+        standardNftMetadata()
+      );
+      return MintNonFungibleTxHelper.buildTx(
+        (1n << 64n) - 1n,
+        0xffffffff,
+        senderPub,
+        senderPub,
+        rom,
+        new Uint8Array(),
+        new MintNftFeeOptions(10000n, 1000n),
+        100000000n,
+        1759711416000n
+      );
+    }
+    default:
+      throw new Error(`No public encoder for vector kind ${kind}`);
+  }
 };
 
 // ---------- TSV parser ----------
@@ -275,18 +430,25 @@ const encoders: Partial<Record<Kind, Enc>> = {
     w.writeArrayBigInt(items);
   },
 
-  /* eslint-disable @typescript-eslint/no-unused-vars */
-  VMSTRUCT01: (_c, w) => {},
-  VMSTRUCT02: (_c, w) => {},
-  TX1: (_c, w) => {},
-  TX2: (_c, w) => {},
-  'TX-TRANSFER-FUNGIBLE-GASPAYER': (_c, w) => {},
-  'TX-BURN-FUNGIBLE-GASPAYER': (_c, w) => {},
-  'TX-MINT-FUNGIBLE': (_c, w) => {},
-  'TX-CREATE-TOKEN': (_c, w) => {},
-  'TX-CREATE-TOKEN-SERIES': (_c, w) => {},
-  'TX-MINT-NON-FUNGIBLE': (_c, w) => {},
-  /* eslint-enable @typescript-eslint/no-unused-vars */
+  VMSTRUCT01: (_c, w) => TokenSchemasBuilder.prepareStandard(false).write(w),
+  VMSTRUCT02: (_c, w) =>
+    w.write(
+      TokenMetadataBuilder.buildAndSerialize({
+        name: 'My test token!',
+        icon: SAMPLE_PNG_ICON_DATA_URI,
+        url: 'http://example.com',
+        description: 'My test token description',
+      })
+    ),
+  TX1: (_c, w) => carbonVectorTx('TX1').write(w),
+  TX2: (_c, w) => w.write(signedTransferVectorBytes()),
+  'TX-TRANSFER-FUNGIBLE-GASPAYER': (_c, w) =>
+    carbonVectorTx('TX-TRANSFER-FUNGIBLE-GASPAYER').write(w),
+  'TX-BURN-FUNGIBLE-GASPAYER': (_c, w) => carbonVectorTx('TX-BURN-FUNGIBLE-GASPAYER').write(w),
+  'TX-MINT-FUNGIBLE': (_c, w) => carbonVectorTx('TX-MINT-FUNGIBLE').write(w),
+  'TX-CREATE-TOKEN': (_c, w) => carbonVectorTx('TX-CREATE-TOKEN').write(w),
+  'TX-CREATE-TOKEN-SERIES': (_c, w) => carbonVectorTx('TX-CREATE-TOKEN-SERIES').write(w),
+  'TX-MINT-NON-FUNGIBLE': (_c, w) => carbonVectorTx('TX-MINT-NON-FUNGIBLE').write(w),
 };
 
 const decoders: Partial<Record<Kind, Dec>> = {
@@ -397,7 +559,8 @@ describe('TokenMetadataBuilder icon validation', () => {
   });
 
   it('rejects icons with unsupported mime types', () => {
-    const gifIcon = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAAAAACH5BAAAAAAALAAAAAABAAEAAAICRAEAOw==';
+    const gifIcon =
+      'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAAAAACH5BAAAAAAALAAAAAABAAEAAAICRAEAOw==';
     expect(() =>
       TokenMetadataBuilder.buildAndSerialize(
         buildFields({
@@ -464,19 +627,6 @@ describe('TxMsgCall arg-sections', () => {
 
 describe('CarbonSerialization.ts ↔ C# fixtures (encode)', () => {
   test.each(rows.map((r, i) => [i, r]))('encode line #%d: %s', (_i, c) => {
-    if (
-      c.kind === 'VMSTRUCT01' ||
-      c.kind === 'VMSTRUCT02' ||
-      c.kind === 'TX1' ||
-      c.kind === 'TX2' ||
-      c.kind === 'TX-TRANSFER-FUNGIBLE-GASPAYER' ||
-      c.kind === 'TX-BURN-FUNGIBLE-GASPAYER' ||
-      c.kind === 'TX-MINT-FUNGIBLE' ||
-      c.kind === 'TX-CREATE-TOKEN' ||
-      c.kind === 'TX-CREATE-TOKEN-SERIES' ||
-      c.kind === 'TX-MINT-NON-FUNGIBLE'
-    )
-      return;
     const enc = encoders[c.kind];
     expect(enc).toBeDefined();
     const w = new CarbonBinaryWriter();
@@ -879,7 +1029,11 @@ describe('CarbonSerialization.ts ↔ C# fixtures (decode)', () => {
         expectStructBytes(romStruct, 'rom', phantasmaRomData);
         expectStructString(romStruct, 'name', 'My NFT #1');
         expectStructString(romStruct, 'description', 'This is my first NFT!');
-        expectStructString(romStruct, 'imageURL', 'images-assets.nasa.gov/image/PIA13227/PIA13227~orig.jpg');
+        expectStructString(
+          romStruct,
+          'imageURL',
+          'images-assets.nasa.gov/image/PIA13227/PIA13227~orig.jpg'
+        );
         expectStructString(romStruct, 'infoURL', 'https://images.nasa.gov/details/PIA13227');
         expectStructInt32(romStruct, 'royalties', 10000000);
 

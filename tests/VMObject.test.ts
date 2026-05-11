@@ -37,7 +37,7 @@ describe('VM index file', () => {
     expect(myNewVM.Type).toBe(VMType.Number);
     let result = myNewVM.AsString();
     expect(result).toBe('5');
-    expect(myNewVM.AsNumber()).toBe(5);
+    expect(myNewVM.AsNumber()).toBe(5n);
   });
 
   /*test("Bool VM", () => {

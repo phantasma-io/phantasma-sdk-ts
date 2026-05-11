@@ -19,7 +19,12 @@ import { Auction } from './interfaces/Auction.js';
 import { Script } from './interfaces/Script.js';
 import { Archive } from './interfaces/Archive.js';
 import { NFT } from './interfaces/NFT.js';
-import { CursorPaginatedResult, TokenSeriesResult } from './interfaces/index.js';
+import {
+  BuildInfoResult,
+  CursorPaginatedResult,
+  PhantasmaVmConfig,
+  TokenSeriesResult,
+} from './interfaces/index.js';
 
 export class PhantasmaAPI {
   host: string;
@@ -163,9 +168,13 @@ export class PhantasmaAPI {
   }
 
   //Returns the number of transactions of given block hash or error if given hash is invalid or is not found.
-  async getBlockTransactionCountByHash(blockHash: string): Promise<number> {
-    let params: Array<any> = [blockHash];
-    return (await this.JSONRPC('getBlockTransactionCountByHash', params)) as number;
+  async getBlockTransactionCountByHash(
+    chainAddressOrName: string,
+    blockHash: string
+  ): Promise<number> {
+    const params: Array<any> = [chainAddressOrName, blockHash];
+    const result = await this.JSONRPC('getBlockTransactionCountByHash', params);
+    return typeof result === 'string' ? parseInt(result, 10) : (result as number);
   }
 
   //Returns information about a block by hash.
@@ -188,10 +197,11 @@ export class PhantasmaAPI {
 
   //Returns the information about a transaction requested by a block hash and transaction index.
   async getTransactionByBlockHashAndIndex(
+    chainAddressOrName: string,
     blockHash: string,
     index: number
   ): Promise<TransactionData> {
-    let params: Array<any> = [blockHash, index];
+    const params: Array<any> = [chainAddressOrName, blockHash, index];
     return (await this.JSONRPC('getTransactionByBlockHashAndIndex', params)) as TransactionData;
   }
 
@@ -211,19 +221,19 @@ export class PhantasmaAPI {
     return (await this.JSONRPC('getAddressTransactionCount', params)) as number;
   }
 
-  //Allows to broadcast a signed operation on the network, but it&apos;s required to build it manually.
+  // Broadcasts a manually built signed operation to the network.
   async sendRawTransaction(txData: string): Promise<string> {
     let params: Array<any> = [txData];
     return (await this.JSONRPC('sendRawTransaction', params)) as string;
   }
 
-  //Allows to broadcast a signed carbon transaction on the network.
+  // Broadcasts a signed Carbon transaction to the network.
   async sendCarbonTransaction(txData: string): Promise<string> {
     let params: Array<any> = [txData];
     return (await this.JSONRPC('sendCarbonTransaction', params)) as string;
   }
 
-  //Allows to invoke script based on network state, without state changes.
+  // Invokes a script against network state without state changes.
   async invokeRawScript(chainInput: string, scriptData: string): Promise<Script> {
     let params: Array<any> = [chainInput, scriptData];
     return (await this.JSONRPC('invokeRawScript', params)) as Script;
@@ -236,18 +246,21 @@ export class PhantasmaAPI {
   }
 
   //Returns an array of all chains deployed in Phantasma.
+  // Warning: current Carbon RPC endpoint is stubbed and returns an empty array.
   async getChains(extended: boolean = true): Promise<Chain[]> {
     let params: Array<any> = [extended];
     return (await this.JSONRPC('getChains', params)) as Chain[];
   }
 
   //Return the chain
+  // Warning: current Carbon RPC endpoint is stubbed and returns a default chain object.
   async getChain(name: string, extended: boolean = true): Promise<Chain> {
     let params: Array<any> = [name, extended];
     return (await this.JSONRPC('getChain', params)) as Chain;
   }
 
   //Returns info about the nexus.
+  // Warning: current Carbon RPC endpoint is stubbed and returns a default nexus object.
   async getNexus(extended: boolean = true): Promise<Nexus> {
     let params: Array<any> = [extended];
     return (await this.JSONRPC('getNexus', params)) as Nexus;
@@ -277,22 +290,26 @@ export class PhantasmaAPI {
   }
 
   //Returns info about an organization.
+  // Warning: current Carbon RPC endpoint is stubbed and returns a default organization object.
   async getOrganization(ID: string, extended: boolean = true): Promise<Organization> {
     let params: Array<any> = [ID, extended];
     return (await this.JSONRPC('getOrganization', params)) as Organization;
   }
 
+  // Warning: current Carbon RPC endpoint is stubbed and returns a default organization object.
   async getOrganizationByName(name: string, extended: boolean = true): Promise<Organization> {
     let params: Array<any> = [name, extended];
     return (await this.JSONRPC('getOrganizationByName', params)) as Organization;
   }
 
+  // Warning: current Carbon RPC endpoint is stubbed and returns an empty array.
   async getOrganizations(extended: boolean = false): Promise<Organization[]> {
     let params: Array<any> = [extended];
     return (await this.JSONRPC('getOrganizations', params)) as Organization[];
   }
 
   //Returns content of a Phantasma leaderboard.
+  // Warning: current Carbon RPC endpoint is stubbed and returns a default leaderboard object.
   async getLeaderboard(name: string): Promise<Leaderboard> {
     let params: Array<any> = [name];
     return (await this.JSONRPC('getLeaderboard', params)) as Leaderboard;
@@ -308,7 +325,11 @@ export class PhantasmaAPI {
   }
 
   //Returns info about a specific token deployed in Phantasma.
-  async getToken(symbol: string, extended: boolean = true, carbonTokenId: bigint = 0n): Promise<Token> {
+  async getToken(
+    symbol: string,
+    extended: boolean = true,
+    carbonTokenId: bigint = 0n
+  ): Promise<Token> {
     let params: Array<any> = [symbol, extended, carbonTokenId.toString()];
     return (await this.JSONRPC('getToken', params)) as Token;
   }
@@ -339,7 +360,20 @@ export class PhantasmaAPI {
     cursor: string = ''
   ): Promise<CursorPaginatedResult<TokenSeriesResult[]>> {
     let params: Array<any> = [symbol, carbonTokenId.toString(), pageSize, cursor];
-    return (await this.JSONRPC('getTokenSeries', params)) as CursorPaginatedResult<TokenSeriesResult[]>;
+    return (await this.JSONRPC('getTokenSeries', params)) as CursorPaginatedResult<
+      TokenSeriesResult[]
+    >;
+  }
+
+  // Returns one token series by Phantasma or Carbon identifiers.
+  async getTokenSeriesById(
+    symbol: string,
+    carbonTokenId: bigint,
+    seriesId: string,
+    carbonSeriesId: number
+  ): Promise<TokenSeriesResult> {
+    const params: Array<any> = [symbol, carbonTokenId.toString(), seriesId, carbonSeriesId];
+    return (await this.JSONRPC('getTokenSeriesById', params)) as TokenSeriesResult;
   }
 
   // Returns NFTs for a token (optionally restricted to a series) with cursor pagination.
@@ -350,13 +384,7 @@ export class PhantasmaAPI {
     cursor: string = '',
     extended: boolean = false
   ): Promise<CursorPaginatedResult<NFT[]>> {
-    let params: Array<any> = [
-      carbonTokenId.toString(),
-      carbonSeriesId,
-      pageSize,
-      cursor,
-      extended,
-    ];
+    let params: Array<any> = [carbonTokenId.toString(), carbonSeriesId, pageSize, cursor, extended];
     return (await this.JSONRPC('getTokenNFTs', params)) as CursorPaginatedResult<NFT[]>;
   }
 
@@ -377,7 +405,9 @@ export class PhantasmaAPI {
       cursor,
       checkAddressReservedByte,
     ];
-    return (await this.JSONRPC('getAccountFungibleTokens', params)) as CursorPaginatedResult<Balance[]>;
+    return (await this.JSONRPC('getAccountFungibleTokens', params)) as CursorPaginatedResult<
+      Balance[]
+    >;
   }
 
   // Returns NFTs owned by an address, with optional token/series filters and extended properties.
@@ -441,7 +471,9 @@ export class PhantasmaAPI {
       cursor,
       checkAddressReservedByte,
     ];
-    return (await this.JSONRPC('getAccountOwnedTokenSeries', params)) as CursorPaginatedResult<TokenSeriesResult[]>;
+    return (await this.JSONRPC('getAccountOwnedTokenSeries', params)) as CursorPaginatedResult<
+      TokenSeriesResult[]
+    >;
   }
 
   //Returns the number of active auctions.
@@ -468,12 +500,14 @@ export class PhantasmaAPI {
   }
 
   //Returns info about a specific archive.
+  // Warning: current Carbon RPC endpoint is stubbed and returns a default archive object.
   async getArchive(hashText: string): Promise<Archive> {
     let params: Array<any> = [hashText];
     return (await this.JSONRPC('getArchive', params)) as Archive;
   }
 
   //Writes the contents of an incomplete archive.
+  // Warning: current Carbon RPC endpoint is stubbed and returns false without persisting data.
   async writeArchive(hashText: string, blockIndex: number, blockContent: string): Promise<boolean> {
     let params: Array<any> = [hashText, blockIndex, blockContent];
     return (await this.JSONRPC('writeArchive', params)) as boolean;
@@ -488,5 +522,14 @@ export class PhantasmaAPI {
   async getNFTs(symbol: string, nftIDs: string[], extended: boolean = true): Promise<NFT[]> {
     let params: Array<any> = [symbol, nftIDs.join(','), extended];
     return (await this.JSONRPC('getNFTs', params)) as NFT[];
+  }
+
+  async getVersion(): Promise<BuildInfoResult> {
+    return (await this.JSONRPC('getVersion', [])) as BuildInfoResult;
+  }
+
+  async getPhantasmaVmConfig(chainAddressOrName: string): Promise<PhantasmaVmConfig> {
+    const params: Array<any> = [chainAddressOrName];
+    return (await this.JSONRPC('getPhantasmaVmConfig', params)) as PhantasmaVmConfig;
   }
 }

@@ -1,6 +1,6 @@
 {
   "name": "phantasma-sdk-ts",
-  "version": "0.7.0",
+  "version": "0.8.0",
   "description": "Typescript SDK for interacting with the Phantasma Chain",
   "author": "Phantasma Team",
   "main": "dist/cjs/index.js",
@@ -56,13 +56,13 @@
   ],
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/phantasma-io/phantasma-ts.git"
+    "url": "git+https://github.com/phantasma-io/phantasma-sdk-ts.git"
   },
   "license": "ISC",
   "bugs": {
-    "url": "https://github.com/phantasma-io/phantasma-ts/issues"
+    "url": "https://github.com/phantasma-io/phantasma-sdk-ts/issues"
   },
-  "homepage": "https://github.com/phantasma-io/phantasma-ts#readme",
+  "homepage": "https://github.com/phantasma-io/phantasma-sdk-ts#readme",
   "dependencies": {
     "@ledgerhq/hw-transport-node-hid": "^6.31.0",
     "@ledgerhq/hw-transport-webusb": "^6.31.0",

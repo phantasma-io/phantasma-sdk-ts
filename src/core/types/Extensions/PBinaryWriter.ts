@@ -121,7 +121,7 @@ export class PBinaryWriter {
       let B = (value & 0x0000ff00) >> 8;
       let A = value & 0x000000ff;
 
-      // TODO check if the endianess is correct, might have to reverse order of appends
+      // VM variable integers append the least significant byte first.
       this.appendByte(0xfd);
       this.appendByte(A);
       this.appendByte(B);
@@ -130,7 +130,7 @@ export class PBinaryWriter {
       let B = (value & 0x0000ff00) >> 8;
       let A = value & 0x000000ff;
 
-      // TODO check if the endianess is correct, might have to reverse order of appends
+      // VM variable integers append the least significant byte first.
       this.appendByte(0xfe);
       this.appendByte(A);
       this.appendByte(B);
@@ -141,7 +141,7 @@ export class PBinaryWriter {
       let B = (value & 0x0000ff00) >> 8;
       let A = value & 0x000000ff;
 
-      // TODO check if the endianess is correct, might have to reverse order of appends
+      // VM variable integers append the least significant byte first.
       this.appendByte(0xff);
       this.appendByte(A);
       this.appendByte(B);
@@ -209,7 +209,7 @@ export class PBinaryWriter {
     let B = (value & 0x0000ff00) >> 8;
     let A = value & 0x000000ff;
 
-    // TODO check if the endianess is correct, might have to reverse order of appends
+    // VM integers append the least significant byte first.
     this.appendByte(0xff);
     this.appendByte(A);
     this.appendByte(B);

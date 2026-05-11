@@ -403,7 +403,7 @@ export const GetBalanceFromPrivateKey = async (
   if (config.Debug) {
     logger.log('privateKey', privateKey);
   }
-  // https://github.com/phantasma-io/phantasma-ts/blob/7d04aaed839851ae5640f68ab223ca7d92c42016/core/tx/utils.js
+  // https://github.com/phantasma-io/phantasma-sdk-ts/blob/7d04aaed839851ae5640f68ab223ca7d92c42016/core/tx/utils.js
   const publicKey = GetPublicFromPrivate(privateKey);
   /* istanbul ignore if */
   if (config.Debug) {

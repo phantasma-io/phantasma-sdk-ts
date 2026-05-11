@@ -1,4 +1,4 @@
-import { Base16, ConsensusPoll, PBinaryReader, PollValue, VMObject } from '../../src/core';
+import { Base16, ConsensusPoll, PBinaryReader, VMObject } from '../../src/core';
 
 describe('Consensus Tests', () => {
   test('Consensus Array Unserialize', function (done) {
@@ -30,27 +30,17 @@ describe('Consensus Tests', () => {
     const readerVM = new PBinaryReader(arrayBytes);
     vm.UnserializeData(readerVM);
     const con = vm.ToStruct<ConsensusPoll>(ConsensusPoll);
-    con.entries.forEach((entry) => {
-      //console.log(entry);
-      const entryValue = entry as unknown as string;
-      const pollValueBytes = Base16.decodeUint8Array(entryValue);
-      const pollValue = new PollValue();
-      const reader = new PBinaryReader(pollValueBytes);
-      pollValue.UnserializeData(reader);
-      //console.log(pollValue);
-
-      //pollValue.UnserializeData(reader);
-
-      //console.log(reader.read());
-    });
+    // Entries are already decoded by VMObject.ToStruct; old tests treated them
+    // as hex strings, which masked the exact bigint return type.
+    expect(con.entries).toHaveLength(2);
     expect(con.subject).toBe('system.nexus.protocol.version');
     expect(con.organization).toBe('validators');
     expect(con.mode).toBe(1);
     expect(con.state).toBe(1);
     expect(con.startTime.value).toBe(1674661973);
     expect(con.endTime.value).toBe(1674748373);
-    expect(con.choicesPerUser).toBe(1);
-    expect(con.totalVotes).toBe(5);
+    expect(con.choicesPerUser).toBe(1n);
+    expect(con.totalVotes).toBe(5n);
     done();
   });
 });

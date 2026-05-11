@@ -13,7 +13,7 @@ npm install phantasma-sdk-ts
 ## Importing
 
 ```javascript
-const { PhantasmaTS } = require("phantasma-sdk-ts");
+const { PhantasmaTS } = require('phantasma-sdk-ts');
 ```
 
 ## Logging
@@ -21,7 +21,7 @@ const { PhantasmaTS } = require("phantasma-sdk-ts");
 SDK logging is opt-in. To enable logs, pass your logger (for example, `console`) to `setLogger`. Leave it unset for silent operation.
 
 ```javascript
-const { setLogger } = require("phantasma-sdk-ts");
+const { setLogger } = require('phantasma-sdk-ts');
 
 setLogger(console); // enable SDK logs
 // setLogger(); // disable SDK logs
@@ -36,15 +36,14 @@ setLogger(console); // enable SDK logs
 ```javascript
 phantasma.PhantasmaTS; // To use PhantasmaTS
 phantasma.PhantasmaLink; // To use PhantasmaLink
-phantasma.EasyConnect; // To use EasyConnect, an easy to use PhantasmaLink wrapper
+phantasma.EasyConnect; // To use EasyConnect, a PhantasmaLink wrapper
 ```
 
 ## Table Of Contents
 
 The Phantasma TypeScript SDK transpiles into PhantasmaTS, PhantasmaLink and EasyConnect.
 
-1. [PhantasmaTS](#phantasmats) - Allows you to interact with the Phantasma Blockchain
-
+1. [PhantasmaTS](#phantasmats) - Direct blockchain interaction utilities
    - [Utility Functions](#phantasmats-utility-functions)
    - [Script Builder](#building-a-script-with-script-builder)
      - [Interop Commands](#interop-functions)
@@ -52,12 +51,11 @@ The Phantasma TypeScript SDK transpiles into PhantasmaTS, PhantasmaLink and Easy
      - [Deploying Smart Contract](#deploying-a-contract)
      - [RPC](#using-rpc)
 
-2. [PhantasmaLink](#phantasmalink) - Allows you to interact with Phantasma based wallets
+2. [PhantasmaLink](#phantasmalink) - Wallet connection and signing support
    - [Functions](#functions)
    - [Examples](#example-code)
 
-3. [EasyConnect](#easyconnect) - Easy plug and play solution for creating DApps
-
+3. [EasyConnect](#easyconnect) - Higher-level DApp connection helper
    - [Core Functions](#core-functions)
    - [Query Function](#query-function)
    - [Action Function](#action-function)
@@ -74,18 +72,18 @@ Use PhantasmaTS to interact with the Phantasma blockchain directly.
 
 ### PhantasmaTS Utility Functions
 
-Just some standard useful functions that you probably will end up using at some point.
+These utility functions cover common byte encoding, key, address, and signing operations.
 
 ```javascript
 PhantasmaTS.byteArrayToHex(arr: ArrayBuffer | ArrayLike<number>); //Turns a Byte Array into Serialized Hex
 ```
 
 ```javascript
-PhantasmaTS.getAddressFromWif(wif: string); //Get's Public Address from WIF (Wallet Import Format)
+PhantasmaTS.getAddressFromWif(wif: string); //Gets public address from WIF (Wallet Import Format)
 ```
 
 ```javascript
-PhantasmaTS.getPrivateKeyFromWif(wif: string); //Get's Private Key from WIF (Wallet Import Format)
+PhantasmaTS.getPrivateKeyFromWif(wif: string); //Gets private key from WIF (Wallet Import Format)
 ```
 
 ```javascript
@@ -102,17 +100,17 @@ PhantasmaTS.signData(msgHex: string, privateKey: string); //Signs some text with
 
 ### Building a Script with Script Builder
 
-Building a script is the most important part of interacting with the Phantasma blockchain. Without a propper script, the Phantasma blockchain will not know what you are trying to do.
+Building a script is the main entry point for transaction and contract interactions. The script must match the target contract or interop ABI.
 
-These functions, `.CallContract` and `.CallInterop`, are your bread and butter for creating new scripts.
+The `.CallContract` and `.CallInterop` methods are the primary entry points for creating scripts.
 
 ` .CallContract(contractName: string, methodName: string, [arguments]: array)`
 
 ` .CallInterop(functionName: string, [arguments]: array)`
 
-- You can find out all the diffrent `.CallInterop` functions below.
+- The available `.CallInterop` functions are listed below.
 
-- For `.CallContract`, you will have to look through the ABI's of all the diffrent smart contracts currently deployed on the Phantasma 'mainnet': [Link Here](https://explorer.phantasma.info/chain/main#tab_contracts)
+- For `.CallContract`, inspect the ABIs of the smart contracts currently deployed on Phantasma mainnet: [Explorer contract list](https://explorer.phantasma.info/chain/main#tab_contracts)
 
 #### Example:
 
@@ -136,11 +134,12 @@ let sb = new PhantasmaTS.ScriptBuilder();
     .EndScript();
 
 ```
-#### InvokeRawScript and decoding the result
-```javascript
 
+#### InvokeRawScript and decoding the result
+
+```javascript
 let sb = new PhantasmaTS.ScriptBuilder();
-sb.CallContract("stake", "GetMasterCount", []);
+sb.CallContract('stake', 'GetMasterCount', []);
 let script = sb.EndScript();
 let targetNet = 'main';
 
@@ -150,7 +149,6 @@ let response = await RPC.invokeRawScript(targetNet, script);
 const decoder = new PhantasmaTS.Decoder(response.result);
 const value = decoder.readVmObject();
 console.log(value); // print the decoded value to the console
-
 ```
 
 #### Interop Functions:
@@ -192,21 +190,15 @@ To build a transaction you will first need to build a script.
 Note, building a Transaction is for transactional scripts only. Non transactional scripts should use the RPC function `RPC.invokeRawScript(chainInput: string, scriptData: string)`
 
 ```javascript
-const { PhantasmaTS } = require("phantasma-sdk-ts");
-
+const { PhantasmaTS } = require('phantasma-sdk-ts');
 
 async function sendTransaction() {
+  let WIF = 'WIF'; //In WIF Format
+  let fromAddress = 'yourPublicWalletAddress';
+  let toAddress = 'addressYoureSendingTo';
 
-  let WIF = "WIF"; //In WIF Format
-  let fromAddress = "yourPublicWalletAddress";
-  let toAddress = "addressYoureSendingTo";
-
-  //Creating RPC Connection **(Needs To Be Updated)
-  let RPC = new PhantasmaTS.PhantasmaAPI(
-    "http://localhost:7077/rpc",
-    null,
-    "simnet"
-  );
+  // Create an RPC connection for the target network.
+  let RPC = new PhantasmaTS.PhantasmaAPI('http://localhost:7077/rpc', null, 'simnet');
 
   //set Gas parameters for Runtime.TransferTokens
   let gasPrice = PhantasmaTS.DomainSettings.DefaultMinimumGasFee; //Internal Blockchain minimum gas fee needed - i.e 100000
@@ -219,32 +211,27 @@ async function sendTransaction() {
   let script = sb
     .BeginScript()
     .AllowGas(fromAddress, sb.NullAddress, gasPrice, gasLimit)
-    .CallInterop("Runtime.TransferTokens", [
-      fromAddress,
-      toAddress,
-      "SOUL",
-      100000000,
-    ]) //100000000 = 1 SOUL
+    .CallInterop('Runtime.TransferTokens', [fromAddress, toAddress, 'SOUL', 100000000]) //100000000 = 1 SOUL
     .SpendGas(fromAddress)
     .EndScript();
 
   //Used to set expiration date
-  let expiration = 5; //This is in miniutes
+  let expiration = 5; // Expiration window in minutes.
   let getTime = new Date();
   let expiration_date = new Date(getTime.getTime() + expiration * 60000);
 
-  let payload = PhantasmaTS.Base16.encode("Phantasma-ts"); //Says '7068616e7461736d612d7473' in hex
+  let payload = PhantasmaTS.Base16.encode('Phantasma-ts'); //Says '7068616e7461736d612d7473' in hex
 
   //Creating New Transaction Object
   let transaction = new PhantasmaTS.Transaction(
-    "simnet", //Nexus Name - if you're using mainnet change it to mainnet or simnet if you're using you localnode
-    "main", //Chain
+    'simnet', // Nexus name. Use 'mainnet' for mainnet or 'simnet' for a local node.
+    'main', //Chain
     script, //In string format
     expiration_date, //Date Object
     payload //Extra Info to attach to Transaction in Serialized Hex
   );
 
-  //Sign's Transaction with WIF
+  // Sign the transaction with WIF.
   transaction.sign(WIF);
   let hexEncodedTx = transaction.ToStringEncoded(true); //converts trasnaction to base16 string -true means transaction is signed-
 
@@ -253,56 +240,51 @@ async function sendTransaction() {
   //Return Transaction Hash
   return txHash;
 }
-
 ```
+
 ### Staking SOUL
 
 This is an example how to stake SOUL
 
 ```javascript
 async function stakeSOUL() {
-  let WIF = "WIF"; //WIF format
+  let WIF = 'WIF'; //WIF format
 
-  let fromAddress = "yourPublicWalletAddress"; // Phantasma Public Address
+  let fromAddress = 'yourPublicWalletAddress'; // Phantasma Public Address
 
   //Creating a new Script Builder Object
   let sb = new PhantasmaTS.ScriptBuilder();
   let gasPrice = PhantasmaTS.DomainSettings.DefaultMinimumGasFee; //Internal Blockchain minimum gas fee needed - i.e 100000
   let gasLimit = 21000;
-  let amount = String(10 * 10 ** 8); // 100 the amount - 10**8 it's to get the decimals to the desired amount
-  // Soul has 8 decimals places.
+  let amount = String(10 * 10 ** 8); // 10 SOUL with 8 decimal places.
 
-  //Creating RPC Connection **(Needs To Be Updated)
-  let RPC = new PhantasmaTS.PhantasmaAPI(
-    "http://localhost:7077/rpc",
-    null,
-    "simnet"
-  );
+  // Create an RPC connection for the target network.
+  let RPC = new PhantasmaTS.PhantasmaAPI('http://localhost:7077/rpc', null, 'simnet');
 
   //Making a Script
   let script = sb
     .AllowGas(fromAddress, sb.NullAddress, gasPrice, gasLimit)
-    .CallContract("stake", "Stake", [fromAddress, amount])
+    .CallContract('stake', 'Stake', [fromAddress, amount])
     .SpendGas(fromAddress)
     .EndScript();
 
   //Used to set expiration date
-  let expiration = 5; //This is in miniutes
+  let expiration = 5; // Expiration window in minutes.
   let getTime = new Date();
   let expiration_date = new Date(getTime.getTime() + expiration * 60000);
 
-  let payload = "7068616e7461736d612d7473"; //Says 'Phantasma-ts' in hex
+  let payload = '7068616e7461736d612d7473'; //Says 'Phantasma-ts' in hex
 
   //Creating New Transaction Object
   let transaction = new PhantasmaTS.Transaction(
-    "simnet", //Nexus Name - if you're using mainnet change it to mainnet
-    "main", //Chain
+    'simnet', //Nexus Name - if you're using mainnet change it to mainnet
+    'main', //Chain
     script, //In string format
     expiration_date, //Date Object
     payload //Extra Info to attach to Transaction in Serialized Hex
   );
 
-  //Sign's Transaction with WIF
+  // Sign the transaction with WIF.
   transaction.sign(WIF);
 
   let hexEncodedTx = transaction.ToStringEncoded(true);
@@ -319,13 +301,13 @@ async function stakeSOUL() {
 
 ```javascript
 async function deployContract() {
-  //Wallet Stuff
-  let WIF = "WIF"; //In wif Format
-  let fromAddress = "yourPublicWalletAddress";
+  // Wallet configuration
+  let WIF = 'WIF'; //In wif Format
+  let fromAddress = 'yourPublicWalletAddress';
 
-  //Contract Stuff
-  let pvm = "PVM HEX String";
-  let abi = "ABI HEX String";
+  // Contract artifacts
+  let pvm = 'PVM HEX String';
+  let abi = 'ABI HEX String';
 
   //convert Pvm to Bytes -> uint8Array
   let pvm_byteArr = PhantasmaTS.hexToByteArray(pvm);
@@ -339,43 +321,34 @@ async function deployContract() {
 
   let gasPrice = PhantasmaTS.DomainSettings.DefaultMinimumGasFee; //Internal Blockchain minimum gas fee needed - i.e 100000
   let gasLimit = 21000;
-  let contractName = "contractName"; //Whatever you want
+  let contractName = 'contractName'; // Contract name
 
   //Creating a new Script Builder Object
   let sb = new PhantasmaTS.ScriptBuilder();
 
   //New RPC and Peers Needed
   //Creating RPC Connection, use ('http://testnet.phantasma.info/rpc', null, 'testnet') for testing
-  let RPC = new PhantasmaTS.PhantasmaAPI(
-    "http://localhost:5172/rpc",
-    null,
-    "simnet"
-  );
+  let RPC = new PhantasmaTS.PhantasmaAPI('http://localhost:5172/rpc', null, 'simnet');
 
   //Making a Script
   let script = sb
     .AllowGas(fromAddress, sb.NullAddress, gasPrice, gasLimit)
-    .CallInterop("Runtime.DeployContract", [
-      fromAddress,
-      contractName,
-      byte_pvm,
-      byte_abi,
-    ])
+    .CallInterop('Runtime.DeployContract', [fromAddress, contractName, byte_pvm, byte_abi])
     .SpendGas(fromAddress)
     .EndScript();
 
   //Used to set expiration date
-  let expiration = 5; //This is in miniutes
+  let expiration = 5; // Expiration window in minutes.
   let getTime = new Date();
   let expiration_date = new Date(getTime.getTime() + expiration * 60000);
 
   //Setting Temp Payload
-  let payload = "MyApp";
+  let payload = 'MyApp';
 
   //Creating New Transaction Object
   let transaction = new PhantasmaTS.Transaction(
-    "simnet", //Nexus Name
-    "main", //Chain
+    'simnet', //Nexus Name
+    'main', //Chain
     script, //In string format
     expiration_date, //Date Object
     payload //Extra Info to attach to Transaction in Serialized Hex
@@ -400,18 +373,14 @@ async function deployContract() {
 ### Scanning the blockchain for incoming transactions
 
 ```javascript
-const { PhantasmaTS } = require("phantasma-sdk-ts");
+const { PhantasmaTS } = require('phantasma-sdk-ts');
 
-let RPC = new PhantasmaTS.PhantasmaAPI(
-  "https://pharpc1.phantasma.info/rpc",
-  null,
-  "mainnet"
-);
+let RPC = new PhantasmaTS.PhantasmaAPI('https://pharpc1.phantasma.info/rpc', null, 'mainnet');
 
 // Store the current height of the chain
 let currentHeight = 1;
 
-let chainName = "main";
+let chainName = 'main';
 
 function onTransactionReceived(address, symbol, amount) {}
 
@@ -432,7 +401,7 @@ async function checkForNewBlocks() {
       // Check all events in this transaction
       for (j = 0; j < tx.events.length; j++) {
         let evt = tx.events[j];
-        if (evt.kind == "TokenReceive") {
+        if (evt.kind == 'TokenReceive') {
           var data = PhantasmaTS.getTokenEventData(evt.data);
           onTransactionReceived(evt.address, data.symbol, data.value);
         }
@@ -454,11 +423,7 @@ checkForNewBlocks();
 ### Using RPC
 
 ```javascript
-let RPC = new PhantasmaTS.PhantasmaAPI(
-  "https://pharpc1.phantasma.info/rpc",
-  null,
-  "mainnet"
-);
+let RPC = new PhantasmaTS.PhantasmaAPI('https://pharpc1.phantasma.info/rpc', null, 'mainnet');
 ```
 
 #### Utillities:
@@ -485,7 +450,7 @@ await RPC.getBlockHeight(chainInput: string); //Returns the height of a chain.
 ```
 
 ```javascript
-await RPC.getBlockTransactionCountByHash(blockHash: string); //Returns the number of transactions of given block hash or error if given hash is invalid or is not found.
+await RPC.getBlockTransactionCountByHash(chainAddressOrName: string, blockHash: string); //Returns the number of transactions of given block hash or error if given hash is invalid or is not found.
 ```
 
 ```javascript
@@ -505,7 +470,7 @@ await RPC.getRawBlockByHeight(chainInput: string, height: number); //Returns a s
 ```
 
 ```javascript
-await RPC.getTransactionByBlockHashAndIndex(blockHash: string, index: number); //Returns the information about a transaction requested by a block hash and transaction index.
+await RPC.getTransactionByBlockHashAndIndex(chainAddressOrName: string, blockHash: string, index: number); //Returns the information about a transaction requested by a block hash and transaction index.
 ```
 
 ```javascript
@@ -513,15 +478,15 @@ await RPC.getAddressTransactions(account: string, page: number, pageSize: number
 ```
 
 ```javascript
-await RPC.getAddressTransactionCount(account: string, chainInput: string); //Get number of transactions in a specific address and chain.
+await RPC.getAddressTransactionCount(account: string, chainInput: string); //Returns the number of transactions for an address on a specific chain.
 ```
 
 ```javascript
-await RPC.sendRawTransaction(txData: string); //Allows to broadcast a signed operation on the network, but it&apos;s required to build it manually.
+await RPC.sendRawTransaction(txData: string); //Broadcasts a manually built signed operation to the network.
 ```
 
 ```javascript
-await RPC.invokeRawScript(chainInput: string, scriptData: string); //Allows to invoke script based on network state, without state changes.
+await RPC.invokeRawScript(chainInput: string, scriptData: string); //Invokes a script against network state without state changes.
 ```
 
 ```javascript
@@ -533,19 +498,19 @@ await RPC.cancelTransaction(hashText: string); //Removes a pending transaction f
 ```
 
 ```javascript
-await RPC.getChains(); //Returns an array of all chains deployed in Phantasma.
+await RPC.getChains(); //Warning: current Carbon RPC endpoint is stubbed and returns an empty array.
 ```
 
 ```javascript
-await RPC.getNexus(); //Returns info about the nexus.
+await RPC.getNexus(); //Warning: current Carbon RPC endpoint is stubbed and returns a default nexus object.
 ```
 
 ```javascript
-await RPC.getOrganization(ID: string); //Returns info about an organization.
+await RPC.getOrganization(ID: string); //Warning: current Carbon RPC endpoint is stubbed and returns a default organization object.
 ```
 
 ```javascript
-await RPC.getLeaderboard(name: string); //Returns content of a Phantasma leaderboard.
+await RPC.getLeaderboard(name: string); //Warning: current Carbon RPC endpoint is stubbed and returns a default leaderboard object.
 ```
 
 ```javascript
@@ -577,11 +542,11 @@ await RPC.getAuction(chainAddressOrName: string, symbol: string, IDtext: string)
 ```
 
 ```javascript
-await RPC.getArchive(hashText: string)getArchive(hashText: string); //Returns info about a specific archive.
+await RPC.getArchive(hashText: string); //Warning: current Carbon RPC endpoint is stubbed and returns a default archive object.
 ```
 
 ```javascript
-await RPC.writeArchive(hashText: string, blockIndex: number, blockContent: string); //Writes the contents of an incomplete archive.
+await RPC.writeArchive(hashText: string, blockIndex: number, blockContent: string); //Warning: current Carbon RPC endpoint is stubbed and returns false without persisting data.
 ```
 
 ```javascript
@@ -630,13 +595,13 @@ await RPC.getNFT(symbol: string, nftId: string); //Returns info of a nft.
 
 ## PhantasmaLink
 
-PhantasmaLink is a core connecting piece that allows you to interact with Phantasma based Wallets. PhantasmaLink is a building block to help you connect with wallets, however if you are more interested in using a more simple plug and play product, please see [EasyConnect](#easyconnect) **<- Super Useful**
+PhantasmaLink is a wallet-connection client for interacting with Phantasma wallets. For a higher-level connection helper, see [EasyConnect](#easyconnect).
 
-Since phantasmaLink is a Class we are going to initiate a new phantasmaLink object.
+Create a `PhantasmaLink` instance before sending wallet requests.
 
 ```javascript
-let dappID = "Dapp Name"; //This is just the name you want to give the connection
-let consoleLogging = true; //This is if you want console logging for Debugging Purposes [Default is set to true]
+let dappID = 'Dapp Name'; //Application name shown to the wallet.
+let consoleLogging = true; //Enables debug console logging. Defaults to true.
 
 let link = new PhantasmaLink(dappID, consoleLogging);
 ```
@@ -657,7 +622,7 @@ link.login(onLoginCallback, onErrorCallback, providerHint); //Provider Hint can 
 ```
 
 ```javascript
-link.invokeScript(script, callback); //Allows you to do a ReadOnly script operation on the Phantasma Blockchain (Sends results as an Argument to Callback Function)
+link.invokeScript(script, callback); //Runs a read-only script operation and sends the result to the callback
 ```
 
 ```javascript
@@ -683,11 +648,11 @@ enum ProofOfWork {
 ```
 
 ```javascript
-link.getPeer(callback, onErrorCallback); //Get's the peer list for the currently connected network
+link.getPeer(callback, onErrorCallback); //Gets the peer list for the currently connected network
 ```
 
 ```javascript
-link.signData(data, callback, onErrorCallback); //Allows you to sign some data via your Wallet (Sends results as an Argument to Callback Function)
+link.signData(data, callback, onErrorCallback); //Signs data through the connected wallet and sends the result to the callback
 ```
 
 ```javascript
@@ -699,41 +664,39 @@ link.dappID(); //Returns DappID
 ```
 
 ```javascript
-link.sendLinkRequest(request, callback); //Used internally and sends wallet instructions through socket, you probably won't use it unless you know what your doing
+link.sendLinkRequest(request, callback); //Internal helper that sends wallet instructions through the socket.
 ```
 
 ```javascript
-link.createSocket(); //Used internally to connect to wallet, you probably won't use it unless you know what your doing
-link.retry(); //Used internally to retry socket connection, you probably won't use it unless you know what your doing
+link.createSocket(); //Internal helper that opens the wallet socket connection.
+link.retry(); //Internal helper that retries the wallet socket connection.
 ```
 
 ```javascript
 link.disconnect(message); //Disconnects From Socket (You can add a reason with the Message Argument)
 ```
 
-
 ### Example Code
-Here is some example code to initate a wallet connection.
+
+Here is example code to initialize a wallet connection.
 
 ```javascript
-let link = new PhantasmaLink("Dapp"); //"Dapp" is just whatever name you want to give your application
+let link = new PhantasmaLink('Dapp'); //"Dapp" is the application name shown to the wallet.
 
 //Use this code snippet to connect to a phantasma wallet
 link.login(
   function (success) {
     //Console Logging for Debugging Purposes
     if (success) {
-      console.log(
-        "Connected to account " + this.account.address + " via " + this.wallet
-      );
+      console.log('Connected to account ' + this.account.address + ' via ' + this.wallet);
     } else {
-      console.log("Connection Failed");
+      console.log('Connection Failed');
     }
   },
   (data) => {
     console.log(data);
   },
-  "ecto"
+  'ecto'
 ); //Swap out ecto for 'poltergeist' if wanting to connect to Poltergeist Wallet
 ```
 
@@ -770,9 +733,9 @@ link.signCarbonTxAndBroadcast(txMsg, async ({ signedTx }) => {
 
 ## EasyConnect
 
-EasyConnect is a plug and play wrapper for PhantasmaLink that makes creating a DApp simple and easy.
+EasyConnect is a higher-level wrapper around PhantasmaLink for common DApp wallet workflows.
 
-Since EasyConnect is a Class we are going to initiate a new EasyConnect object.
+Create an EasyConnect instance before calling its wallet helper methods.
 
 ```javascript
 //Optional Arguments [ requiredVersion: number, platform: string, providerHint: string]
@@ -786,7 +749,7 @@ link.connect(onSuccess, onFail); //Has two optional callback functions, one for 
 ```
 
 ```javascript
-link.disconnect(_message: string); //Allows you to disconnect from the wallet with a desired message
+link.disconnect(_message: string); //Disconnects from the wallet with an optional message
 ```
 
 ```javascript
@@ -798,26 +761,26 @@ link.signCarbonTransaction(txMsg, onSuccess, onFail); //Sends a Carbon TxMsg to 
 ```
 
 ```javascript
-link.signData(data:any, onSuccess, onFail); //Allows you to sign data with a wallet keypair
+link.signData(data:any, onSuccess, onFail); //Signs data with the connected wallet keypair
 ```
 
 ```javascript
-link.setConfig(_provider: string); //Allows you to set wallet provider, 'auto', 'ecto', 'poltergeist' (Default is already set to 'auto')
+link.setConfig(_provider: string); //Sets wallet provider: 'auto', 'ecto', or 'poltergeist' ('auto' by default)
 ```
 
 ```javascript
-//Allows Async aswell
-link.query(_type: string, _arguments: Array<string>, _callback); //Allows you to query connected wallet/account information (arguments and callback are optional)
+// Supports async/await.
+link.query(_type: string, _arguments: Array<string>, _callback); //Queries connected wallet/account information (arguments and callback are optional)
 ```
 
 ```javascript
-//Allows Async aswell
-link.action(_type: string, _arguments: Array<string>, _callback); //Allows you to send a specified action quickly
+// Supports async/await.
+link.action(_type: string, _arguments: Array<string>, _callback); //Sends a predefined wallet action
 ```
 
 ```javascript
-//Allows Async aswell
-link.script.buildScript(_type: string, _arguments: Array<string>, _callback); //Allows you to quickly create a script with only arguments
+// Supports async/await.
+link.script.buildScript(_type: string, _arguments: Array<string>, _callback); //Builds a script from a supported script type and arguments
 // Script Types
 // 'interact', [contractName, methodName, [arguments]]
 // 'invoke', [contractName, methodName, [arguments]]
@@ -825,11 +788,11 @@ link.script.buildScript(_type: string, _arguments: Array<string>, _callback); //
 ```
 
 ```javascript
-link.invokeScript(script: string, _callback); //Allows you to query data from smart contracts on Phantasma (Non Transactional)
+link.invokeScript(script: string, _callback); //Queries smart contract data without broadcasting a transaction
 ```
 
 ```javascript
-link.deployContract(script: string, payload:string, proofOfWork, onSuccess, onFail) //Allows you to deploy a contract script
+link.deployContract(script: string, payload:string, proofOfWork, onSuccess, onFail) //Deploys a contract script
 
 //Proof of Work Enum
 export enum ProofOfWork {
@@ -846,31 +809,31 @@ export enum ProofOfWork {
 
 ### Query Function
 
-The Query function is an async function that also allows you to use callbacks. You can use it is a promise, or in a chain!
+The Query function supports async/await and callbacks.
 
 ```javascript
-await link.query("account"); //Retrieves all connected wallet account information
+await link.query('account'); //Retrieves all connected wallet account information
 ```
 
 ```javascript
-await link.query("name"); //Retrieves registered name associated with connect wallet
+await link.query('name'); //Retrieves registered name associated with the connected wallet
 ```
 
 ```javascript
-await link.query("balances"); //Shows complete token balance accociated with connected wallet
+await link.query('balances'); //Shows complete token balance associated with connected wallet
 ```
 
 ```javascript
-await link.query("walletAddress"); //Shows connected wallet address
+await link.query('walletAddress'); //Shows connected wallet address
 ```
 
 ```javascript
-await link.query("avatar"); //Shows connected wallet avatar
+await link.query('avatar'); //Shows connected wallet avatar
 ```
 
 ### Action Function
 
-The Action function is an async function that also allows you to use callbacks. You can use it is a promise, or in a chain!
+The Action function supports async/await and callbacks.
 
 ```javascript
 await link.action('sendFT', [fromAddress:string, toAddress:string, tokenSymbol:string, amount:number]); //Send Fungible Token
@@ -882,8 +845,7 @@ await link.action('sendNFT', [fromAddress:string, toAddress:string, tokenSymbol:
 
 ### Easy Script Create
 
-(WIP)
-Allows you to generate scripts quickly.
+Generates scripts from high-level action names and arguments.
 
 ```javascript
 async buildScript(_type: string, _options: Array<any>);
