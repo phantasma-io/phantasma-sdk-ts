@@ -5,8 +5,8 @@ import { Bytes64 } from './Bytes64.js';
 
 export class Witness implements ICarbonBlob {
   constructor(
-    public address?: Bytes32,
-    public signature?: Bytes64
+    public address: Bytes32 = Bytes32.Empty,
+    public signature: Bytes64 = Bytes64.Empty
   ) {}
   write(w: CarbonBinaryWriter): void {
     this.address.write(w);

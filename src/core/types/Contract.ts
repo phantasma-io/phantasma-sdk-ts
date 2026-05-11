@@ -55,10 +55,7 @@ export class ContractInterface implements ISerializable {
   }
 
   public FindMethod(name: string): ContractMethod | null {
-    if (this._methods.has(name)) {
-      return this._methods.get(name);
-    }
-    return null;
+    return this._methods.get(name) ?? null;
   }
 
   public FindEvent(value: number): ContractEvent | null {
@@ -84,10 +81,10 @@ export class ContractInterface implements ISerializable {
   }
 
   public ImplementsMethod(method: ContractMethod): boolean {
-    if (!this._methods.has(method.name)) {
+    const thisMethod = this._methods.get(method.name);
+    if (thisMethod === undefined) {
       return false;
     }
-    const thisMethod = this._methods.get(method.name);
     if (thisMethod.parameters.length !== method.parameters.length) {
       return false;
     }
@@ -166,6 +163,9 @@ export class ContractMethod implements ISerializable {
     }
 
     const offset = labels.get(name);
+    if (offset === undefined) {
+      throw new Error(`Missing offset in label map for method ${name}`);
+    }
 
     this.name = name;
     this.offset = offset;

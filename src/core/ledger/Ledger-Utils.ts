@@ -5,10 +5,16 @@ import { PublicKeyResponse } from './interfaces/PublicKeyResponse.js';
 import { SignResponse } from './interfaces/SignResponse.js';
 import { VersionResponse } from './interfaces/VersionResponse.js';
 import { logger } from '../utils/logger.js';
+import { LedgerTransport } from './interfaces/LedgerConfig.js';
+import { LedgerTransportDevice } from './interfaces/Device.js';
 
 export const MAX_SIGNED_TX_LEN = 1024;
 
 const Debug = true;
+export interface LedgerPublicKeyOptions {
+  verifyOnDevice?: boolean;
+  debug?: boolean;
+}
 
 export const Bip44Path =
   '8000002C' + // 44
@@ -17,7 +23,7 @@ export const Bip44Path =
   '00000000' + // 0
   '00000000'; // 0
 
-export const ErrorDescriptions = {
+export const ErrorDescriptions: Record<string, string> = {
   '530C': 'Unlock Ledger Device',
   '6D02': 'App Not Open On Ledger Device',
   6511: 'App Not Open On Ledger Device',
@@ -34,6 +40,20 @@ export const ErrorDescriptions = {
   B005: 'Failed to parse Transaction on Ledger Device',
   B008: 'Failed to sign Transaction on Ledger Device',
   B009: 'Wrong signing parmeters on Ledger Device',
+};
+
+const getErrorMessageText = (error: unknown): string => {
+  if (error instanceof Error) {
+    return error.message;
+  }
+  return String(error);
+};
+
+const requireLedgerDevice = (device: DeviceResponse): LedgerTransportDevice => {
+  if (device.device === undefined) {
+    throw new Error(device.message ?? 'Ledger device handle is unavailable.');
+  }
+  return device.device;
 };
 
 /**
@@ -56,7 +76,7 @@ export const GetErrorMessage = (responseStr: string): string => {
  * @param transport
  * @returns
  */
-export const GetDevice = async (transport): Promise<DeviceResponse> => {
+export const GetDevice = async (transport: LedgerTransport): Promise<DeviceResponse> => {
   /* istanbul ignore if */
   if (Debug) {
     logger.log('getDevice', 'transport', transport);
@@ -112,7 +132,9 @@ export const GetDevice = async (transport): Promise<DeviceResponse> => {
  * @param transport
  * @returns
  */
-export const GetApplicationName = async (transport): Promise<ApplicationNameResponse> => {
+export const GetApplicationName = async (
+  transport: LedgerTransport
+): Promise<ApplicationNameResponse> => {
   const device = await GetDevice(transport);
   if (!device.enabled) {
     return {
@@ -121,13 +143,15 @@ export const GetApplicationName = async (transport): Promise<ApplicationNameResp
     };
   }
 
+  const ledgerDevice = requireLedgerDevice(device);
+
   try {
     const request = Buffer.from('E004000000', 'hex');
     /* istanbul ignore if */
     if (Debug) {
       logger.log('exchange', 'request', request.toString('hex').toUpperCase());
     }
-    const response = await device.device.exchange(request);
+    const response = await ledgerDevice.exchange(request);
     const responseStr = response.toString('hex').toUpperCase();
     /* istanbul ignore if */
     if (Debug) {
@@ -149,17 +173,17 @@ export const GetApplicationName = async (transport): Promise<ApplicationNameResp
       message: message,
       applicationName: applicationName,
     };
-  } catch (error) {
+  } catch (error: unknown) {
     /* istanbul ignore if */
     if (Debug) {
       logger.trace('getApplicationName', 'error', error);
     }
     return {
       success: false,
-      message: error.message,
+      message: getErrorMessageText(error),
     };
   } finally {
-    await device.device.close();
+    await ledgerDevice.close();
   }
 
   if (device.error) {
@@ -175,7 +199,7 @@ export const GetApplicationName = async (transport): Promise<ApplicationNameResp
  * @param transport
  * @returns
  */
-export const GetVersion = async (transport): Promise<VersionResponse> => {
+export const GetVersion = async (transport: LedgerTransport): Promise<VersionResponse> => {
   const device = await GetDevice(transport);
   if (!device.enabled) {
     return {
@@ -184,13 +208,15 @@ export const GetVersion = async (transport): Promise<VersionResponse> => {
     };
   }
 
+  const ledgerDevice = requireLedgerDevice(device);
+
   try {
     const request = Buffer.from('E003000000', 'hex');
     /* istanbul ignore if */
     if (Debug) {
       logger.log('exchange', 'request', request.toString('hex').toUpperCase());
     }
-    const response = await device.device.exchange(request);
+    const response = await ledgerDevice.exchange(request);
     const responseStr = response.toString('hex').toUpperCase();
     /* istanbul ignore if */
     if (Debug) {
@@ -212,17 +238,17 @@ export const GetVersion = async (transport): Promise<VersionResponse> => {
       message: message,
       version: version,
     };
-  } catch (error) {
+  } catch (error: unknown) {
     /* istanbul ignore if */
     if (Debug) {
       logger.trace('getVersion', 'error', error);
     }
     return {
       success: false,
-      message: error.message,
+      message: getErrorMessageText(error),
     };
   } finally {
-    await device.device.close();
+    await ledgerDevice.close();
   }
 
   if (device.error) {
@@ -279,7 +305,10 @@ export const GetBip44PathMessage = (messagePrefix: Buffer): Buffer => {
  * @param options
  * @returns
  */
-export const GetPublicKey = async (transport, options): Promise<PublicKeyResponse> => {
+export const GetPublicKey = async (
+  transport: LedgerTransport,
+  options: LedgerPublicKeyOptions
+): Promise<PublicKeyResponse> => {
   /* istanbul ignore if */
   if (transport == undefined) {
     throw Error('transport is a required parameter.');
@@ -296,6 +325,8 @@ export const GetPublicKey = async (transport, options): Promise<PublicKeyRespons
     };
   }
 
+  const ledgerDevice = requireLedgerDevice(device);
+
   try {
     let messagePrefix;
     if (options.verifyOnDevice) {
@@ -309,7 +340,7 @@ export const GetPublicKey = async (transport, options): Promise<PublicKeyRespons
     if (Debug) {
       logger.log('exchange', 'request', request.toString('hex').toUpperCase());
     }
-    const response = await device.device.exchange(request);
+    const response = await ledgerDevice.exchange(request);
     const responseStr = response.toString('hex').toUpperCase();
     /* istanbul ignore if */
     if (Debug) {
@@ -330,17 +361,17 @@ export const GetPublicKey = async (transport, options): Promise<PublicKeyRespons
       message: message,
       publicKey: publicKey,
     };
-  } catch (error) {
+  } catch (error: unknown) {
     /* istanbul ignore if */
     if (Debug) {
       logger.trace('getPublicKey', 'error', error);
     }
     return {
       success: false,
-      message: error.message,
+      message: getErrorMessageText(error),
     };
   } finally {
-    await device.device.close();
+    await ledgerDevice.close();
   }
 
   if (device.error) {
@@ -362,11 +393,11 @@ export const GetPublicKey = async (transport, options): Promise<PublicKeyRespons
  * @param length
  * @returns
  */
-export const ChunkString = (str, length) => {
-  return str.match(new RegExp('.{1,' + length + '}', 'g'));
+export const ChunkString = (str: string, length: number): string[] => {
+  return str.match(new RegExp('.{1,' + length + '}', 'g')) ?? [];
 };
 
-export const SplitMessageIntoChunks = (ledgerMessage) => {
+export const SplitMessageIntoChunks = (ledgerMessage: string): Buffer[] => {
   const messages: Buffer[] = [];
 
   messages.push(GetBip44PathMessage(Buffer.from('E006' + '00' + '80', 'hex')));
@@ -428,7 +459,7 @@ export const SplitMessageIntoChunks = (ledgerMessage) => {
   return messages;
 };
 
-export const DecodeSignature = (response) => {
+export const DecodeSignature = (response: string): string => {
   /* istanbul ignore if */
   if (Debug) {
     logger.log('decodeSignature', 'response', response);
@@ -441,7 +472,10 @@ export const DecodeSignature = (response) => {
   return signature;
 };
 
-export const SignLedger = async (transport, transactionHex): Promise<SignResponse> => {
+export const SignLedger = async (
+  transport: LedgerTransport,
+  transactionHex: string
+): Promise<SignResponse> => {
   /* istanbul ignore if */
   if (Debug) {
     logger.log('sign', 'transactionHex', transactionHex);
@@ -475,6 +509,8 @@ export const SignLedger = async (transport, transactionHex): Promise<SignRespons
     };
   }
 
+  const ledgerDevice = requireLedgerDevice(device);
+
   try {
     let lastResponse: string | undefined = undefined;
     // console.log('deviceThenCallback', 'messages', messages);
@@ -492,7 +528,7 @@ export const SignLedger = async (transport, transactionHex): Promise<SignRespons
         );
       }
 
-      const response = await device.device.exchange(message);
+      const response = await ledgerDevice.exchange(message);
       const responseStr = response.toString('hex').toUpperCase();
       if (Debug) {
         logger.log('exchange', ix, 'of', messages.length, 'response', responseStr);
@@ -511,9 +547,9 @@ export const SignLedger = async (transport, transactionHex): Promise<SignRespons
       lastResponse = responseStr;
     }
 
-    let signature = undefined;
+    let signature = '';
     let success = false;
-    let message = lastResponse;
+    let message = lastResponse ?? 'No response from Ledger device';
     if (lastResponse !== undefined) {
       if (lastResponse.endsWith('9000')) {
         signature = DecodeSignature(lastResponse);
@@ -528,17 +564,17 @@ export const SignLedger = async (transport, transactionHex): Promise<SignRespons
       message: message!,
       signature: signature,
     };
-  } catch (error) {
+  } catch (error: unknown) {
     /* istanbul ignore if */
     if (Debug) {
       logger.trace('sign', 'error', error);
     }
     return {
       success: false,
-      message: error.message,
+      message: getErrorMessageText(error),
     };
   } finally {
-    await device.device.close();
+    await ledgerDevice.close();
   }
 
   if (device.error) {

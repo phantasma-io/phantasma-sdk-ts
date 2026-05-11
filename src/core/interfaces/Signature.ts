@@ -8,8 +8,8 @@ export enum SignatureKind {
 }
 
 export class ISignature {
-  signature: string;
-  kind: number;
+  signature = '';
+  kind: SignatureKind = SignatureKind.None;
 }
 
 export abstract class Signature implements ISerializable {

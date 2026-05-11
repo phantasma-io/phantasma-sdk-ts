@@ -1,9 +1,9 @@
 import { VMObject } from '../VMObject.js';
 
 export class DisasmMethodCall {
-  public ContractName: string;
-  public MethodName: string;
-  public Arguments: VMObject[];
+  public ContractName = '';
+  public MethodName = '';
+  public Arguments: VMObject[] = [];
 
   public toString(): string {
     const sb = Array<string>();

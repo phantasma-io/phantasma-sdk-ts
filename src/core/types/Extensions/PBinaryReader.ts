@@ -104,7 +104,7 @@ export class PBinaryReader {
     return this.readBigInteger().toString();
   }
 
-  public readSignatureV2(): Signature {
+  public readSignatureV2(): Signature | null {
     const kind = this.readByte() as SignatureKind;
     const signature: Signature = new Ed25519Signature();
 
@@ -127,7 +127,7 @@ export class PBinaryReader {
     return signature;
   }
 
-  public readSignature(): Signature {
+  public readSignature(): Signature | null {
     const kind = this.readByte() as SignatureKind;
     const signature: Signature = new Ed25519Signature();
     signature.Kind = kind;

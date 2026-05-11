@@ -12,7 +12,13 @@ import { GetAddressFromPublicKey, GetAddressPublicKeyFromPublicKey } from './Add
 import { LedgerConfig } from './interfaces/LedgerConfig.js';
 import { GetPublicFromPrivate, Verify } from './Transaction-Sign.js';
 import { GetExpirationDate } from './Transaction-Transcode.js';
-import { GetVersion, GetApplicationName, GetPublicKey, SignLedger } from './Ledger-Utils.js';
+import {
+  GetVersion,
+  GetApplicationName,
+  GetPublicKey,
+  LedgerPublicKeyOptions,
+  SignLedger,
+} from './Ledger-Utils.js';
 import { LedgerDeviceInfoResponse } from './interfaces/LedgerDeviceInfoResponse.js';
 import { LedgerBalanceFromLedgerResponse } from './interfaces/LedgerBalanceFromLedgerResponse.js';
 import { LedgerSigner } from './interfaces/LedgerSigner.js';
@@ -23,7 +29,7 @@ import { LedgerSigner } from './interfaces/LedgerSigner.js';
  * @param length
  * @returns
  */
-export const LeftPad = (number, length): string => {
+export const LeftPad = (number: string | number, length: number): string => {
   let str = '' + number;
   while (str.length < length) {
     str = '0' + str;
@@ -37,7 +43,7 @@ export const LeftPad = (number, length): string => {
  * @param decimals
  * @returns
  */
-export const ToWholeNumber = (balance, decimals): string => {
+export const ToWholeNumber = (balance: string | number, decimals: number): string => {
   if (balance === undefined) {
     throw Error('balance is a required parameter.');
   }
@@ -84,7 +90,7 @@ export const GetLedgerDeviceInfo = async (
  */
 export const GetLedgerAccountSigner = async (
   config: LedgerConfig,
-  accountIx
+  accountIx: number
 ): Promise<LedgerSigner> => {
   /* istanbul ignore if */
   if (config === undefined) {
@@ -98,8 +104,10 @@ export const GetLedgerAccountSigner = async (
   const paths = await config.Transport.list();
   logger.log('paths', paths);
   if (paths.length == 0) {
-    alert('NUmber of devices found:' + paths.length);
-    return;
+    if (typeof alert !== 'undefined') {
+      alert('Number of devices found:' + paths.length);
+    }
+    throw Error('No Ledger device connected.');
   }
   const accountData = await GetLedgerSignerData(config, {
     verifyOnDevice: false,
@@ -108,9 +116,15 @@ export const GetLedgerAccountSigner = async (
 
   const signer: LedgerSigner = {
     GetPublicKey: () => {
+      if (!accountData.publicKey) {
+        throw Error('Ledger did not return a public key.');
+      }
       return accountData.publicKey;
     },
     GetAccount: () => {
+      if (!accountData.address) {
+        throw Error('Ledger did not return an address.');
+      }
       return accountData.address;
     },
   };
@@ -125,7 +139,7 @@ export const GetLedgerAccountSigner = async (
  */
 export async function GetLedgerSignerData(
   config: LedgerConfig,
-  options
+  options: LedgerPublicKeyOptions
 ): Promise<LedgerSignerData> {
   if (config == undefined) {
     throw Error('config is a required parameter.');
@@ -150,7 +164,11 @@ export async function GetLedgerSignerData(
   }
 
   const publicKey = msg.publicKey;
-  const address = GetAddressPublicKeyFromPublicKey(publicKey!);
+  if (!publicKey) {
+    response.message = 'Ledger did not return a public key.';
+    return response;
+  }
+  const address = GetAddressPublicKeyFromPublicKey(publicKey);
   response.success = true;
   response.message = 'success';
   response.address = address;
@@ -166,7 +184,7 @@ export async function GetLedgerSignerData(
  */
 export const GetBalanceFromLedger = async (
   config: LedgerConfig,
-  options
+  options: LedgerPublicKeyOptions
 ): Promise<LedgerBalanceFromLedgerResponse> => {
   /* istanbul ignore if */
   if (config == undefined) {
@@ -184,7 +202,7 @@ export const GetBalanceFromLedger = async (
   const response: LedgerBalanceFromLedgerResponse = {
     address: Address.Null,
     publicKey: '',
-    balances: new Map<string, { amount: number; decimals: number }>(),
+    balances: new Map<string, string>(),
     success: false,
     message: '',
   };
@@ -195,7 +213,11 @@ export const GetBalanceFromLedger = async (
   }
 
   const publicKey = msg.publicKey;
-  const address = GetAddressPublicKeyFromPublicKey(publicKey!);
+  if (!publicKey) {
+    response.message = 'Ledger did not return a public key.';
+    return response;
+  }
+  const address = GetAddressPublicKeyFromPublicKey(publicKey);
   /* istanbul ignore if */
   if (config.Debug) {
     logger.log('address', address);
@@ -207,10 +229,13 @@ export const GetBalanceFromLedger = async (
   if (config.Debug) {
     logger.log('rpcResponse', rpcResponse);
   }
-  response.balances = new Map<string, { amount: number; decimals: number }>();
+  response.balances = new Map<string, string>();
   if (rpcResponse.balances !== undefined) {
     rpcResponse.balances.forEach((balanceElt) => {
-      response.balances[balanceElt.symbol] = ToWholeNumber(balanceElt.amount, balanceElt.decimals);
+      response.balances?.set(
+        balanceElt.symbol,
+        ToWholeNumber(balanceElt.amount, balanceElt.decimals)
+      );
     });
   }
   response.address = address;
@@ -227,7 +252,7 @@ export const GetBalanceFromLedger = async (
  */
 export const GetAddressFromLedeger = async (
   config: LedgerConfig,
-  options
+  options: LedgerPublicKeyOptions
 ): Promise<string | PublicKeyResponse> => {
   /* istanbul ignore if */
   if (config == undefined) {
@@ -243,7 +268,10 @@ export const GetAddressFromLedeger = async (
     logger.log('getBalanceFromLedger', 'msg', msg);
   }
   if (msg.success) {
-    const publicKey = msg.publicKey!;
+    const publicKey = msg.publicKey;
+    if (!publicKey) {
+      return { success: false, message: 'Ledger did not return a public key.' };
+    }
     const address = GetAddressFromPublicKey(publicKey);
     return address;
   } else {
@@ -264,6 +292,9 @@ async function SignEncodedTx(encodedTx: string, config: LedgerConfig): Promise<s
     logger.log('sendAmountUsingLedger', 'signCallback', 'response', response);
   }
   if (response.success) {
+    if (!response.signature) {
+      throw Error('Ledger reported signing success without returning a signature.');
+    }
     return response.signature;
   } else {
     throw Error(response.message);
@@ -385,8 +416,8 @@ export async function SendTransactionLedger(
  * @returns
  */
 export const GetBalanceFromPrivateKey = async (
-  config,
-  privateKey
+  config: LedgerConfig,
+  privateKey: string
 ): Promise<LedgerBalanceFromLedgerResponse> => {
   /* istanbul ignore if */
   if (config == undefined) {
@@ -417,11 +448,19 @@ export const GetBalanceFromPrivateKey = async (
   if (config.Debug) {
     logger.log('rpcResponse', rpcResponse);
   }
-  let response: LedgerBalanceFromLedgerResponse;
-  response.balances = new Map<string, { amount: number; decimals: number }>();
+  const response: LedgerBalanceFromLedgerResponse = {
+    address: Address.Null,
+    publicKey,
+    balances: new Map<string, string>(),
+    success: false,
+    message: '',
+  };
   if (rpcResponse.balances !== undefined) {
     rpcResponse.balances.forEach((balanceElt) => {
-      response.balances[balanceElt.symbol] = ToWholeNumber(balanceElt.amount, balanceElt.decimals);
+      response.balances?.set(
+        balanceElt.symbol,
+        ToWholeNumber(balanceElt.amount, balanceElt.decimals)
+      );
     });
   }
   response.address = Address.FromText(address);
@@ -439,7 +478,11 @@ export const GetBalanceFromPrivateKey = async (
  * @param index
  * @returns
  */
-export const GetBalanceFromMnemonic = async (config: LedgerConfig, mnemonic: string, index) => {
+export const GetBalanceFromMnemonic = async (
+  config: LedgerConfig,
+  mnemonic: string,
+  index: string
+) => {
   /* istanbul ignore if */
   if (config == undefined) {
     throw Error('config is a required parameter.');

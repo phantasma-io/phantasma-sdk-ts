@@ -41,8 +41,8 @@ export class Serialization {
     CustomSerializer
   >(); //: { [key: string]: CustomSerializer };
 
-  static RegisterType<T>(type: T, reader: CustomReader, writer: CustomWriter) {
-    Serialization._customSerializers[typeof type] = new CustomSerializer(reader, writer);
+  static RegisterType<T>(type: T, reader: CustomReader, writer: CustomWriter): void {
+    Serialization._customSerializers.set(typeof type, new CustomSerializer(reader, writer));
   }
 
   static SerializeEnum(obj: unknown): Uint8Array {
@@ -82,8 +82,8 @@ export class Serialization {
       return;
     }
 
-    if (Serialization._customSerializers.has(typeof type)) {
-      const serializer = Serialization._customSerializers[typeof type];
+    const serializer = Serialization._customSerializers.get(typeof type);
+    if (serializer !== undefined) {
       serializer.Write(writer, obj);
       return;
     }
@@ -100,6 +100,7 @@ export class Serialization {
       return;
     } else if (typeof obj == 'bigint') {
       writer.writeBigInteger(obj);
+      return;
     } else if (obj instanceof String || typeof obj == 'string') {
       writer.writeString(obj as string);
       return;
@@ -123,6 +124,7 @@ export class Serialization {
       return;
     } else if (obj instanceof Uint8Array) {
       writer.writeByteArray(Array.from(obj));
+      return;
     } else {
       // TODO: Add support for other types
       // Get the keys of the object
@@ -147,8 +149,8 @@ export class Serialization {
   }
 
   static UnserializeObject<T>(reader: PBinaryReader, type: Constructor<T> | unknown): T {
-    if (Serialization._customSerializers.has(typeof type)) {
-      const serializer = Serialization._customSerializers[typeof type];
+    const serializer = Serialization._customSerializers.get(typeof type);
+    if (serializer !== undefined) {
       return serializer.Read(reader) as T;
     }
 
@@ -204,6 +206,7 @@ export class Serialization {
         );
       });
       return localType as T;*/
+      return localType as T;
     }
   }
 }

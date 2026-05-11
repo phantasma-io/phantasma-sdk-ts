@@ -7,11 +7,8 @@ type byte = number;
 
 export class PBinaryWriter {
   private writer: BinaryWriter;
-  _buffer: Buffer;
-  _position: number;
-  _length: number;
-  constructor(arg1?: undefined | Buffer | Uint8Array | null) {
-    this.writer = new BinaryWriter(arg1);
+  constructor(arg1?: Buffer | Uint8Array) {
+    this.writer = arg1 === undefined ? new BinaryWriter() : new BinaryWriter(arg1);
   }
 
   get length(): number {
@@ -244,7 +241,7 @@ export class PBinaryWriter {
     return this.writeByteArray(bytes);
   }
 
-  public writeSignature(signature: Signature): this {
+  public writeSignature(signature: Signature | null): this {
     if (!signature) {
       this.writeByte(SignatureKind.None);
       return this;

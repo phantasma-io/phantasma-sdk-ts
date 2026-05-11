@@ -21,13 +21,13 @@ const INT256_MAX = (1n << 255n) - 1n;
 const UINT256_MAX = (1n << 256n) - 1n;
 
 export class MetadataField {
-  name: string;
-  value: MetadataValueInput;
+  name = '';
+  value: MetadataValueInput = '';
 }
 
 export class FieldType {
-  name: string;
-  type: VmType;
+  name = '';
+  type = VmType.Dynamic;
 }
 
 export const seriesDefaultMetadataFields: readonly FieldType[] = [
@@ -49,7 +49,10 @@ export const standardMetadataFields: readonly FieldType[] = [
   { name: 'royalties', type: VmType.Int32 },
 ] as const;
 
-export function findMetadataField(fields: MetadataField[], name: string): MetadataField {
+export function findMetadataField(
+  fields: MetadataField[],
+  name: string
+): MetadataField | undefined {
   return fields.find((f) => f.name.toLowerCase() === name.toLowerCase());
 }
 

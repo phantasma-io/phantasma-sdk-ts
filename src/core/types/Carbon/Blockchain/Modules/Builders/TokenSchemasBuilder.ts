@@ -13,9 +13,9 @@ import {
 import { logger } from '../../../../../utils/logger.js';
 
 export class TokenSchemasJson {
-  seriesMetadata: FieldType[];
-  rom: FieldType[];
-  ram: FieldType[];
+  seriesMetadata: FieldType[] = [];
+  rom: FieldType[] = [];
+  ram: FieldType[] = [];
 }
 
 export function parseTokenSchemasJson(json: string): TokenSchemasJson {

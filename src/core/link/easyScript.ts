@@ -15,7 +15,7 @@ export class EasyScript {
     this.nexus = nexus;
   }
 
-  buildScript(_type: string, _options: unknown[] = [null]) {
+  buildScript(_type: string, _options: unknown[] = [null]): string {
     this.sb = new ScriptBuilder();
 
     switch (_type) {
@@ -30,8 +30,6 @@ export class EasyScript {
           .CallContract('gas', 'SpendGas', [])
           .EndScript();
 
-        break;
-
       case 'invoke':
         const contractNameInvoke = _options[0] as string;
         const methodNameInvoke = _options[1] as string;
@@ -40,8 +38,6 @@ export class EasyScript {
         return this.sb
           .CallContract(contractNameInvoke, methodNameInvoke, inputArgumentsInvoke) //The Meat of the Script
           .EndScript();
-
-        break;
 
       case 'interop':
         const interopNameInterop = _options[0] as string;
@@ -53,7 +49,8 @@ export class EasyScript {
           .CallContract('gas', 'SpendGas', [])
           .EndScript();
 
-        break;
+      default:
+        throw new Error(`Unsupported EasyScript type: ${_type}`);
     }
   }
 }

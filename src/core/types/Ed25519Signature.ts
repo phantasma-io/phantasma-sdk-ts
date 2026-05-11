@@ -10,7 +10,7 @@ export class Ed25519Signature implements Signature {
   public Bytes: Uint8Array;
   public Kind: SignatureKind = SignatureKind.Ed25519;
 
-  constructor(bytes?: Uint8Array) {
+  constructor(bytes: Uint8Array = new Uint8Array()) {
     this.Bytes = bytes;
   }
 

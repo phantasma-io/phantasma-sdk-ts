@@ -60,7 +60,7 @@ export function uint8ArrayToStringDefault(array: Uint8Array): string {
 }
 
 export function uint8ArrayToNumberArray(array: Uint8Array): number[] {
-  const result = [];
+  const result: number[] = [];
   for (let i = 0; i < array.length; i++) {
     result.push(array[i]);
   }
@@ -92,7 +92,7 @@ export function arrayNumberToUint8Array(arr: number[]): Uint8Array {
 }
 
 export function uint8ArrayToBytes(array: Uint8Array): number[] {
-  const result = [];
+  const result: number[] = [];
   for (let i = 0; i < array.length; i++) {
     result.push(array[i]);
   }
@@ -113,6 +113,8 @@ export function numberToByteArray(num: number, size?: number): Uint8Array {
       size = 5;
     } else if (num <= 0xffffffffffffffff) {
       size = 9;
+    } else {
+      throw new RangeError('number is too large to encode as a byte array');
     }
   }
   const bytes = new Uint8Array(size);
@@ -135,7 +137,7 @@ export function bigIntToByteArray(bigint: bigint): Uint8Array {
   return byteArray;
 }
 
-export const hex2ascii = (hexx) => {
+export const hex2ascii = (hexx: string): string => {
   const hex = hexx.toString();
   let str = '';
   for (let i = 0; i < hex.length; i += 2) {

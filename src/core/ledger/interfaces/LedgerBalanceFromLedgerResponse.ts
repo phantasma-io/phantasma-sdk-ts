@@ -5,5 +5,5 @@ export interface LedgerBalanceFromLedgerResponse {
   message: string;
   publicKey?: string;
   address?: Address;
-  balances?: Map<string, { amount: number; decimals: number }>;
+  balances?: Map<string, string>;
 }

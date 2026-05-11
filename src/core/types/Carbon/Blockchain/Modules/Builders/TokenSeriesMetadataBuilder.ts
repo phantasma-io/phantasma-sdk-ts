@@ -17,7 +17,7 @@ export class TokenSeriesMetadataBuilder {
     const wMetadata = new CarbonBinaryWriter();
 
     const sharedRomField = findMetadataField(metadata, 'rom');
-    let rom: Uint8Array | string;
+    let rom: Uint8Array | string = new Uint8Array();
     if (sharedRomField) {
       if (
         !(sharedRomField.value instanceof Uint8Array || typeof sharedRomField.value === 'string')
@@ -31,7 +31,7 @@ export class TokenSeriesMetadataBuilder {
     seriesMetadata.fields = [
       VmNamedDynamicVariable.from(StandardMeta.id, VmType.Int256, newPhantasmaSeriesId),
       VmNamedDynamicVariable.from('mode', VmType.Int8, rom == null || rom.length == 0 ? 0 : 1),
-      VmNamedDynamicVariable.from('rom', VmType.Bytes, rom ? rom : []),
+      VmNamedDynamicVariable.from('rom', VmType.Bytes, rom),
     ];
 
     seriesMetadataSchema.fields.forEach((s) => {

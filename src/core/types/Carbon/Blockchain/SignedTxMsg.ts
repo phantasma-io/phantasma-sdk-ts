@@ -8,8 +8,8 @@ import { TxMsg } from './TxMsg.js';
 
 export class SignedTxMsg implements ICarbonBlob {
   constructor(
-    public msg?: TxMsg,
-    public witnesses?: Witness[]
+    public msg: TxMsg = new TxMsg(),
+    public witnesses: Witness[] = []
   ) {}
 
   write(w: CarbonBinaryWriter): void {

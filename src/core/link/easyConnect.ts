@@ -83,9 +83,8 @@ export class EasyConnect {
               : null;
           onSuccess(data);
           logger.log('%c[EasyConnect Connected]', 'color:green');
-          logger.log(
-            "Wallet Address '" + this.link.account.address + "' connected via " + this.link.wallet
-          );
+          const address = this.link.account?.address ?? '<unknown>';
+          logger.log("Wallet Address '" + address + "' connected via " + this.link.wallet);
         } else {
           onFail();
           logger.log('EasyConnect could not connect to wallet');
@@ -105,7 +104,7 @@ export class EasyConnect {
   }
 
   async query(
-    _type: string = null,
+    _type: string | null = null,
     _arguments: string[] | null = null,
     _callback: EasyCallback = (data) => {
       logger.log(data);
@@ -121,25 +120,25 @@ export class EasyConnect {
           break;
 
         case 'name':
-          const name = this.link.account.name;
+          const name = this.link.account?.name;
           _callback(name);
           return name;
           break;
 
         case 'balances':
-          const balances = this.link.account.balances;
+          const balances = this.link.account?.balances;
           _callback(balances);
           return balances;
           break;
 
         case 'walletAddress':
-          const walletAddress = this.link.account.address;
+          const walletAddress = this.link.account?.address;
           _callback(walletAddress);
           return walletAddress;
           break;
 
         case 'avatar':
-          const avatar = this.link.account.avatar;
+          const avatar = this.link.account?.avatar;
           _callback(avatar);
           return avatar;
           break;
@@ -155,7 +154,7 @@ export class EasyConnect {
   }
 
   async action(
-    _type: string = null,
+    _type: string | null = null,
     _arguments: EasyArguments | null = null,
     onSuccess: EasyCallback = () => {},
     onFail: EasyCallback = (data) => {
@@ -164,21 +163,31 @@ export class EasyConnect {
   ) {
     if (this.connected == true) {
       switch (_type) {
-        case 'sendFT':
+        case 'sendFT': {
+          if (_arguments === null || _arguments.length < 4) {
+            onFail('Missing sendFT arguments');
+            return;
+          }
           const sendFTScript = await this.script.buildScript('interop', [
             'Runtime.SendTokens',
             [_arguments[0], _arguments[1], _arguments[2], _arguments[3]],
           ]);
           this.signTransaction(sendFTScript, null, onSuccess, onFail);
           break;
+        }
 
-        case 'sendNFT':
+        case 'sendNFT': {
+          if (_arguments === null || _arguments.length < 4) {
+            onFail('Missing sendNFT arguments');
+            return;
+          }
           const sendNFTScript = await this.script.buildScript('interop', [
             'Runtime.SendTokens',
             [_arguments[0], _arguments[1], _arguments[2], _arguments[3]],
           ]);
           this.signTransaction(sendNFTScript, null, onSuccess, onFail);
           break;
+        }
       }
     } else {
       logger.log('%cWallet is not connected', 'color:red');
@@ -187,7 +196,7 @@ export class EasyConnect {
 
   signTransaction(
     script: string,
-    payload = null,
+    payload: string | null = null,
     onSuccess: EasyCallback = () => {},
     onFail: EasyCallback = (data) => {
       logger.log('%cError: ' + data, 'color:red');

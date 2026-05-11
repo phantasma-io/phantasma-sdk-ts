@@ -126,9 +126,9 @@ export class MintPhantasmaNonFungibleTxHelper {
 
     const msg = new TxMsg();
     msg.type = TxTypes.Call;
-    msg.expiry = expiry || BigInt(Date.now() + 60_000);
+    msg.expiry = expiry ?? BigInt(Date.now() + 60_000);
     msg.maxGas = maxGas;
-    msg.maxData = maxData;
+    msg.maxData = maxData ?? 0n;
     msg.gasFrom = senderPublicKey;
     msg.payload = SmallString.empty;
 

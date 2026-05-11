@@ -72,7 +72,7 @@ export class Address implements ISerializable {
     return true;
   }
 
-  private _text: string;
+  private _text: string | null;
 
   private static _keyToTextCache = new Map<Uint8Array, string>();
 
@@ -83,7 +83,10 @@ export class Address implements ISerializable {
 
     if (!this._text) {
       if (Address._keyToTextCache.has(this._bytes)) {
-        this._text = Address._keyToTextCache.get(this._bytes);
+        const cachedText = Address._keyToTextCache.get(this._bytes);
+        if (cachedText !== undefined) {
+          this._text = cachedText;
+        }
       }
 
       if (!this._text) {

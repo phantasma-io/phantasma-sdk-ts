@@ -17,7 +17,7 @@ export class NftRomBuilder {
     const wRom = new CarbonBinaryWriter();
 
     const romField = findMetadataField(metadata, 'rom');
-    let rom: Uint8Array | string;
+    let rom: Uint8Array | string = new Uint8Array();
     if (romField) {
       if (!(romField.value instanceof Uint8Array || typeof romField.value === 'string')) {
         throw Error("'rom' must be a byte array or hex string");
@@ -28,7 +28,7 @@ export class NftRomBuilder {
     const nftRom = new VmDynamicStruct();
     nftRom.fields = [
       VmNamedDynamicVariable.from(StandardMeta.id, VmType.Int256, phantasmaNftId),
-      VmNamedDynamicVariable.from('rom', VmType.Bytes, rom ? rom : []),
+      VmNamedDynamicVariable.from('rom', VmType.Bytes, rom),
     ];
 
     nftRomSchema.fields.forEach((s) => {

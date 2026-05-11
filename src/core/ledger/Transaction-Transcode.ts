@@ -5,7 +5,9 @@
  * @param expirationDate
  * @returns
  */
-export const GetDateAsUTCSeconds = (expirationDate) => {
+import { Transaction } from '../tx/index.js';
+
+export const GetDateAsUTCSeconds = (expirationDate: Date): number => {
   const expirationDateUTCms = Date.UTC(
     expirationDate.getUTCFullYear(),
     expirationDate.getUTCMonth(),
@@ -21,7 +23,7 @@ export const GetDateAsUTCSeconds = (expirationDate) => {
  * Get Expiration Date
  * @returns
  */
-export const GetExpirationDate = () => {
+export const GetExpirationDate = (): Date => {
   // TODO: make expirationDate configurable.
   const expirationMinutes = 5; // This is in minutes
   const expirationDate = new Date(Date.now() + expirationMinutes * 60000);
@@ -33,7 +35,7 @@ export const GetExpirationDate = () => {
  * @param transaction
  * @returns
  */
-export const EncodeSendTxWithSignature = (transaction) => {
+export const EncodeSendTxWithSignature = (transaction: Transaction): string => {
   // console.log('encodeSendTx', 'transaction', transaction);
   const sendTx = transaction.toString(true);
   // console.log('encodeSendTx', 'sendTx', sendTx);
@@ -45,7 +47,7 @@ export const EncodeSendTxWithSignature = (transaction) => {
  * @param transaction
  * @returns
  */
-export const EncodeSendTxWithoutSignature = (transaction) => {
+export const EncodeSendTxWithoutSignature = (transaction: Transaction): string => {
   const sendTx = transaction.toString(false);
   // console.log('encodeSendTx', 'sendTx', sendTx);
   return sendTx;

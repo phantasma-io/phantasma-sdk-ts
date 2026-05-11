@@ -9,7 +9,6 @@
     "emitDecoratorMetadata": true,
     "experimentalDecorators": true,
     "removeComments": false,
-    //"noImplicitAny": false,
     "outDir": "./dist",
     "rootDir": "./src",
     // Added - Comment if needed
@@ -23,9 +22,7 @@
     "noUnusedParameters": false,
     "preserveWatchOutput": true,
     "skipLibCheck": true,
-    // TypeScript 6 defaults strict to true. Keep the existing non-strict SDK
-    // baseline here; enabling strict mode is a separate hardening change.
-    "strict": false
+    "strict": true
   },
   "include": ["src"]
 }

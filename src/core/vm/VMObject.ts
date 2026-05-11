@@ -611,6 +611,9 @@ export class VMObject implements ISerializable {
       const key = VMObject.FromObject(field);
       //const key = field;
       const dictKey = dictKeys.next().value;
+      if (dictKey === undefined) {
+        continue;
+      }
       let val: unknown;
       if (dictKey?.Data?.toString() == key?.Data?.toString()) {
         const localValue = dict.get(dictKey);

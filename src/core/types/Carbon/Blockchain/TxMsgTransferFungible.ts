@@ -4,9 +4,9 @@ import { Bytes32 } from '../Bytes32.js';
 
 export class TxMsgTransferFungible implements ICarbonBlob {
   constructor(
-    public to?: Bytes32,
-    public tokenId?: bigint,
-    public amount?: bigint
+    public to: Bytes32 = Bytes32.Empty,
+    public tokenId: bigint = 0n,
+    public amount: bigint = 0n
   ) {}
   write(w: CarbonBinaryWriter): void {
     this.to.write(w);

@@ -28,9 +28,9 @@ export class MintNonFungibleTxHelper {
 
     const msg = new TxMsg();
     msg.type = TxTypes.MintNonFungible;
-    msg.expiry = expiry || BigInt(Date.now() + 60_000);
+    msg.expiry = expiry ?? BigInt(Date.now() + 60_000);
     msg.maxGas = maxGas;
-    msg.maxData = maxData;
+    msg.maxData = maxData ?? 0n;
     msg.gasFrom = senderPublicKey;
     msg.payload = SmallString.empty;
 
@@ -91,7 +91,7 @@ export class MintNonFungibleTxHelper {
       signer,
       receiverPublicKey,
       rom,
-      ram,
+      ram ?? new Uint8Array(),
       feeOptions,
       maxData,
       expiry

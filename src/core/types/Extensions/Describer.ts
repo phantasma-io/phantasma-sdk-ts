@@ -1,7 +1,7 @@
 export class Describer {
   private static FRegEx = new RegExp(/(?:this\.)(.+?(?= ))/g);
   static describe(val: { prototype: object; toString(): string }, parent = false): string[] {
-    let result = [];
+    let result: string[] = [];
     if (parent) {
       const proto = Object.getPrototypeOf(val.prototype);
       if (proto) {

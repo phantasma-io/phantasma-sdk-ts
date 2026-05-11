@@ -257,8 +257,8 @@ export class ScriptBuilder {
         }
       } else if (obj.Data instanceof VMObject) {
         const writerNew: PBinaryWriter = new PBinaryWriter();
-        const bytes = obj.Data.SerializeData(writerNew);
-        //console.log(bytes.length);
+        obj.Data.SerializeData(writerNew);
+        const bytes = writerNew.toUint8Array();
         this.EmitVarInt(bytes.length);
         this.AppendBytes(Array.from(bytes));
       }

@@ -15,7 +15,7 @@ export class Transaction implements ISerializable {
   payload: string; // Should be HexString
   expiration: Date;
   signatures: Array<Signature>;
-  hash: string;
+  hash = '';
 
   public static FromBytes(serializedData: string): Transaction {
     const transaction = new Transaction('', '', '', new Date(), '');
@@ -156,7 +156,9 @@ export class Transaction implements ISerializable {
     const sigCount = reader.readVarInt();
     for (let i = 0; i < sigCount; i++) {
       const sig = reader.readSignatureV2();
-      this.signatures.push(sig);
+      if (sig !== null) {
+        this.signatures.push(sig);
+      }
     }
   }
 

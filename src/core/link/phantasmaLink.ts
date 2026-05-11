@@ -18,10 +18,10 @@ interface PhantasmaLinkSocketLike {
   close(): void;
   send(request: string): void;
   readyState?: number;
-  onopen?: (event: unknown) => void;
-  onmessage?: (event: { data: string }) => void;
-  onclose?: (event: { reason?: string; wasClean?: boolean }) => void;
-  onerror?: (error: unknown) => void;
+  onopen?: ((event: Event) => void) | null;
+  onmessage?: ((event: MessageEvent<string>) => void) | null;
+  onclose?: ((event: CloseEvent) => void) | null;
+  onerror?: ((error: Event) => void) | null;
 }
 
 declare global {
@@ -88,6 +88,7 @@ export class PhantasmaLink {
     this.nexus = '';
     this.chain = 'main';
     this.platform = 'poltergeist';
+    this.providerHint = 'poltergeist';
 
     //Turn On|Off Console Logging
     if (logging == false) {
@@ -154,7 +155,7 @@ export class PhantasmaLink {
   //Connect To Wallet
   login(
     onLoginCallback: (success: boolean) => void,
-    onErrorCallback: (message: string) => void,
+    onErrorCallback: LinkErrorCallback,
     version: number = 4,
     platform: string = 'phantasma',
     providerHint: string = 'poltergeist'
@@ -642,7 +643,9 @@ export class PhantasmaLink {
         : `Using raw WebSocket transport: ${path}`
     );
 
-    this.socket = useInjectedSocket && injectedSocket ? new injectedSocket() : new WebSocket(path);
+    const socket: PhantasmaLinkSocketLike =
+      useInjectedSocket && injectedSocket ? new injectedSocket() : new WebSocket(path);
+    this.socket = socket;
 
     this.requestCallback = null;
     this.lastSocketErrorMessage = null;
@@ -653,7 +656,7 @@ export class PhantasmaLink {
     const authorizeRequest = 'authorize/' + this.dapp + '/' + this.version;
     const getAccountRequest = 'getAccount/' + this.platform;
     //Once Socket Opened
-    this.socket.onopen = () => {
+    socket.onopen = () => {
       this.socketOpen = true;
       this.onMessage('Connection established, authorizing dapp in wallet...');
       if (isResume) {
@@ -690,7 +693,7 @@ export class PhantasmaLink {
     };
 
     //Retrieves Message From Socket and Processes It
-    this.socket.onmessage = (event) => {
+    socket.onmessage = (event) => {
       const obj = JSON.parse(event.data) as LinkResponse;
       if (this.messageLogging == true) {
         logger.log('%c' + event.data, 'color:blue');
@@ -739,7 +742,7 @@ export class PhantasmaLink {
     };
 
     //Cleanup After Socket Closes
-    this.socket.onclose = (event) => {
+    socket.onclose = (event) => {
       this.socketOpen = false;
       const reason =
         event.reason && event.reason.length > 0
@@ -756,7 +759,7 @@ export class PhantasmaLink {
     };
 
     //Error Callback When Socket Has Error
-    this.socket.onerror = (error) => {
+    socket.onerror = (error) => {
       const errMsg = errorMessage(error, 'WebSocket error');
       this.lastSocketErrorMessage = errMsg;
       this.onMessage('Error: ' + errMsg);

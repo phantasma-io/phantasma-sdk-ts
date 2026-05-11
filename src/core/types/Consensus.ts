@@ -41,9 +41,9 @@ export class PollChoice implements ISerializable {
 }
 
 export class PollValue implements ISerializable {
-  public value: string; // Should be byte[]
-  public ranking: bigint;
-  public votes: bigint;
+  public value = ''; // Should be byte[]
+  public ranking = 0n;
+  public votes = 0n;
 
   SerializeData(writer: PBinaryWriter) {
     writer.writeByteArray(stringToUint8Array(this.value));
@@ -65,8 +65,8 @@ export class PollValue implements ISerializable {
 }
 
 export class PollVote implements ISerializable {
-  public index: bigint;
-  public percentage: bigint;
+  public index = 0n;
+  public percentage = 0n;
 
   SerializeData(writer: PBinaryWriter) {
     writer.writeBigInteger(this.index);
@@ -153,8 +153,8 @@ export class ConsensusPoll implements ISerializable {
 }
 
 export class PollPresence implements ISerializable {
-  public subject: string;
-  public round: bigint;
+  public subject = '';
+  public round = 0n;
 
   SerializeData(writer: PBinaryWriter) {
     writer.writeString(this.subject);
