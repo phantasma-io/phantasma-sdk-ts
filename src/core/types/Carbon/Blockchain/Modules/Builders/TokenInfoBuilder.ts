@@ -18,7 +18,7 @@ export class TokenInfoBuilder {
   ): TokenInfo {
     const { ok, error } = this.checkIsValidSymbol(symbol);
     if (!ok) {
-      throw Error(error ?? "Unknown error");
+      throw Error(error ?? 'Unknown error');
     }
 
     const tokenInfo = new TokenInfo();
@@ -27,7 +27,7 @@ export class TokenInfoBuilder {
     tokenInfo.flags = 0; // Small fungible
     if (isNFT) {
       if (!maxSupply.is8ByteSafe()) {
-        throw Error("NFT maximum supply must fit into Int64");
+        throw Error('NFT maximum supply must fit into Int64');
       }
       tokenInfo.flags = CarbonTokenFlags.NonFungible;
     } else {
@@ -41,13 +41,13 @@ export class TokenInfoBuilder {
     tokenInfo.symbol = new SmallString(symbol);
 
     if (!metadata) {
-      throw new Error('metadata is required for all tokens')
+      throw new Error('metadata is required for all tokens');
     }
     tokenInfo.metadata = metadata;
 
     if (isNFT) {
       if (!tokenSchemas) {
-        throw new Error('tokenSchemas is required for NFTs')
+        throw new Error('tokenSchemas is required for NFTs');
       }
       tokenInfo.tokenSchemas = TokenSchemasBuilder.serialize(tokenSchemas);
     }
@@ -57,22 +57,26 @@ export class TokenInfoBuilder {
 
   static maxSymbolLength: number = 255;
   /**
-  * Mirrors carbon::CheckIsValidSymbol from contracts/token.cpp.
-  * Returns true when valid, or false when the symbol must be rejected.
-  */
-  static checkIsValidSymbol(symbol: string): { ok: boolean, error: string | null } {
+   * Mirrors carbon::CheckIsValidSymbol from contracts/token.cpp.
+   * Returns true when valid, or false when the symbol must be rejected.
+   */
+  static checkIsValidSymbol(symbol: string): { ok: boolean; error: string | null } {
     if (!symbol || symbol.length === 0) {
-      return { ok: false, error: "Symbol validation error: Empty string is invalid" };
+      return { ok: false, error: 'Symbol validation error: Empty string is invalid' };
     }
     if (symbol.length > this.maxSymbolLength) {
-      return { ok: false, error: "Symbol validation error: Too long" };
+      return { ok: false, error: 'Symbol validation error: Too long' };
     }
 
     for (let i = 0; i < symbol.length; i++) {
       const code = symbol.charCodeAt(i);
       const isUppercaseAsciiLetter = code >= 0x41 && code <= 0x5a; // 'A'..'Z'
       if (!isUppercaseAsciiLetter) {
-        return { ok: false, error: "Symbol validation error: Anything outside A–Z is forbidden (digits, accents, etc.)" };
+        return {
+          ok: false,
+          error:
+            'Symbol validation error: Anything outside A–Z is forbidden (digits, accents, etc.)',
+        };
       }
     }
 

@@ -1,4 +1,4 @@
-import { Address, ContractInterface } from "../types/index.js";
+import { Address, ContractInterface } from '../types/index.js';
 
 export enum TokenFlags {
   None = 0,

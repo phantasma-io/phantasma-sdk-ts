@@ -1,7 +1,12 @@
 import { CarbonBinaryWriter } from '../../../../CarbonSerialization.js';
 import { VmDynamicStruct, VmNamedDynamicVariable, VmStructSchema, VmType } from '../../Vm/index.js';
 import { StandardMeta } from '../StandardMeta.js';
-import { findMetadataField, MetadataField, nftDefaultMetadataFields, pushMetadataField } from './MetadataHelper.js';
+import {
+  findMetadataField,
+  MetadataField,
+  nftDefaultMetadataFields,
+  pushMetadataField,
+} from './MetadataHelper.js';
 
 export class NftRomBuilder {
   static buildAndSerialize(
@@ -13,8 +18,8 @@ export class NftRomBuilder {
 
     const romField = findMetadataField(metadata, 'rom');
     let rom: Uint8Array | string;
-    if(romField) {
-      if(!(romField.value instanceof Uint8Array || typeof romField.value === "string")) {
+    if (romField) {
+      if (!(romField.value instanceof Uint8Array || typeof romField.value === 'string')) {
         throw Error("'rom' must be a byte array or hex string");
       }
       rom = romField.value;
@@ -23,21 +28,18 @@ export class NftRomBuilder {
     const nftRom = new VmDynamicStruct();
     nftRom.fields = [
       VmNamedDynamicVariable.from(StandardMeta.id, VmType.Int256, phantasmaNftId),
-      VmNamedDynamicVariable.from('rom', VmType.Bytes, rom ? rom : [])
+      VmNamedDynamicVariable.from('rom', VmType.Bytes, rom ? rom : []),
     ];
 
-    nftRomSchema.fields.forEach(s => {
+    nftRomSchema.fields.forEach((s) => {
       // We don't verify default fields here, they are treated differently
       // in the code above.
-      if(!nftDefaultMetadataFields.some(df => df.name === s.name.data)) {
+      if (!nftDefaultMetadataFields.some((df) => df.name === s.name.data)) {
         pushMetadataField(s, nftRom, metadata);
       }
     });
 
-    nftRom.writeWithSchema(
-      nftRomSchema,
-      wRom
-    );
+    nftRom.writeWithSchema(nftRomSchema, wRom);
 
     // console.log("nftRom.fields.length: ", nftRom.fields.length);
     // TokenSchemasBuilder.logSchema(nftRomSchema);

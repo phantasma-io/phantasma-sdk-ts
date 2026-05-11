@@ -1,4 +1,4 @@
-import { Signature } from "./Signature.js";
+import { Signature } from './Signature.js';
 
 export interface IKeyPair {
   PrivateKey: Uint8Array;

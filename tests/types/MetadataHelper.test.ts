@@ -1,7 +1,16 @@
 import { Bytes16 } from '../../src/core/types/Carbon/Bytes16';
 import { Bytes32 } from '../../src/core/types/Carbon/Bytes32';
-import { VmDynamicStruct, VmNamedVariableSchema, VmStructSchema, VmType, VmVariableSchema } from '../../src/core/types/Carbon/Blockchain/Vm';
-import { MetadataField, pushMetadataField } from '../../src/core/types/Carbon/Blockchain/Modules/Builders/MetadataHelper';
+import {
+  VmDynamicStruct,
+  VmNamedVariableSchema,
+  VmStructSchema,
+  VmType,
+  VmVariableSchema,
+} from '../../src/core/types/Carbon/Blockchain/Vm';
+import {
+  MetadataField,
+  pushMetadataField,
+} from '../../src/core/types/Carbon/Blockchain/Modules/Builders/MetadataHelper';
 
 describe('MetadataHelper.pushMetadataField', () => {
   it('accepts matching Int32 values', () => {
@@ -111,7 +120,7 @@ describe('MetadataHelper.pushMetadataField', () => {
   it('rejects values outside Int64/UInt64 bounds', () => {
     const struct = new VmDynamicStruct();
     const schema = new VmNamedVariableSchema('supply', VmType.Int64);
-    const metadata: MetadataField[] = [{ name: 'supply', value: (1n << 64n) }];
+    const metadata: MetadataField[] = [{ name: 'supply', value: 1n << 64n }];
 
     expect(() => pushMetadataField(schema, struct, metadata)).toThrow(
       "Metadata field 'supply' must be between -9223372036854775808 and 9223372036854775807 or between 0 and 18446744073709551615 (Int64)"
@@ -121,7 +130,7 @@ describe('MetadataHelper.pushMetadataField', () => {
   it('rejects values outside Int256/UInt256 bounds', () => {
     const struct = new VmDynamicStruct();
     const schema = new VmNamedVariableSchema('value', VmType.Int256);
-    const metadata: MetadataField[] = [{ name: 'value', value: (1n << 256n) }];
+    const metadata: MetadataField[] = [{ name: 'value', value: 1n << 256n }];
 
     expect(() => pushMetadataField(schema, struct, metadata)).toThrow(
       "Metadata field 'value' must be between -57896044618658097711785492504343953926634992332820282019728792003956564819968 and 57896044618658097711785492504343953926634992332820282019728792003956564819967 or between 0 and 115792089237316195423570985008687907853269984665640564039457584007913129639935 (Int256)"
@@ -154,11 +163,16 @@ describe('MetadataHelper.pushMetadataField', () => {
       new VmNamedVariableSchema('innerName', VmType.String),
       new VmNamedVariableSchema('innerValue', VmType.Int32),
     ]);
-    const schema = new VmNamedVariableSchema('details', new VmVariableSchema(VmType.Struct, nestedSchema));
-    const metadata: MetadataField[] = [{
-      name: 'details',
-      value: { innerName: 'demo', innerValue: 5 },
-    }];
+    const schema = new VmNamedVariableSchema(
+      'details',
+      new VmVariableSchema(VmType.Struct, nestedSchema)
+    );
+    const metadata: MetadataField[] = [
+      {
+        name: 'details',
+        value: { innerName: 'demo', innerValue: 5 },
+      },
+    ];
 
     pushMetadataField(schema, struct, metadata);
 
@@ -173,11 +187,16 @@ describe('MetadataHelper.pushMetadataField', () => {
     const nestedSchema = new VmStructSchema([
       new VmNamedVariableSchema('innerName', VmType.String),
     ]);
-    const schema = new VmNamedVariableSchema('details', new VmVariableSchema(VmType.Struct, nestedSchema));
-    const metadata: MetadataField[] = [{
-      name: 'details',
-      value: { innerName: 'demo', extra: 'oops' },
-    }];
+    const schema = new VmNamedVariableSchema(
+      'details',
+      new VmVariableSchema(VmType.Struct, nestedSchema)
+    );
+    const metadata: MetadataField[] = [
+      {
+        name: 'details',
+        value: { innerName: 'demo', extra: 'oops' },
+      },
+    ];
 
     expect(() => pushMetadataField(schema, struct, metadata)).toThrow(
       "Metadata field 'details' received unknown property 'extra'"
@@ -189,11 +208,16 @@ describe('MetadataHelper.pushMetadataField', () => {
     const nestedSchema = new VmStructSchema([
       new VmNamedVariableSchema('innerName', VmType.String),
     ]);
-    const schema = new VmNamedVariableSchema('details', new VmVariableSchema(VmType.Struct, nestedSchema));
-    const metadata: MetadataField[] = [{
-      name: 'details',
-      value: {},
-    }];
+    const schema = new VmNamedVariableSchema(
+      'details',
+      new VmVariableSchema(VmType.Struct, nestedSchema)
+    );
+    const metadata: MetadataField[] = [
+      {
+        name: 'details',
+        value: {},
+      },
+    ];
 
     expect(() => pushMetadataField(schema, struct, metadata)).toThrow(
       "Metadata field 'details.innerName' is mandatory"
@@ -202,7 +226,10 @@ describe('MetadataHelper.pushMetadataField', () => {
 
   it('accepts arrays for matching array schema', () => {
     const struct = new VmDynamicStruct();
-    const schema = new VmNamedVariableSchema('tags', new VmVariableSchema(VmType.Array | VmType.String));
+    const schema = new VmNamedVariableSchema(
+      'tags',
+      new VmVariableSchema(VmType.Array | VmType.String)
+    );
     const metadata: MetadataField[] = [{ name: 'tags', value: ['alpha', 'beta'] }];
 
     pushMetadataField(schema, struct, metadata);
@@ -212,7 +239,10 @@ describe('MetadataHelper.pushMetadataField', () => {
 
   it('converts Int8 arrays into Uint8Array', () => {
     const struct = new VmDynamicStruct();
-    const schema = new VmNamedVariableSchema('deltas', new VmVariableSchema(VmType.Array | VmType.Int8));
+    const schema = new VmNamedVariableSchema(
+      'deltas',
+      new VmVariableSchema(VmType.Array | VmType.Int8)
+    );
     const metadata: MetadataField[] = [{ name: 'deltas', value: [1, -1, 5] }];
 
     pushMetadataField(schema, struct, metadata);
@@ -223,14 +253,17 @@ describe('MetadataHelper.pushMetadataField', () => {
 
   it('builds VmStructArray for arrays of structs', () => {
     const struct = new VmDynamicStruct();
-    const elementSchema = new VmStructSchema([
-      new VmNamedVariableSchema('name', VmType.String),
-    ]);
-    const schema = new VmNamedVariableSchema('items', new VmVariableSchema(VmType.Array | VmType.Struct, elementSchema));
-    const metadata: MetadataField[] = [{
-      name: 'items',
-      value: [{ name: 'one' }, { name: 'two' }],
-    }];
+    const elementSchema = new VmStructSchema([new VmNamedVariableSchema('name', VmType.String)]);
+    const schema = new VmNamedVariableSchema(
+      'items',
+      new VmVariableSchema(VmType.Array | VmType.Struct, elementSchema)
+    );
+    const metadata: MetadataField[] = [
+      {
+        name: 'items',
+        value: [{ name: 'one' }, { name: 'two' }],
+      },
+    ];
 
     pushMetadataField(schema, struct, metadata);
 
@@ -252,14 +285,19 @@ describe('MetadataHelper.pushMetadataField', () => {
 
   it('builds arrays of Bytes32 instances', () => {
     const struct = new VmDynamicStruct();
-    const schema = new VmNamedVariableSchema('roots', new VmVariableSchema(VmType.Array | VmType.Bytes32));
-    const metadata: MetadataField[] = [{
-      name: 'roots',
-      value: [
-        '00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff',
-        'ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff',
-      ],
-    }];
+    const schema = new VmNamedVariableSchema(
+      'roots',
+      new VmVariableSchema(VmType.Array | VmType.Bytes32)
+    );
+    const metadata: MetadataField[] = [
+      {
+        name: 'roots',
+        value: [
+          '00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff',
+          'ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff',
+        ],
+      },
+    ];
 
     pushMetadataField(schema, struct, metadata);
 

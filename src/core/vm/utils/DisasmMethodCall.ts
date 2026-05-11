@@ -1,4 +1,4 @@
-import { VMObject } from "../VMObject.js";
+import { VMObject } from '../VMObject.js';
 
 export class DisasmMethodCall {
   public ContractName: string;
@@ -10,13 +10,13 @@ export class DisasmMethodCall {
     sb.push(`${this.ContractName}.${this.MethodName}(`);
     for (let i = 0; i < this.Arguments.length; i++) {
       if (i > 0) {
-        sb.push(",");
+        sb.push(',');
       }
 
       const arg = this.Arguments[i];
       sb.push(arg.toString());
     }
-    sb.push(")");
-    return sb.join("");
+    sb.push(')');
+    return sb.join('');
   }
 }

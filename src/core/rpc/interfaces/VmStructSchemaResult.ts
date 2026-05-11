@@ -4,4 +4,3 @@ export interface VmStructSchemaResult {
   fields: VmNamedVariableSchemaResult[];
   flags: number;
 }
-

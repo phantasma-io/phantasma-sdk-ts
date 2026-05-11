@@ -1,9 +1,5 @@
 import { CarbonBinaryWriter } from '../../../../CarbonSerialization.js';
-import {
-  VmDynamicStruct,
-  VmNamedVariableSchema,
-  VmStructSchema,
-} from '../../Vm/index.js';
+import { VmDynamicStruct, VmNamedVariableSchema, VmStructSchema } from '../../Vm/index.js';
 import { MetadataField, pushMetadataField } from './MetadataHelper.js';
 
 export class PhantasmaNftRomBuilder {
@@ -18,10 +14,7 @@ export class PhantasmaNftRomBuilder {
     );
   }
 
-  static buildAndSerialize(
-    nftRomSchema: VmStructSchema,
-    metadata: MetadataField[]
-  ): Uint8Array {
+  static buildAndSerialize(nftRomSchema: VmStructSchema, metadata: MetadataField[]): Uint8Array {
     const reservedField = (metadata ?? []).find((field) =>
       this.reservedFieldNames.has(field.name.toLowerCase())
     );

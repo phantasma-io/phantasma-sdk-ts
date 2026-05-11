@@ -53,16 +53,22 @@ export class MintPhantasmaNonFungibleTxHelper {
   ): TxMsg {
     if (typeof arg1 === 'bigint') {
       if (!(arg3 instanceof Bytes32)) {
-        throw new Error('receiverPublicKey is required for single-item MintPhantasmaNonFungible tx');
+        throw new Error(
+          'receiverPublicKey is required for single-item MintPhantasmaNonFungible tx'
+        );
       }
 
       const publicRom = arg4;
       const ram = arg5;
       if (!(publicRom instanceof Uint8Array)) {
-        throw new Error('publicRom must be a Uint8Array for single-item MintPhantasmaNonFungible tx');
+        throw new Error(
+          'publicRom must be a Uint8Array for single-item MintPhantasmaNonFungible tx'
+        );
       }
       if (!(ram === undefined || ram instanceof Uint8Array)) {
-        throw new Error('ram must be a Uint8Array when provided for single-item MintPhantasmaNonFungible tx');
+        throw new Error(
+          'ram must be a Uint8Array when provided for single-item MintPhantasmaNonFungible tx'
+        );
       }
 
       const safeRam = ram instanceof Uint8Array ? ram : new Uint8Array();

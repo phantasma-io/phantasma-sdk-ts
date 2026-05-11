@@ -49,9 +49,9 @@ describe('TokenInfoBuilder', () => {
   });
 
   it('requires metadata for all tokens', () => {
-    expect(() =>
-      TokenInfoBuilder.build('TEST', maxSupply, false, 0, creator, undefined)
-    ).toThrow(/metadata is required/);
+    expect(() => TokenInfoBuilder.build('TEST', maxSupply, false, 0, creator, undefined)).toThrow(
+      /metadata is required/
+    );
   });
 
   it('enforces NFT constraints', () => {
@@ -59,7 +59,15 @@ describe('TokenInfoBuilder', () => {
     const bigSupply = IntX.fromBigInt(9223372036854775808n);
 
     expect(() =>
-      TokenInfoBuilder.build('NFT', bigSupply, true, 0, creator, metadata, TokenSchemasBuilder.prepareStandard(false))
+      TokenInfoBuilder.build(
+        'NFT',
+        bigSupply,
+        true,
+        0,
+        creator,
+        metadata,
+        TokenSchemasBuilder.prepareStandard(false)
+      )
     ).toThrow(/NFT maximum supply must fit into Int64/);
 
     expect(() =>
@@ -70,7 +78,9 @@ describe('TokenInfoBuilder', () => {
   it('accepts valid fungible tokens', () => {
     const metadata = buildTokenMetadata();
 
-    expect(() => TokenInfoBuilder.build('FUNGIBLE', maxSupply, false, 8, creator, metadata)).not.toThrow();
+    expect(() =>
+      TokenInfoBuilder.build('FUNGIBLE', maxSupply, false, 8, creator, metadata)
+    ).not.toThrow();
   });
 });
 

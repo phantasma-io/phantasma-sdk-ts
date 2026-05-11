@@ -14,7 +14,10 @@ import {
 } from '../../src/core/types/Carbon/Blockchain/Modules/Builders';
 import { VmDynamicStruct } from '../../src/core/types/Carbon/Blockchain/Vm';
 import { SmallString } from '../../src/core/types/Carbon/SmallString';
-import { MintNftFeeOptions, MintPhantasmaNonFungibleTxHelper } from '../../src/core/types/Carbon/Blockchain/TxHelpers';
+import {
+  MintNftFeeOptions,
+  MintPhantasmaNonFungibleTxHelper,
+} from '../../src/core/types/Carbon/Blockchain/TxHelpers';
 import { ModuleId } from '../../src/core/types/Carbon/Blockchain/ModuleId';
 
 const sender = new Bytes32(new Uint8Array(32).fill(0x11));

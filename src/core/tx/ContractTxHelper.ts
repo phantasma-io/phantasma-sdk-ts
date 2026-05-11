@@ -5,7 +5,12 @@ import { PhantasmaKeys } from '../types/PhantasmaKeys.js';
 import { bytesToHex } from '../utils/index.js';
 import { ScriptBuilder } from '../vm/index.js';
 import { Transaction } from './Transaction.js';
-import { ContractArtifactBundle, ContractBinaryInput, coerceContractBytes, normalizeContractName } from './ContractArtifacts.js';
+import {
+  ContractArtifactBundle,
+  ContractBinaryInput,
+  coerceContractBytes,
+  normalizeContractName,
+} from './ContractArtifacts.js';
 
 export interface ContractScriptBuildParams {
   from: string | Address;
@@ -60,7 +65,12 @@ export class ContractTxHelper {
     return tx.ToStringEncoded(true).toUpperCase();
   }
 
-  static buildDeployScriptFromBundle(bundle: ContractArtifactBundle, from: string | Address, gasPrice?: number | bigint, gasLimit?: number | bigint): string {
+  static buildDeployScriptFromBundle(
+    bundle: ContractArtifactBundle,
+    from: string | Address,
+    gasPrice?: number | bigint,
+    gasLimit?: number | bigint
+  ): string {
     return this.buildDeployScript({
       from,
       contractName: bundle.contractName,
@@ -71,7 +81,12 @@ export class ContractTxHelper {
     });
   }
 
-  static buildUpgradeScriptFromBundle(bundle: ContractArtifactBundle, from: string | Address, gasPrice?: number | bigint, gasLimit?: number | bigint): string {
+  static buildUpgradeScriptFromBundle(
+    bundle: ContractArtifactBundle,
+    from: string | Address,
+    gasPrice?: number | bigint,
+    gasLimit?: number | bigint
+  ): string {
     return this.buildUpgradeScript({
       from,
       contractName: bundle.contractName,
@@ -95,8 +110,14 @@ export class ContractTxHelper {
     const contractName = normalizeContractName(params.contractName);
     const scriptBytes = coerceContractBytes(params.script, 'script');
     const abiBytes = coerceContractBytes(params.abi, 'abi');
-    const gasPrice = this.normalizeSmallInteger(params.gasPrice ?? this.DefaultGasPrice, 'gasPrice');
-    const gasLimit = this.normalizeSmallInteger(params.gasLimit ?? this.DefaultGasLimit, 'gasLimit');
+    const gasPrice = this.normalizeSmallInteger(
+      params.gasPrice ?? this.DefaultGasPrice,
+      'gasPrice'
+    );
+    const gasLimit = this.normalizeSmallInteger(
+      params.gasLimit ?? this.DefaultGasLimit,
+      'gasLimit'
+    );
     const nullAddress = new ScriptBuilder().NullAddress;
 
     return new ScriptBuilder()

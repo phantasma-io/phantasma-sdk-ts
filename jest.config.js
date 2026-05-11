@@ -3,7 +3,7 @@ module.exports = {
   testRegex: '/tests/.*\\.(test|spec)?\\.(ts|tsx)$',
   moduleFileExtensions: ['ts', 'tsx', 'js', 'jsx', 'json', 'node'],
   testPathIgnorePatterns: ['/node_modules/', '/USE_ONLY_AS_DOCUMENTATION/'],
-  transform: { "^.+\\.tsx?$": ["ts-jest", { tsconfig: "tsconfig.jest.json" }] },
+  transform: { '^.+\\.tsx?$': ['ts-jest', { tsconfig: 'tsconfig.jest.json' }] },
   moduleNameMapper: {
     '^(\\.{1,2}/.*)\\.js$': '$1',
   },

@@ -8,6 +8,12 @@ test:
 
 alias t := test
 
+[group('format')]
+format:
+    npm run format
+
+alias f := format
+
 # Reinstall all modules. Don't forget 'nvm use 22'!
 [group('manage')]
 reinstall:
@@ -50,4 +56,3 @@ publish: build
 [group('publish')]
 publish-rc: build
     npm publish --tag rc
-

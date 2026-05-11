@@ -55,12 +55,12 @@ export function vmTypeFromString(type: string): VmType {
     Array_Bytes32: VmType.Array_Bytes32,
     Array_Bytes64: VmType.Array_Bytes64,
     Array_String: VmType.Array_String,
-  }
+  };
 
-  const value = map[type.trim()]
+  const value = map[type.trim()];
   if (value === undefined) {
-    throw new Error(`Unknown VmType: ${type}`)
+    throw new Error(`Unknown VmType: ${type}`);
   }
 
-  return value
+  return value;
 }

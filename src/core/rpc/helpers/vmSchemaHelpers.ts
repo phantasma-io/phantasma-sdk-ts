@@ -1,4 +1,10 @@
-import { VmNamedVariableSchema, VmStructSchema, VmType, vmTypeFromString, VmVariableSchema } from '../../types/index.js';
+import {
+  VmNamedVariableSchema,
+  VmStructSchema,
+  VmType,
+  vmTypeFromString,
+  VmVariableSchema,
+} from '../../types/index.js';
 import { VmStructSchemaResult, VmVariableSchemaResult } from '../interfaces/index.js';
 
 export function vmStructSchemaFromRpcResult(r: VmStructSchemaResult): VmStructSchema {
