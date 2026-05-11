@@ -1,41 +1,36 @@
-import { BinaryReader, BinaryWriter } from 'csharp-binary-stream';
-import { Type } from 'typescript';
 import {
   Base16,
   PBinaryWriter,
   PollChoice,
   Serialization,
   Timestamp,
-  Transaction,
   VMObject,
   VMType,
 } from '../src/core';
 
 describe('VM index file', () => {
   test('empty string should result in zero', () => {
-    let vm = new VMObject();
+    const vm = new VMObject();
 
     expect(vm).toBeInstanceOf(VMObject);
     expect(vm.Type).toBe(VMType.None);
   });
 
   test('String VM', () => {
-    let vm = new VMObject();
-    let myNewVM = VMObject.FromObject('MyString');
+    const myNewVM = VMObject.FromObject('MyString');
 
     expect(myNewVM).toBeInstanceOf(VMObject);
     expect(myNewVM.Type).toBe(VMType.String);
-    let result = myNewVM.AsString();
+    const result = myNewVM.AsString();
     expect(result).toBe('MyString');
   });
 
   test('Number VM', () => {
-    let vm = new VMObject();
-    let myNewVM = VMObject.FromObject(5);
+    const myNewVM = VMObject.FromObject(5);
 
     expect(myNewVM).toBeInstanceOf(VMObject);
     expect(myNewVM.Type).toBe(VMType.Number);
-    let result = myNewVM.AsString();
+    const result = myNewVM.AsString();
     expect(result).toBe('5');
     expect(myNewVM.AsNumber()).toBe(5n);
   });
@@ -77,11 +72,10 @@ describe('VM index file', () => {
   });*/
 
   test('PollChoices', () => {
-    let vm = new VMObject();
-    let choice = new PollChoice('myChoice');
-    let choice2 = new PollChoice('myChoice');
-    let choices: PollChoice[] = [choice, choice2];
-    let myNewVM = VMObject.FromArray(choices);
+    const choice = new PollChoice('myChoice');
+    const choice2 = new PollChoice('myChoice');
+    const choices: PollChoice[] = [choice, choice2];
+    const myNewVM = VMObject.FromArray(choices);
 
     expect(myNewVM).toBeInstanceOf(VMObject);
     expect(myNewVM.Type).toBe(VMType.Struct);
@@ -90,11 +84,10 @@ describe('VM index file', () => {
   });
 
   test('Serialization', () => {
-    let vm = new VMObject();
-    let choice = new PollChoice('myChoice');
-    let choice2 = new PollChoice('myChoice');
-    let time = new Timestamp(10000);
-    let choices: PollChoice[] = [choice, choice2];
+    const choice = new PollChoice('myChoice');
+    const choice2 = new PollChoice('myChoice');
+    const time = new Timestamp(10000);
+    const choices: PollChoice[] = [choice, choice2];
 
     class myTestClass {
       name: string = 'test';
@@ -103,17 +96,20 @@ describe('VM index file', () => {
       constructor() {}
     }
 
-    let testClass = new myTestClass();
+    const testClass = new myTestClass();
 
-    let choice1Serialized = Serialization.Serialize(testClass);
-    let choice1Deserialized = Serialization.Unserialize<myTestClass>(
-      choice1Serialized,
-      myTestClass
-    );
+    const choice1Serialized = Serialization.Serialize(testClass);
+    expect(() =>
+      Serialization.Unserialize<myTestClass>(choice1Serialized, myTestClass)
+    ).not.toThrow();
 
-    let myVM = VMObject.FromObject(choice1Serialized);
-    let writer = new PBinaryWriter();
-    let result = myVM.SerializeData(writer);
+    const myVM = VMObject.FromObject(choice1Serialized);
+    const writer = new PBinaryWriter();
+    const result = myVM.SerializeData(writer);
+
+    expect(choice1Serialized.length).toBeGreaterThan(0);
+    expect(result).toBeInstanceOf(Uint8Array);
+    expect(result.length).toBeGreaterThan(0);
 
     /*let choicesSerialized: Uint8Array[] = [
       Serialization.Serialize(choice),
@@ -129,16 +125,17 @@ describe('VM index file', () => {
   });
 
   test('Serialization2', () => {
-    let choice = new PollChoice('myChoice');
-    let choice2 = new PollChoice('myChoice');
-    let choices: PollChoice[] = [choice, choice2];
-    let choicesSerialized = Serialization.Serialize(choices);
+    const choice = new PollChoice('myChoice');
+    const choice2 = new PollChoice('myChoice');
+    const choices: PollChoice[] = [choice, choice2];
+    const choicesSerialized = Serialization.Serialize(choices);
+    expect(choicesSerialized.length).toBeGreaterThan(0);
   });
 
   test('DecodeBool', () => {
-    let vmCode = '0601';
-    let bytes = Base16.decodeUint8Array(vmCode);
-    let vm = VMObject.FromBytes(bytes);
+    const vmCode = '0601';
+    const bytes = Base16.decodeUint8Array(vmCode);
+    const vm = VMObject.FromBytes(bytes);
 
     expect(vm.Type).toBe(VMType.Bool);
     expect(vm.AsBool()).toBe(true);

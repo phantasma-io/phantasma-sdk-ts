@@ -65,9 +65,10 @@ export class VmDynamicStruct implements ICarbonBlob {
     if (schema.fields.length === 0) {
       this.fields = [];
     } else {
-      this.fields = new Array<VmNamedDynamicVariable>(schema.fields.length)
-        .fill(null as any)
-        .map(() => new VmNamedDynamicVariable());
+      this.fields = Array.from(
+        { length: schema.fields.length },
+        () => new VmNamedDynamicVariable()
+      );
       for (let i = 0; i < schema.fields.length; i++) {
         this.fields[i].name = schema.fields[i].name;
         this.fields[i].value = new VmDynamicVariable();

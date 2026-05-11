@@ -1,6 +1,5 @@
 import { ISerializable } from '../interfaces/index.js';
 import { VMType } from '../vm/VMType.js';
-import { BinaryReader, BinaryWriter, Encoding } from 'csharp-binary-stream';
 import { arrayNumberToUint8Array, uint8ArrayToNumberArray } from '../utils/index.js';
 import { TokenTrigger } from './DomainSettings.js';
 import { PBinaryReader, PBinaryWriter } from './Extensions/index.js';
@@ -133,7 +132,7 @@ export class ContractInterface implements ISerializable {
   }
   public SerializeData(writer: PBinaryWriter): void {
     writer.writeByte(this._methods.size);
-    for (const [_, value] of this._methods) {
+    for (const value of this._methods.values()) {
       value.Serialize(writer);
     }
     writer.writeByte(this._events.length);

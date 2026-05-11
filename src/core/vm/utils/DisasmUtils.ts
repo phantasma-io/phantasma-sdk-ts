@@ -1,6 +1,5 @@
-import { IContract, NativeContractKind } from "../../interfaces/index.js";
-import { Stack } from "../../types/index.js";
-import { VMObject } from "../VMObject.js";
+import { Stack } from '../../types/index.js';
+import { VMObject } from '../VMObject.js';
 
 export class DisasmUtils {
   private static PopArgs(
@@ -15,8 +14,8 @@ export class DisasmUtils {
     }
 
     if (methodArgumentCountTable.hasOwnProperty(key)) {
-      let argCount = methodArgumentCountTable[key];
-      let result: Array<VMObject> = new Array<VMObject>(argCount);
+      const argCount = methodArgumentCountTable[key];
+      const result: Array<VMObject> = new Array<VMObject>(argCount);
       for (let i = 0; i < argCount; i++) {
         if (stack.size() == 0) {
           throw new Error(
@@ -39,7 +38,7 @@ export class DisasmUtils {
         }
         let table: { [key: string]: number } = {};
 
-        ExtCalls.IterateExtcalls((methodName: string, argCount: number, method: any) => {
+        ExtCalls.IterateExtcalls((methodName: string, argCount: number, method: unknown) => {
             table[methodName] = argCount;
         });
 

@@ -1,5 +1,5 @@
-import { BinaryWriter, BinaryReader, Encoding } from 'csharp-binary-stream';
-import { ISignature, SignatureKind, Signature } from '../../interfaces/index.js';
+import { BinaryReader, Encoding } from 'csharp-binary-stream';
+import { SignatureKind, Signature } from '../../interfaces/index.js';
 import { bytesToHex, stringToUint8Array } from '../../utils/index.js';
 import { VMType } from '../../vm/index.js';
 import { Ed25519Signature } from '../Ed25519Signature.js';
@@ -77,26 +77,26 @@ export class PBinaryReader {
   }
 
   public read(numBytes: number): string {
-    var res = bytesToHex(this.readBytes(numBytes)).substr(0, numBytes * 2);
+    const res = bytesToHex(this.readBytes(numBytes)).substr(0, numBytes * 2);
     //this.position += numBytes;
     return res;
   }
 
   public readString(): string {
-    var len = this.readVarInt();
+    const len = this.readVarInt();
     return this.readStringBytes(len);
   }
 
   public readStringBytes(numBytes: number) {
-    var res = '';
-    for (var i = 0; i < numBytes; ++i) {
+    let res = '';
+    for (let i = 0; i < numBytes; ++i) {
       res += String.fromCharCode(this.readByte());
     }
     return res;
   }
 
   public readBigInteger(): bigint {
-    var len = this.readVarInt();
+    const len = this.readVarInt();
     return twosComplementLEToBigInt(Uint8Array.from(this.readBytes(len)));
   }
 
@@ -105,20 +105,19 @@ export class PBinaryReader {
   }
 
   public readSignatureV2(): Signature {
-    let kind = this.readByte() as SignatureKind;
-    let curve;
-    let signature: Signature = new Ed25519Signature();
+    const kind = this.readByte() as SignatureKind;
+    const signature: Signature = new Ed25519Signature();
 
     switch (kind) {
       case SignatureKind.None:
         return null;
 
       case SignatureKind.Ed25519:
-        let len = this.readVarInt();
+        const len = this.readVarInt();
         signature.Bytes = new Uint8Array(this.readBytes(len));
         break;
       case SignatureKind.ECDSA:
-        curve = this.readByte();
+        this.readByte();
         signature.Bytes = stringToUint8Array(this.readString());
         break;
       default:
@@ -129,20 +128,19 @@ export class PBinaryReader {
   }
 
   public readSignature(): Signature {
-    let kind = this.readByte() as SignatureKind;
-    let signature: Signature = new Ed25519Signature();
-    let curve;
+    const kind = this.readByte() as SignatureKind;
+    const signature: Signature = new Ed25519Signature();
     signature.Kind = kind;
     switch (kind) {
       case SignatureKind.None:
         return null;
 
       case SignatureKind.Ed25519:
-        let len = this.readVarInt();
+        const len = this.readVarInt();
         signature.Bytes = stringToUint8Array(this.read(len));
         break;
       case SignatureKind.ECDSA:
-        curve = this.readByte();
+        this.readByte();
         signature.Bytes = stringToUint8Array(this.readString());
         break;
       default:
@@ -152,44 +150,41 @@ export class PBinaryReader {
     return signature;
   }
 
-  public readByteArray() {
-    var res;
-    var length = this.readVarInt();
-    if (length == 0) return [];
+  public readByteArray(): string {
+    const length = this.readVarInt();
+    if (length == 0) return '';
 
-    res = this.read(length);
+    const res = this.read(length);
     return res;
   }
 
   public readTimestamp(): Timestamp {
     //var len = this.readByte();
     let result = 0;
-    let bytes = this.read(4);
-    //[...(bytes.match(/.{1,2}/g) as any)];
-    bytes
-      .match(/.{1,2}/g)
+    const bytes = this.read(4);
+    (bytes.match(/.{1,2}/g) ?? [])
       .reverse()
       .forEach((c) => (result = result * 256 + parseInt(c, 16)));
 
-    let timestamp = new Timestamp(result);
+    const timestamp = new Timestamp(result);
     return timestamp;
   }
 
   public readVarInt(): number {
-    var len = this.readByte();
-    var res = 0;
+    const len = this.readByte();
+    let res = 0;
     if (len === 0xfd) {
-      [...(this.read(2).match(/.{1,2}/g) as any)]
+      [...(this.read(2).match(/.{1,2}/g) ?? [])]
         .reverse()
         .forEach((c) => (res = res * 256 + parseInt(c, 16)));
       return res;
     } else if (len === 0xfe) {
-      [...(this.read(4).match(/.{1,2}/g) as any)]
+      [...(this.read(4).match(/.{1,2}/g) ?? [])]
         .reverse()
         .forEach((c) => (res = res * 256 + parseInt(c, 16)));
       return res;
     } else if (len === 0xff) {
-      [...(this.read(8).match(/.{1,2}/g) as any)]
+      [...(this.read(8).match(/.{1,2}/g) ?? [])]
         .reverse()
         .forEach((c) => (res = res * 256 + parseInt(c, 16)));
       return res;
@@ -198,7 +193,7 @@ export class PBinaryReader {
   }
 
   public readVarString(): string {
-    var len = this.readVarInt();
+    const len = this.readVarInt();
     if (len == 0) return '';
     return this.readStringBytes(len);
   }
@@ -214,9 +209,9 @@ export class PBinaryReader {
         return this.readByte() != 0;
       case VMType.Struct:
         const numFields = this.readVarInt();
-        let res = {};
+        const res: Record<string, unknown> = {};
         for (let i = 0; i < numFields; ++i) {
-          const key: any = this.readVmObject();
+          const key = String(this.readVmObject());
           const value = this.readVmObject();
           res[key] = value;
         }

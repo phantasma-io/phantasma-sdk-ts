@@ -1,5 +1,3 @@
-import TransportWebUSB from '@ledgerhq/hw-transport-webusb';
-
 export * from './core/index.js';
 export * as PhantasmaTS from './core/index.js';
 export { PhantasmaLink } from './core/link/phantasmaLink.js';

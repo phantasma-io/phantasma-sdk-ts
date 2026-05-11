@@ -1,13 +1,10 @@
 import base58 from 'bs58';
-import { encodeBase16, stringToUint8Array, uint8ArrayToString } from '../utils/index.js';
+import { uint8ArrayToString } from '../utils/index.js';
 import SHA256 from 'crypto-js/sha256.js';
 import hexEncoding from 'crypto-js/enc-hex.js';
 import { IKeyPair, ISerializable } from '../interfaces/index.js';
-import { getPrivateKeyFromWif, getPublicKeyFromPrivateKey, getWifFromPrivateKey } from '../tx/index.js';
-import pkg from 'elliptic';
-import { PBinaryWriter, PBinaryReader } from './Extensions/index.js';
-const { eddsa } = pkg;
-const curve = new eddsa('ed25519');
+import { getPrivateKeyFromWif, getPublicKeyFromPrivateKey } from '../tx/index.js';
+import { Base16, PBinaryWriter, PBinaryReader } from './Extensions/index.js';
 
 export enum AddressKind {
   Invalid = 0,
@@ -112,7 +109,6 @@ export class Address implements ISerializable {
   }
 
   private constructor(publicKey: Uint8Array) {
-    let pkFromArray = Array.from(publicKey);
     if (publicKey.length != Address.LengthInBytes) {
       throw new Error(
         `publicKey length must be ${Address.LengthInBytes}, it was ${publicKey.length}}`
@@ -141,15 +137,12 @@ export class Address implements ISerializable {
       return Address.Null;
     }
 
-    let addr: Address;
-
-    let originalText = text;
-    let prefix = text[0];
+    const prefix = text[0];
 
     text = text.slice(1);
-    var bytes = base58.decode(text);
+    const bytes = base58.decode(text);
 
-    addr = new Address(bytes);
+    const addr = new Address(bytes);
 
     switch (prefix) {
       case 'P':
@@ -183,7 +176,7 @@ export class Address implements ISerializable {
     try {
       Address.FromText(text);
       return true;
-    } catch (e) {
+    } catch {
       return false;
     }
   }
@@ -211,7 +204,7 @@ export class Address implements ISerializable {
 
   public static FromHash(str: string): Address;
   public static FromHash(input: Uint8Array): Address;
-  public static FromHash(input: any): Address {
+  public static FromHash(input: string | Uint8Array): Address {
     let bytes: Uint8Array;
     if (typeof input === 'string') {
       bytes = new TextEncoder().encode(input);
@@ -229,7 +222,7 @@ export class Address implements ISerializable {
   public static FromWif(wif: string): Address {
     const privateKey = getPrivateKeyFromWif(wif);
     const publicKey = getPublicKeyFromPrivateKey(privateKey);
-    var addressHex = Buffer.from('0100' + publicKey, 'hex');
+    const addressHex = Buffer.from('0100' + publicKey, 'hex');
     return this.FromBytes(addressHex);
   }
 
@@ -244,7 +237,7 @@ export class Address implements ISerializable {
     return 0;
   }
 
-  public equals(other: any): boolean {
+  public equals(other: unknown): boolean {
     if (!(other instanceof Address)) {
       return false;
     }
@@ -292,7 +285,7 @@ export class Address implements ISerializable {
   }
 
   UnserializeData(reader: PBinaryReader) {
-    this._bytes = reader.readByteArray();
+    this._bytes = Base16.decodeUint8Array(reader.readByteArray());
     this._text = null;
   }
 }

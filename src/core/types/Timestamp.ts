@@ -9,7 +9,7 @@ export class Timestamp {
     return new Date(this.value * 1000).toUTCString();
   }
 
-  public toStringFormat(format: string) {
+  public toStringFormat() {
     return new Date(this.value * 1000).toUTCString();
   }
 
@@ -28,7 +28,7 @@ export class Timestamp {
     return 1;
   }
 
-  public equals(obj: any) {
+  public equals(obj: unknown) {
     if (!(obj instanceof Timestamp)) {
       return false;
     }

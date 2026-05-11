@@ -428,7 +428,7 @@ let RPC = new PhantasmaTS.PhantasmaAPI('https://pharpc1.phantasma.info/rpc', nul
 
 #### Utillities:
 
-- `RPC.JSONRPC(method: string, params: Array<any>);` <- Used to make any Phantasma RPC call
+- `RPC.JSONRPC(method: string, params: (string | number | boolean | null)[]);` <- Used to make a Phantasma RPC call
 - ` RPC.updateRpc()`
 - ` RPC.setRpcHost(rpcHost: string)`
 - ` RPC.setRpcByName(rpcName: string)`
@@ -761,7 +761,7 @@ link.signCarbonTransaction(txMsg, onSuccess, onFail); //Sends a Carbon TxMsg to 
 ```
 
 ```javascript
-link.signData(data:any, onSuccess, onFail); //Signs data with the connected wallet keypair
+link.signData(data: string, onSuccess, onFail); //Signs data with the connected wallet keypair
 ```
 
 ```javascript
@@ -848,7 +848,7 @@ await link.action('sendNFT', [fromAddress:string, toAddress:string, tokenSymbol:
 Generates scripts from high-level action names and arguments.
 
 ```javascript
-async buildScript(_type: string, _options: Array<any>);
+async buildScript(_type: string, _options: unknown[]);
 // Script Types
 // 'interact', [contractName, methodName, [arguments]]
 // 'invoke', [contractName, methodName, [arguments]]

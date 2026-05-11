@@ -7,10 +7,10 @@ import {
 } from '../index.js';
 import { logger } from '../utils/logger.js';
 import { Transaction } from '../tx/index.js';
-import { Address, Base16, Ed25519Signature, PBinaryReader } from '../types/index.js';
+import { Address, Base16, Ed25519Signature } from '../types/index.js';
 import { GetAddressFromPublicKey, GetAddressPublicKeyFromPublicKey } from './Address-Transcode.js';
 import { LedgerConfig } from './interfaces/LedgerConfig.js';
-import { GetPublicFromPrivate, Sign, Verify } from './Transaction-Sign.js';
+import { GetPublicFromPrivate, Verify } from './Transaction-Sign.js';
 import { GetExpirationDate } from './Transaction-Transcode.js';
 import { GetVersion, GetApplicationName, GetPublicKey, SignLedger } from './Ledger-Utils.js';
 import { LedgerDeviceInfoResponse } from './interfaces/LedgerDeviceInfoResponse.js';
@@ -106,7 +106,7 @@ export const GetLedgerAccountSigner = async (
     debug: true,
   });
 
-  let signer: LedgerSigner = {
+  const signer: LedgerSigner = {
     GetPublicKey: () => {
       return accountData.publicKey;
     },
@@ -136,7 +136,7 @@ export async function GetLedgerSignerData(
   }
 
   const msg = await GetPublicKey(config.Transport, options);
-  let response: LedgerSignerData = {
+  const response: LedgerSignerData = {
     address: Address.Null,
     publicKey: '',
     success: false,
@@ -181,7 +181,7 @@ export const GetBalanceFromLedger = async (
   if (config.Debug) {
     logger.log('getBalanceFromLedger', 'msg', msg);
   }
-  let response: LedgerBalanceFromLedgerResponse = {
+  const response: LedgerBalanceFromLedgerResponse = {
     address: Address.Null,
     publicKey: '',
     balances: new Map<string, { amount: number; decimals: number }>(),
@@ -293,13 +293,10 @@ export async function SendTransactionLedger(
     return msg_publicKey;
   }
 
-  const addr = GetAddressPublicKeyFromPublicKey(msg_publicKey.publicKey!);
   const publicKey = msg_publicKey.publicKey!;
 
   const nexusName = config.NexusName;
   const chainName = config.ChainName;
-  const gasPrice = config.GasPrice;
-  const gasLimit = config.GasLimit;
 
   const expirationDate = GetExpirationDate();
 
@@ -340,9 +337,9 @@ export async function SendTransactionLedger(
       }
     }
 
-    let signatureBytes = Base16.decodeUint8Array(signature!);
-    let mySignature = new Ed25519Signature(signatureBytes);
-    let myNewSignaturesArray: Signature[] = [];
+    const signatureBytes = Base16.decodeUint8Array(signature!);
+    const mySignature = new Ed25519Signature(signatureBytes);
+    const myNewSignaturesArray: Signature[] = [];
     myNewSignaturesArray.push(mySignature);
     myTransaction.signatures = myNewSignaturesArray;
 
@@ -368,14 +365,14 @@ export async function SendTransactionLedger(
       logger.log('response', response);
     }
     return response;
-  } catch (error) {
+  } catch (error: unknown) {
     if (config.Debug) {
       logger.log('error', error);
     }
 
     const errorResponse: LedgerSendTransactionResponse = {
       success: false,
-      message: error.message,
+      message: error instanceof Error ? error.message : String(error),
     };
     return errorResponse;
   }

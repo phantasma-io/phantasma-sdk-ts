@@ -1,6 +1,5 @@
-import { Address, PBinaryReader, PBinaryWriter } from "../types/index.js";
-import { ISerializable } from "./ISerializable.js";
-import { BinaryReader, BinaryWriter } from "csharp-binary-stream";
+import { Address, PBinaryReader, PBinaryWriter } from '../types/index.js';
+import { ISerializable } from './ISerializable.js';
 
 export enum SignatureKind {
   None,

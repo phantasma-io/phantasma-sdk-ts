@@ -238,7 +238,7 @@ export const GetVersion = async (transport): Promise<VersionResponse> => {
  * @param messagePrefix
  * @returns
  */
-export const GetBip44PathMessage = (messagePrefix: any): Buffer => {
+export const GetBip44PathMessage = (messagePrefix: Buffer): Buffer => {
   /* istanbul ignore if */
   if (messagePrefix == undefined) {
     throw Error('messagePrefix is a required parameter.');
@@ -367,7 +367,7 @@ export const ChunkString = (str, length) => {
 };
 
 export const SplitMessageIntoChunks = (ledgerMessage) => {
-  const messages: any = [];
+  const messages: Buffer[] = [];
 
   messages.push(GetBip44PathMessage(Buffer.from('E006' + '00' + '80', 'hex')));
 

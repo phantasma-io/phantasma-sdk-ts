@@ -13,11 +13,10 @@ export function reverseHex(hex: string): string {
 }
 
 export function getDifficulty(transactionHash: string) {
-  let bytes = hexToBytes(transactionHash).reverse();
+  const bytes = hexToBytes(transactionHash).reverse();
   let result = 0;
 
   for (let i = 0; i < bytes.length; i++) {
-    var n = bytes[i];
     for (let j = 0; j < 8; j++) {
       if ((bytes[i] & (1 << j)) != 0) {
         result = 1 + (i << 3) + j;
@@ -61,7 +60,7 @@ export function uint8ArrayToStringDefault(array: Uint8Array): string {
 }
 
 export function uint8ArrayToNumberArray(array: Uint8Array): number[] {
-  let result = [];
+  const result = [];
   for (let i = 0; i < array.length; i++) {
     result.push(array[i]);
   }
@@ -69,7 +68,7 @@ export function uint8ArrayToNumberArray(array: Uint8Array): number[] {
 }
 
 export function stringToUint8Array(str: string): Uint8Array {
-  let result = new Uint8Array(str.length);
+  const result = new Uint8Array(str.length);
   for (let i = 0; i < str.length; i++) {
     result[i] = str.charCodeAt(i);
   }
@@ -77,7 +76,7 @@ export function stringToUint8Array(str: string): Uint8Array {
 }
 
 export function hexStringToUint8Array(str: string): Uint8Array {
-  let result = new Uint8Array(str.length);
+  const result = new Uint8Array(str.length);
   for (let i = 0; i < str.length; i++) {
     result[i] = str.charCodeAt(i).toString(16).charCodeAt(0);
   }
@@ -85,7 +84,7 @@ export function hexStringToUint8Array(str: string): Uint8Array {
 }
 
 export function arrayNumberToUint8Array(arr: number[]): Uint8Array {
-  let result = new Uint8Array(arr.length);
+  const result = new Uint8Array(arr.length);
   for (let i = 0; i < arr.length; i++) {
     result[i] = arr[i];
   }
@@ -93,7 +92,7 @@ export function arrayNumberToUint8Array(arr: number[]): Uint8Array {
 }
 
 export function uint8ArrayToBytes(array: Uint8Array): number[] {
-  let result = [];
+  const result = [];
   for (let i = 0; i < array.length; i++) {
     result.push(array[i]);
   }
@@ -116,9 +115,9 @@ export function numberToByteArray(num: number, size?: number): Uint8Array {
       size = 9;
     }
   }
-  var bytes = new Uint8Array(size);
+  const bytes = new Uint8Array(size);
 
-  var i = 0;
+  let i = 0;
   do {
     bytes[i++] = num & 0xff;
     num = num >> 8;
@@ -128,9 +127,9 @@ export function numberToByteArray(num: number, size?: number): Uint8Array {
 
 export function bigIntToByteArray(bigint: bigint): Uint8Array {
   // Get a big-endian byte representation of the bigint
-  var bytes = bigint.toString(16).padStart(64, '0');
-  var byteArray = new Uint8Array(bytes.length / 2);
-  for (var i = 0; i < bytes.length; i += 2) {
+  const bytes = bigint.toString(16).padStart(64, '0');
+  const byteArray = new Uint8Array(bytes.length / 2);
+  for (let i = 0; i < bytes.length; i += 2) {
     byteArray[i / 2] = parseInt(bytes.substring(i, i + 2), 16);
   }
   return byteArray;

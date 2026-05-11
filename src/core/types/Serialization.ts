@@ -1,18 +1,14 @@
-import { Type } from "typescript";
-import { Base16, PBinaryReader, PBinaryWriter } from "./Extensions/index.js";
-import { Timestamp } from "./Timestamp.js";
-import { ISerializable } from "../interfaces/index.js";
-import { stringToUint8Array, uint8ArrayToBytes } from "../utils/index.js";
+import { PBinaryReader, PBinaryWriter } from './Extensions/index.js';
+import { Timestamp } from './Timestamp.js';
+import { ISerializable } from '../interfaces/index.js';
+import { stringToUint8Array } from '../utils/index.js';
 
 export interface CustomReader {
-  (reader: PBinaryReader): any;
+  (reader: PBinaryReader): unknown;
 }
 export interface CustomWriter {
-  (writer: PBinaryWriter, obj: any): void;
+  (writer: PBinaryWriter, obj: unknown): void;
 }
-//function CustomWriter(writer: PBinaryWriter, obj: any): void;
-//function CustomReader(reader: PBinaryReader): any;
-
 export class CustomSerializer {
   readonly Read: CustomReader;
   readonly Write: CustomWriter;
@@ -22,20 +18,34 @@ export class CustomSerializer {
   }
 }
 
-export class Serialization<T> {
+type Constructor<T = unknown> = new () => T;
+type SerializableLike = {
+  SerializeData(writer: PBinaryWriter): void;
+  UnserializeData(reader: PBinaryReader): void;
+};
+
+function isSerializableLike(obj: unknown): obj is SerializableLike {
+  return (
+    typeof obj === 'object' &&
+    obj !== null &&
+    'UnserializeData' in obj &&
+    'SerializeData' in obj &&
+    typeof (obj as SerializableLike).UnserializeData === 'function' &&
+    typeof (obj as SerializableLike).SerializeData === 'function'
+  );
+}
+
+export class Serialization {
   private static _customSerializers: Map<string, CustomSerializer> = new Map<
     string,
     CustomSerializer
   >(); //: { [key: string]: CustomSerializer };
 
   static RegisterType<T>(type: T, reader: CustomReader, writer: CustomWriter) {
-    Serialization._customSerializers[typeof type] = new CustomSerializer(
-      reader,
-      writer
-    );
+    Serialization._customSerializers[typeof type] = new CustomSerializer(reader, writer);
   }
 
-  static SerializeEnum(obj: any): Uint8Array {
+  static SerializeEnum(obj: unknown): Uint8Array {
     if (!obj) {
       return new Uint8Array();
     }
@@ -44,12 +54,12 @@ export class Serialization<T> {
       return obj;
     }
 
-    let writer = new PBinaryWriter();
-    writer.writeEnum(obj);
+    const writer = new PBinaryWriter();
+    writer.writeEnum(Number(obj));
     return writer.toUint8Array();
   }
 
-  static Serialize(obj: any): Uint8Array {
+  static Serialize(obj: unknown): Uint8Array {
     if (!obj) {
       return new Uint8Array();
     }
@@ -59,13 +69,13 @@ export class Serialization<T> {
     }
 
     //let jsonString = JSON.stringify(obj);
-    let writer = new PBinaryWriter();
+    const writer = new PBinaryWriter();
     this.SerializeObject(writer, obj, typeof obj);
     //let jsonAsUint8 = new TextEncoder().encode(jsonString);
     return writer.toUint8Array();
   }
 
-  static SerializeObject(writer: PBinaryWriter, obj: any, type: any | null) {
+  static SerializeObject(writer: PBinaryWriter, obj: unknown, type: unknown | null) {
     if (type == null || type == undefined) {
       type = typeof obj;
       this.SerializeObject(writer, obj, type);
@@ -73,7 +83,7 @@ export class Serialization<T> {
     }
 
     if (Serialization._customSerializers.has(typeof type)) {
-      var serializer = Serialization._customSerializers[typeof type];
+      const serializer = Serialization._customSerializers[typeof type];
       serializer.Write(writer, obj);
       return;
     }
@@ -81,21 +91,16 @@ export class Serialization<T> {
     /*if (typeof obj == "void") {
       return;
     }*/
-    const structType: any = Object.getPrototypeOf(obj).constructor.name;
-    const result = Object.apply(structType);
-    let localType = Object.apply(typeof type);
-    //console.log(localType);
-
-    if (obj instanceof Boolean || typeof obj == "boolean") {
+    if (obj instanceof Boolean || typeof obj == 'boolean') {
       writer.writeByte(obj ? 1 : 0);
       return;
-    } else if (obj instanceof Number || typeof obj == "number") {
+    } else if (obj instanceof Number || typeof obj == 'number') {
       writer.writeByte(stringToUint8Array(obj.toString()).length);
       writer.writeVarInt(obj as number);
       return;
-    } else if (obj instanceof BigInt || typeof obj == "bigint") {
+    } else if (typeof obj == 'bigint') {
       writer.writeBigInteger(obj);
-    } else if (obj instanceof String || typeof obj == "string") {
+    } else if (obj instanceof String || typeof obj == 'string') {
       writer.writeString(obj as string);
       return;
     } else if (obj instanceof Timestamp) {
@@ -104,10 +109,7 @@ export class Serialization<T> {
     } else if (obj instanceof Date) {
       writer.writeDateTime(obj);
       return;
-    } else if (
-      typeof obj.UnserializeData === "function" &&
-      typeof obj.SerializeData === "function"
-    ) {
+    } else if (isSerializableLike(obj)) {
       (obj as ISerializable).SerializeData(writer);
       return;
     } else if (Array.isArray(obj)) {
@@ -116,7 +118,7 @@ export class Serialization<T> {
         this.SerializeObject(writer, entry, typeof entry);
       });
       return;
-    } else if (Object.getPrototypeOf(type) == "enum") {
+    } else if (Object.getPrototypeOf(type) == 'enum') {
       writer.writeByte(obj as unknown as number);
       return;
     } else if (obj instanceof Uint8Array) {
@@ -124,18 +126,15 @@ export class Serialization<T> {
     } else {
       // TODO: Add support for other types
       // Get the keys of the object
-      const fields = Object.keys(obj);
+      const fields = Object.keys(obj as object);
       fields.forEach((field) => {
-        let value = obj[field];
+        const value = (obj as Record<string, unknown>)[field];
         this.SerializeObject(writer, value, typeof value);
       });
     }
   }
 
-  static Unserialize<T>(
-    bytesOrBytes: Uint8Array | PBinaryReader,
-    type?: any
-  ): T {
+  static Unserialize<T>(bytesOrBytes: Uint8Array | PBinaryReader, type?: unknown): T {
     if (bytesOrBytes instanceof PBinaryReader) {
       return Serialization.UnserializeObject(bytesOrBytes, type) as T;
     }
@@ -143,14 +142,14 @@ export class Serialization<T> {
       return null as T;
     }
     //let type = Object.prototype.propertyIsEnumerable(T);
-    let stream: PBinaryReader = new PBinaryReader(bytesOrBytes);
+    const stream: PBinaryReader = new PBinaryReader(bytesOrBytes);
     return Serialization.UnserializeObject<T>(stream, type) as T;
   }
 
-  static UnserializeObject<T extends any>(reader: PBinaryReader, type: any): T {
+  static UnserializeObject<T>(reader: PBinaryReader, type: Constructor<T> | unknown): T {
     if (Serialization._customSerializers.has(typeof type)) {
-      var serializer = Serialization._customSerializers[typeof type];
-      return serializer.Read(reader);
+      const serializer = Serialization._customSerializers[typeof type];
+      return serializer.Read(reader) as T;
     }
 
     if (type == null || type == undefined) {
@@ -159,45 +158,44 @@ export class Serialization<T> {
 
     let localType; //: typeof type;
 
-    if (type.name != undefined) {
-      let className = type.name as T;
+    const constructorType = type as Constructor<T> & { name?: string };
+
+    if (constructorType.name != undefined) {
+      const className = constructorType.name as T;
       localType = Object.apply(className);
     } else {
-      localType = new type();
+      localType = new constructorType();
     }
 
     if (
       localType instanceof Boolean ||
-      typeof localType == "boolean" ||
-      type.name == "Boolean"
+      typeof localType == 'boolean' ||
+      constructorType.name == 'Boolean'
     ) {
       return reader.readBoolean() as unknown as T;
-    } else if (localType instanceof Number || typeof localType == "number") {
+    } else if (localType instanceof Number || typeof localType == 'number') {
       return reader.readVarInt() as unknown as T;
-    } else if (localType instanceof BigInt || typeof localType == "bigint") {
+    } else if (localType instanceof BigInt || typeof localType == 'bigint') {
       return reader.readBigInteger() as unknown as T;
-    } else if (localType instanceof String || typeof localType == "string") {
+    } else if (localType instanceof String || typeof localType == 'string') {
       return reader.readVarString() as unknown as T;
     } else if (localType instanceof Timestamp) {
       return new Timestamp(reader.readVarInt()) as unknown as T;
-    } else if (
-      typeof localType.UnserializeData === "function" &&
-      typeof localType.SerializeData === "function"
-    ) {
-      let obj = localType;
+    } else if (isSerializableLike(localType)) {
+      const obj = localType;
       obj.UnserializeData(reader);
       return obj as T;
     } else if (Array.isArray(type)) {
-      var len = reader.readByte();
-      var arr = new Array(len);
+      const len = reader.readByte();
+      const arr = new Array(len);
       for (let i = 0; i < len; i++) {
         arr[i] = this.UnserializeObject(reader, type[i]);
       }
       return arr as unknown as T;
-    } else if (Object.getPrototypeOf(type) == "enum") {
+    } else if (Object.getPrototypeOf(type) == 'enum') {
       return reader.readByte() as unknown as T;
     } else {
-      const fields = Object.keys(localType as T);
+      Object.keys(localType as object);
       /*console.log(fields);
       fields.forEach((field) => {
         localType[field] = this.UnserializeObject(

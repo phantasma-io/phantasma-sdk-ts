@@ -1,9 +1,5 @@
 'use strict';
 
-import { ScriptBuilder } from '../vm/index.js';
-import { Address } from '../types/index.js';
-import { Transaction } from '../tx/Transaction.js';
-
 /**
  * Expiration Date is in UTC Seconds
  * @param expirationDate

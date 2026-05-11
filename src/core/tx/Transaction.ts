@@ -2,10 +2,10 @@ import pkg from 'elliptic';
 import { logger } from '../utils/logger.js';
 const { eddsa } = pkg;
 import { Decoder, ScriptBuilder } from '../vm/index.js';
-import { bytesToHex, hexToBytes, getDifficulty, uint8ArrayToStringDefault } from '../utils/index.js';
+import { bytesToHex, hexToBytes, getDifficulty } from '../utils/index.js';
 import hexEncoding from 'crypto-js/enc-hex.js';
 import SHA256 from 'crypto-js/sha256.js';
-import { ISerializable, ISignature, Signature } from '../interfaces/index.js';
+import { ISerializable, Signature } from '../interfaces/index.js';
 import { Address, Base16, PBinaryReader, PBinaryWriter, PhantasmaKeys } from '../types/index.js';
 import { getWifFromPrivateKey } from './utils.js';
 const curve = new eddsa('ed25519');
@@ -20,7 +20,7 @@ export class Transaction implements ISerializable {
   hash: string;
 
   public static FromBytes(serializedData: string): Transaction {
-    let transaction = new Transaction('', '', '', new Date(), '');
+    const transaction = new Transaction('', '', '', new Date(), '');
     return transaction.unserialize(serializedData);
   }
 
@@ -40,9 +40,9 @@ export class Transaction implements ISerializable {
   }
 
   public sign(wif: string) {
-    let _keys = PhantasmaKeys.fromWIF(wif);
+    const _keys = PhantasmaKeys.fromWIF(wif);
     const msg = this.ToByteAray(false);
-    let sig: Signature = _keys.Sign(msg);
+    const sig: Signature = _keys.Sign(msg);
     let sigs: Signature[] = [];
     if (this.signatures != null && this.signatures.length > 0) {
       sigs = this.signatures;
@@ -56,7 +56,7 @@ export class Transaction implements ISerializable {
 
   public signWithPrivateKey(privateKey: string) {
     const msg = this.ToByteAray(false);
-    let sig: Signature = PhantasmaKeys.fromWIF(getWifFromPrivateKey(privateKey)).Sign(msg);
+    const sig: Signature = PhantasmaKeys.fromWIF(getWifFromPrivateKey(privateKey)).Sign(msg);
     let sigs: Signature[] = [];
     if (this.signatures != null && this.signatures.length > 0) {
       sigs = this.signatures;
@@ -68,7 +68,7 @@ export class Transaction implements ISerializable {
 
   public signWithKeys(keys: PhantasmaKeys) {
     const msg = this.ToByteAray(false);
-    let sig: Signature = keys.Sign(msg);
+    const sig: Signature = keys.Sign(msg);
     let sigs: Signature[] = [];
     if (this.signatures != null && this.signatures.length > 0) {
       sigs = this.signatures;
@@ -130,7 +130,7 @@ export class Transaction implements ISerializable {
   }
 
   public ToByteAray(withSignature: boolean): Uint8Array {
-    let writer = new PBinaryWriter();
+    const writer = new PBinaryWriter();
     writer.writeString(this.nexusName);
     writer.writeString(this.chainName);
     writer.AppendHexEncoded(this.script);
@@ -151,13 +151,13 @@ export class Transaction implements ISerializable {
   public UnserializeData(reader: PBinaryReader) {
     this.nexusName = reader.readString();
     this.chainName = reader.readString();
-    this.script = uint8ArrayToStringDefault(reader.readByteArray());
-    let time = reader.readTimestamp();
+    this.script = reader.readByteArray();
+    const time = reader.readTimestamp();
     this.expiration = new Date(time.toString());
-    this.payload = uint8ArrayToStringDefault(reader.readByteArray());
-    let sigCount = reader.readVarInt();
+    this.payload = reader.readByteArray();
+    const sigCount = reader.readVarInt();
     for (let i = 0; i < sigCount; i++) {
-      let sig = reader.readSignatureV2();
+      const sig = reader.readSignatureV2();
       this.signatures.push(sig);
     }
   }
@@ -192,7 +192,7 @@ export class Transaction implements ISerializable {
 
     let expirationBytes = [d, c, b, a];*/
 
-    let sb = new ScriptBuilder()
+    const sb = new ScriptBuilder()
       .EmitVarString(this.nexusName)
       .EmitVarString(this.chainName)
       .EmitVarInt(this.script.length / 2)
@@ -225,7 +225,7 @@ export class Transaction implements ISerializable {
   }
 
   public getHash() {
-    let generatedHash = SHA256(hexEncoding.parse(this.toString(false)));
+    const generatedHash = SHA256(hexEncoding.parse(this.toString(false)));
     this.hash = bytesToHex(hexToBytes(generatedHash.toString(hexEncoding)).reverse());
     return this.hash;
   }
@@ -237,14 +237,14 @@ export class Transaction implements ISerializable {
     }
 
     let nonce = 0;
-    let deepCopy = new Transaction(
+    const deepCopy = new Transaction(
       JSON.parse(JSON.stringify(this.nexusName)),
       JSON.parse(JSON.stringify(this.chainName)),
       JSON.parse(JSON.stringify(this.script)),
       this.expiration,
       JSON.parse(JSON.stringify(this.payload))
     );
-    let payload = Buffer.alloc(4);
+    const payload = Buffer.alloc(4);
 
     while (true) {
       if (getDifficulty(deepCopy.getHash()) >= difficulty) {
@@ -274,17 +274,17 @@ export class Transaction implements ISerializable {
   }
 
   public unserialize(serializedData: string): Transaction {
-    let dec = new Decoder(serializedData);
-    let nexusName = dec.readString();
-    let chainName = dec.readString();
-    let scriptLength = dec.readVarInt();
-    let script = dec.read(scriptLength);
-    let date = new Date(dec.readTimestamp() * 1000);
-    let payloadLength = dec.readVarInt();
-    let payload = dec.read(payloadLength);
+    const dec = new Decoder(serializedData);
+    const nexusName = dec.readString();
+    const chainName = dec.readString();
+    const scriptLength = dec.readVarInt();
+    const script = dec.read(scriptLength);
+    const date = new Date(dec.readTimestamp() * 1000);
+    const payloadLength = dec.readVarInt();
+    const payload = dec.read(payloadLength);
 
-    let nTransaction = new Transaction(nexusName, chainName, script, date, payload);
-    let signatureCount = dec.readVarInt();
+    const nTransaction = new Transaction(nexusName, chainName, script, date, payload);
+    dec.readVarInt();
     /*for (let i = 0; i < signatureCount; i++) {
       nTransaction.signatures.push(dec.readSignature());
     }*/
@@ -292,8 +292,8 @@ export class Transaction implements ISerializable {
   }
 
   public static Unserialize(serialized: Uint8Array) {
-    let reader = new PBinaryReader(serialized);
-    let tx = new Transaction('', '', '', new Date(), '');
+    const reader = new PBinaryReader(serialized);
+    const tx = new Transaction('', '', '', new Date(), '');
     tx.UnserializeData(reader);
     return tx;
   }

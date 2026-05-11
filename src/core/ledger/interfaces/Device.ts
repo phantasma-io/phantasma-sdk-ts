@@ -1,6 +1,11 @@
+export interface LedgerTransportDevice {
+  exchange(request: Buffer): Promise<Buffer>;
+  close(): Promise<void>;
+}
+
 export interface Device {
   enabled: boolean;
   error?: boolean;
   message?: string;
-  device?: any; // Define the type based on your device's type
+  device?: LedgerTransportDevice;
 }

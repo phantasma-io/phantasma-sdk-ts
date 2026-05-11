@@ -1,6 +1,13 @@
 import { CarbonBinaryWriter } from '../../../CarbonSerialization.js';
 import { Bytes32 } from '../../Bytes32.js';
 
+export type CarbonNftAddressInfo = {
+  carbonTokenId: bigint;
+  instanceId: bigint;
+  seriesId: number;
+  mintNumber: number;
+};
+
 export class TokenHelper {
   static getNftAddress(carbonTokenId: bigint, instanceId: bigint): Bytes32 {
     const w = new CarbonBinaryWriter();
@@ -28,7 +35,7 @@ export class TokenHelper {
    * - instanceId: 64-bit composite id (series + mint)
    * - seriesId / mintNumber: 32-bit halves of instanceId
    */
-  static unpackNftAddress(address: Uint8Array): TokenHelper.CarbonNftAddressInfo {
+  static unpackNftAddress(address: Uint8Array): CarbonNftAddressInfo {
     const carbonTokenId = this.readUint64LE(address, 16);
     const instanceId = this.readUint64LE(address, 24);
 
@@ -43,13 +50,3 @@ export class TokenHelper {
     };
   }
 }
-
-export namespace TokenHelper {
-  export type CarbonNftAddressInfo = {
-    carbonTokenId: bigint;
-    instanceId: bigint;
-    seriesId: number;
-    mintNumber: number;
-  };
-}
-

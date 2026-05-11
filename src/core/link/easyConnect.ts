@@ -5,6 +5,9 @@ import { TxMsg } from '../types/Carbon/Blockchain/index.js';
 import { Transaction } from '../tx/Transaction.js';
 import { logger } from '../utils/logger.js';
 
+type EasyCallback = (data?: unknown) => void;
+type EasyArguments = unknown[];
+
 export class EasyConnect {
   requiredVersion: number;
   platform: string;
@@ -14,7 +17,7 @@ export class EasyConnect {
   script: EasyScript;
   nexus: Nexus | null;
 
-  constructor(_options: Array<string> = null) {
+  constructor(_options: string[] | null = null) {
     this.platform = 'phantasma';
     this.providerHint = 'poltergeist';
     this.script = new EasyScript();
@@ -44,8 +47,7 @@ export class EasyConnect {
 
     switch (_provider) {
       case 'auto':
-        // @ts-ignore
-        if (!!window.PhantasmaLinkSocket == true) {
+        if (typeof window !== 'undefined' && !!window.PhantasmaLinkSocket) {
           this.setConfig('ecto');
         } else {
           this.providerHint = '';
@@ -63,28 +65,26 @@ export class EasyConnect {
   }
 
   connect(
-    onSuccess: any = (data) => {},
-    onFail: any = (data) => {
+    onSuccess: EasyCallback = () => {},
+    onFail: EasyCallback = (data) => {
       logger.log('%cError: ' + data, 'color:red');
     }
   ) {
-    let that = this;
-
     this.link.login(
-      function (data) {
+      (data) => {
         //Console Logging for Debugging Purposes
         if (data) {
-          that.connected = true;
-          that.nexus =
-            that.link.nexus === Nexus.Mainnet ||
-            that.link.nexus === Nexus.Simnet ||
-            that.link.nexus === Nexus.Testnet
-              ? (that.link.nexus as Nexus)
+          this.connected = true;
+          this.nexus =
+            this.link.nexus === Nexus.Mainnet ||
+            this.link.nexus === Nexus.Simnet ||
+            this.link.nexus === Nexus.Testnet
+              ? (this.link.nexus as Nexus)
               : null;
           onSuccess(data);
           logger.log('%c[EasyConnect Connected]', 'color:green');
           logger.log(
-            "Wallet Address '" + that.link.account.address + "' connected via " + that.link.wallet
+            "Wallet Address '" + this.link.account.address + "' connected via " + this.link.wallet
           );
         } else {
           onFail();
@@ -106,39 +106,40 @@ export class EasyConnect {
 
   async query(
     _type: string = null,
-    _arguments: Array<string> = null,
-    _callback: any = (data) => {
+    _arguments: string[] | null = null,
+    _callback: EasyCallback = (data) => {
       logger.log(data);
     }
   ) {
+    void _arguments;
     if (this.connected == true) {
       switch (_type) {
         case 'account':
-          let account = this.link.account;
+          const account = this.link.account;
           _callback(account);
           return account;
           break;
 
         case 'name':
-          let name = this.link.account.name;
+          const name = this.link.account.name;
           _callback(name);
           return name;
           break;
 
         case 'balances':
-          let balances = this.link.account.balances;
+          const balances = this.link.account.balances;
           _callback(balances);
           return balances;
           break;
 
         case 'walletAddress':
-          let walletAddress = this.link.account.address;
+          const walletAddress = this.link.account.address;
           _callback(walletAddress);
           return walletAddress;
           break;
 
         case 'avatar':
-          let avatar = this.link.account.avatar;
+          const avatar = this.link.account.avatar;
           _callback(avatar);
           return avatar;
           break;
@@ -155,16 +156,16 @@ export class EasyConnect {
 
   async action(
     _type: string = null,
-    _arguments: Array<any> = null,
-    onSuccess: any = (data) => {},
-    onFail: any = (data) => {
+    _arguments: EasyArguments | null = null,
+    onSuccess: EasyCallback = () => {},
+    onFail: EasyCallback = (data) => {
       logger.log('%cError: ' + data, 'color:red');
     }
   ) {
     if (this.connected == true) {
       switch (_type) {
         case 'sendFT':
-          let sendFTScript = await this.script.buildScript('interop', [
+          const sendFTScript = await this.script.buildScript('interop', [
             'Runtime.SendTokens',
             [_arguments[0], _arguments[1], _arguments[2], _arguments[3]],
           ]);
@@ -172,7 +173,7 @@ export class EasyConnect {
           break;
 
         case 'sendNFT':
-          let sendNFTScript = await this.script.buildScript('interop', [
+          const sendNFTScript = await this.script.buildScript('interop', [
             'Runtime.SendTokens',
             [_arguments[0], _arguments[1], _arguments[2], _arguments[3]],
           ]);
@@ -187,8 +188,8 @@ export class EasyConnect {
   signTransaction(
     script: string,
     payload = null,
-    onSuccess: any = (data) => {},
-    onFail: any = (data) => {
+    onSuccess: EasyCallback = () => {},
+    onFail: EasyCallback = (data) => {
       logger.log('%cError: ' + data, 'color:red');
     }
   ) {
@@ -196,9 +197,9 @@ export class EasyConnect {
   }
 
   signData(
-    data: any,
-    onSuccess: any = (data) => {},
-    onFail: any = (data) => {
+    data: string,
+    onSuccess: EasyCallback = () => {},
+    onFail: EasyCallback = (data) => {
       logger.log('%cError: ' + data, 'color:red');
     }
   ) {
@@ -207,13 +208,13 @@ export class EasyConnect {
 
   signCarbonTransaction(
     txMsg: TxMsg,
-    onSuccess: any = (data) => {},
-    onFail: any = (data) => {
+    onSuccess: EasyCallback = () => {},
+    onFail: EasyCallback = (data) => {
       logger.log('%cError: ' + data, 'color:red');
     }
   ) {
     if (this.connected == true) {
-    this.link.signCarbonTxAndBroadcast(txMsg, onSuccess, onFail);
+      this.link.signCarbonTxAndBroadcast(txMsg, onSuccess, onFail);
     } else {
       const message = 'Wallet is not connected';
       logger.log('%c' + message, 'color:red');
@@ -223,8 +224,8 @@ export class EasyConnect {
 
   signPrebuiltTransaction(
     tx: Transaction,
-    onSuccess: any = (data) => {},
-    onFail: any = (data) => {
+    onSuccess: EasyCallback = () => {},
+    onFail: EasyCallback = (data) => {
       logger.log('%cError: ' + data, 'color:red');
     }
   ) {
@@ -237,7 +238,7 @@ export class EasyConnect {
     }
   }
 
-  invokeScript(script: string, _callback: any) {
+  invokeScript(script: string, _callback: EasyCallback) {
     this.link.invokeScript(script, _callback);
   }
 
@@ -245,8 +246,8 @@ export class EasyConnect {
     script: string,
     payload = null,
     proofOfWork: ProofOfWork = ProofOfWork.Minimal,
-    onSuccess: any = (data) => {},
-    onFail: any = (data) => {
+    onSuccess: EasyCallback = () => {},
+    onFail: EasyCallback = (data) => {
       logger.log('%cError: ' + data, 'color:red');
     }
   ) {

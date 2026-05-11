@@ -16,7 +16,7 @@ export class FeeOptions implements IFeeOptions {
     this.feeMultiplier = feeMultiplier;
   }
 
-  calculateMaxGas(..._args: unknown[]): bigint {
+  calculateMaxGas(): bigint {
     return this.gasFeeBase * this.feeMultiplier;
   }
 }
@@ -63,7 +63,7 @@ export class CreateSeriesFeeOptions extends FeeOptions implements IFeeOptions {
     this.gasFeeCreateSeriesBase = gasFeeCreateSeriesBase;
   }
 
-  override calculateMaxGas(..._args: unknown[]): bigint {
+  override calculateMaxGas(): bigint {
     return (this.gasFeeBase + this.gasFeeCreateSeriesBase) * this.feeMultiplier;
   }
 }
@@ -74,7 +74,7 @@ export class MintNftFeeOptions extends FeeOptions implements IFeeOptions {
     super(gasFeeBase, feeMultiplier);
   }
 
-  override calculateMaxGas(..._args: unknown[]): bigint {
+  override calculateMaxGas(): bigint {
     return this.gasFeeBase * this.feeMultiplier;
   }
 }

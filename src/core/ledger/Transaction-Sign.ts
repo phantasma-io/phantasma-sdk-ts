@@ -48,7 +48,7 @@ export const SignBytes = (hash: Buffer, privateKey: Buffer): string => {
   return signatureHex;
 };
 
-export const GetHash = (encodedTx: string, debug?: boolean): Buffer => {
+export const GetHash = (encodedTx: string): Buffer => {
   return Buffer.from(encodedTx, 'hex');
 };
 

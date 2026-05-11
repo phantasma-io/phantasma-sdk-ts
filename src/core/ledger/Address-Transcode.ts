@@ -19,9 +19,9 @@ export const GetAddressFromPrivateKey = (privateKey: string): string => {
  */
 export const GetAddressFromPublicKey = (publicKey: string): string => {
   // Assuming Base16.decodeUint8Array is a function that decodes a base16 string to Uint8Array
-  let pubKeyBytes = Base16.decodeUint8Array(publicKey);
+  const pubKeyBytes = Base16.decodeUint8Array(publicKey);
   // Create a new array and set the first two elements
-  let addrArray = new Uint8Array(34);
+  const addrArray = new Uint8Array(34);
   addrArray[0] = 1;
   // Copy 32 bytes from the 2nd position of pubKeyBytes to addrArray, starting from the 3rd position of addrArray
   addrArray.set(pubKeyBytes.slice(0, 32), 2);
@@ -34,9 +34,9 @@ export const GetAddressFromPublicKey = (publicKey: string): string => {
  * @returns Address
  */
 export const GetAddressPublicKeyFromPublicKey = (publicKey: string): Address => {
-  let pubKeyBytes = Base16.decodeUint8Array(publicKey);
+  const pubKeyBytes = Base16.decodeUint8Array(publicKey);
   // Create a new array and set the first two elements
-  let addrArray = new Uint8Array(34);
+  const addrArray = new Uint8Array(34);
   addrArray[0] = 1;
   // Copy 32 bytes from the 2nd position of pubKeyBytes to addrArray, starting from the 3rd position of addrArray
   addrArray.set(pubKeyBytes.slice(0, 32), 2);

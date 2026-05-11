@@ -9,9 +9,30 @@ import { Bytes32 } from '../../Bytes32.js';
 import { Bytes64 } from '../../Bytes64.js';
 import { VmVariableSchema } from './VmVariableSchema.js';
 
+export type VmDynamicVariableData =
+  | null
+  | VmDynamicVariable
+  | Uint8Array
+  | VmDynamicStruct
+  | number
+  | bigint
+  | Bytes16
+  | Bytes32
+  | Bytes64
+  | string
+  | VmDynamicVariable[]
+  | Uint8Array[]
+  | VmStructArray
+  | number[]
+  | bigint[]
+  | Bytes16[]
+  | Bytes32[]
+  | Bytes64[]
+  | string[];
+
 export class VmDynamicVariable implements ICarbonBlob {
   type: VmType = VmType.Dynamic;
-  data: any = null;
+  data: VmDynamicVariableData = null;
 
   static fromType(t: VmType): VmDynamicVariable {
     const v = new VmDynamicVariable();

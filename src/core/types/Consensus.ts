@@ -1,4 +1,3 @@
-import { Encoding } from 'csharp-binary-stream';
 import { ISerializable } from '../interfaces/index.js';
 import { bytesToHex, stringToUint8Array } from '../utils/index.js';
 import { Base16, PBinaryReader, PBinaryWriter } from './Extensions/index.js';
@@ -35,7 +34,7 @@ export class PollChoice implements ISerializable {
   }
 
   static Unserialize(reader: PBinaryReader): PollChoice {
-    let pollChoice = new PollChoice('');
+    const pollChoice = new PollChoice('');
     pollChoice.UnserializeData(reader);
     return pollChoice;
   }
@@ -43,8 +42,8 @@ export class PollChoice implements ISerializable {
 
 export class PollValue implements ISerializable {
   public value: string; // Should be byte[]
-  public ranking: BigInt;
-  public votes: BigInt;
+  public ranking: bigint;
+  public votes: bigint;
 
   SerializeData(writer: PBinaryWriter) {
     writer.writeByteArray(stringToUint8Array(this.value));
@@ -59,15 +58,15 @@ export class PollValue implements ISerializable {
   }
 
   static Unserialize(reader: PBinaryReader): PollValue {
-    let pollValue = new PollValue();
+    const pollValue = new PollValue();
     pollValue.UnserializeData(reader);
     return pollValue;
   }
 }
 
 export class PollVote implements ISerializable {
-  public index: BigInt;
-  public percentage: BigInt;
+  public index: bigint;
+  public percentage: bigint;
 
   SerializeData(writer: PBinaryWriter) {
     writer.writeBigInteger(this.index);
@@ -79,7 +78,7 @@ export class PollVote implements ISerializable {
   }
 
   static Unserialize(reader: PBinaryReader): PollVote {
-    let pollVote = new PollVote();
+    const pollVote = new PollVote();
     pollVote.UnserializeData(reader);
     return pollVote;
   }
@@ -91,11 +90,11 @@ export class ConsensusPoll implements ISerializable {
   public mode: ConsensusMode;
   public state: PollState;
   public entries: PollValue[];
-  public round: BigInt;
+  public round: bigint;
   public startTime: Timestamp;
   public endTime: Timestamp;
-  public choicesPerUser: BigInt;
-  public totalVotes: BigInt;
+  public choicesPerUser: bigint;
+  public totalVotes: bigint;
 
   constructor() {
     this.subject = '';
@@ -147,7 +146,7 @@ export class ConsensusPoll implements ISerializable {
   }
 
   static Unserialize(reader: PBinaryReader): ConsensusPoll {
-    let consensusPoll = new ConsensusPoll();
+    const consensusPoll = new ConsensusPoll();
     consensusPoll.UnserializeData(reader);
     return consensusPoll;
   }
@@ -155,7 +154,7 @@ export class ConsensusPoll implements ISerializable {
 
 export class PollPresence implements ISerializable {
   public subject: string;
-  public round: BigInt;
+  public round: bigint;
 
   SerializeData(writer: PBinaryWriter) {
     writer.writeString(this.subject);
@@ -167,7 +166,7 @@ export class PollPresence implements ISerializable {
   }
 
   static Unserialize(reader: PBinaryReader): PollPresence {
-    let pollPresence = new PollPresence();
+    const pollPresence = new PollPresence();
     pollPresence.UnserializeData(reader);
     return pollPresence;
   }

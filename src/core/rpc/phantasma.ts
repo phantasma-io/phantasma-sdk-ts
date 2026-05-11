@@ -1,5 +1,3 @@
-/* eslint-disable */
-
 import { logger } from '../utils/logger.js';
 import fetch from 'cross-fetch';
 import { Balance } from './interfaces/Balance.js';
@@ -26,23 +24,37 @@ import {
   TokenSeriesResult,
 } from './interfaces/index.js';
 
+type JsonRpcParam = string | number | boolean | null | undefined;
+
+interface RpcPeer {
+  url: string;
+  location: string;
+  info?: string;
+  msecs?: number;
+}
+
+interface JsonRpcResponse {
+  result?: unknown;
+  error?: { message?: string } | string;
+}
+
 export class PhantasmaAPI {
   host: string;
   rpcName: string;
   nexus: string;
-  availableHosts: any[];
+  availableHosts: RpcPeer[];
 
   pingAsync(host: string): Promise<number> {
     return new Promise((resolve, reject) => {
-      var started = new Date().getTime();
-      var http = new XMLHttpRequest();
+      const started = new Date().getTime();
+      const http = new XMLHttpRequest();
 
       http.open('GET', host + '/rpc', true);
       http.timeout = 4500;
       http.onreadystatechange = function () {
         if (http.readyState == 4 && http.status == 200) {
-          var ended = new Date().getTime();
-          var milliseconds = ended - started;
+          const ended = new Date().getTime();
+          const milliseconds = ended - started;
           resolve(milliseconds);
         }
 
@@ -55,7 +67,7 @@ export class PhantasmaAPI {
       };
       try {
         http.send(null);
-      } catch (exception) {
+      } catch {
         // this is expected
         reject();
       }
@@ -70,27 +82,30 @@ export class PhantasmaAPI {
 
     if (peersUrlJson != undefined && peersUrlJson != null) {
       fetch(peersUrlJson + '?_=' + new Date().getTime()).then(async (res) => {
-        const data = await res.json();
-        for (var i = 0; i < data.length; i++) {
-          logger.log('Checking RPC: ', data[i]);
+        const data = (await res.json()) as RpcPeer[];
+        for (let i = 0; i < data.length; i++) {
+          const peer = data[i];
+          logger.log('Checking RPC: ', peer);
           try {
-            const msecs = await this.pingAsync(data[i].url);
-            data[i].info = data[i].location + ' • ' + msecs + ' ms';
-            data[i].msecs = msecs;
-            logger.log(data[i].location + ' • ' + msecs + ' ms • ' + data[i].url + '/rpc');
-            this.availableHosts.push(data[i]);
-          } catch (err) {
-            logger.log('Error with RPC: ' + data[i]);
+            const msecs = await this.pingAsync(peer.url);
+            peer.info = peer.location + ' • ' + msecs + ' ms';
+            peer.msecs = msecs;
+            logger.log(peer.location + ' • ' + msecs + ' ms • ' + peer.url + '/rpc');
+            this.availableHosts.push(peer);
+          } catch {
+            logger.log('Error with RPC: ' + peer.url);
           }
         }
-        this.availableHosts.sort((a, b) => a.msecs - b.msecs);
+        this.availableHosts.sort(
+          (a, b) => (a.msecs ?? Number.MAX_SAFE_INTEGER) - (b.msecs ?? Number.MAX_SAFE_INTEGER)
+        );
         this.updateRpc();
       });
     }
   }
 
-  async JSONRPC(method: string, params: Array<any>): Promise<any> {
-    let res = await fetch(this.host, {
+  async JSONRPC(method: string, params: JsonRpcParam[]): Promise<unknown> {
+    const res = await fetch(this.host, {
       method: 'POST',
       mode: 'cors',
       body: JSON.stringify({
@@ -101,13 +116,14 @@ export class PhantasmaAPI {
       }),
       headers: { 'Content-Type': 'application/json' },
     });
-    let resJson = await res.json();
+    const resJson = (await res.json()) as JsonRpcResponse;
     logger.log('method', method, resJson);
     if (resJson.error) {
-      if (resJson.error.message) return { error: resJson.error.message };
+      if (typeof resJson.error === 'object' && resJson.error.message)
+        return { error: resJson.error.message };
       return { error: resJson.error };
     }
-    return await resJson.result;
+    return resJson.result;
   }
 
   setRpcHost(rpcHost: string) {
@@ -138,31 +154,31 @@ export class PhantasmaAPI {
   }
 
   convertDecimals(amount: number, decimals: number): number {
-    let mult = Math.pow(10, decimals);
+    const mult = Math.pow(10, decimals);
     return amount / mult;
   }
 
   //Returns the account name and balance of given address.
   async getAccount(account: string, extended: boolean = true): Promise<Account> {
-    let params: Array<any> = [account, extended];
+    const params: JsonRpcParam[] = [account, extended];
     return (await this.JSONRPC('getAccount', params)) as Account;
   }
 
   //Returns the accounts name and balance of given addresses.
   async getAccounts(accounts: string[], extended: boolean = true): Promise<Account[]> {
-    let params: Array<any> = [accounts.join(','), extended];
+    const params: JsonRpcParam[] = [accounts.join(','), extended];
     return (await this.JSONRPC('getAccounts', params)) as Account[];
   }
 
   //Returns the address that owns a given name.
   async lookUpName(name: string): Promise<string> {
-    let params: Array<any> = [name];
+    const params: JsonRpcParam[] = [name];
     return (await this.JSONRPC('lookUpName', params)) as string;
   }
 
   //Returns the height of a chain.
   async getBlockHeight(chainInput: string): Promise<number> {
-    let params: Array<any> = [chainInput];
+    const params: JsonRpcParam[] = [chainInput];
     const result = await this.JSONRPC('getBlockHeight', params);
     return typeof result === 'string' ? parseInt(result, 10) : (result as number);
   }
@@ -172,26 +188,26 @@ export class PhantasmaAPI {
     chainAddressOrName: string,
     blockHash: string
   ): Promise<number> {
-    const params: Array<any> = [chainAddressOrName, blockHash];
+    const params: JsonRpcParam[] = [chainAddressOrName, blockHash];
     const result = await this.JSONRPC('getBlockTransactionCountByHash', params);
     return typeof result === 'string' ? parseInt(result, 10) : (result as number);
   }
 
   //Returns information about a block by hash.
   async getBlockByHash(blockHash: string): Promise<Block> {
-    let params: Array<any> = [blockHash];
+    const params: JsonRpcParam[] = [blockHash];
     return (await this.JSONRPC('getBlockByHash', params)) as Block;
   }
 
   //Returns information about a block by height and chain.
   async getBlockByHeight(chainInput: string, height: number): Promise<Block> {
-    let params: Array<any> = [chainInput, height];
+    const params: JsonRpcParam[] = [chainInput, height];
     return (await this.JSONRPC('getBlockByHeight', params)) as Block;
   }
 
   //Returns information about a block by height and chain.
   async getLatestBlock(chainInput: string): Promise<Block> {
-    let params: Array<any> = [chainInput];
+    const params: JsonRpcParam[] = [chainInput];
     return (await this.JSONRPC('getLatestBlock', params)) as Block;
   }
 
@@ -201,7 +217,7 @@ export class PhantasmaAPI {
     blockHash: string,
     index: number
   ): Promise<TransactionData> {
-    const params: Array<any> = [chainAddressOrName, blockHash, index];
+    const params: JsonRpcParam[] = [chainAddressOrName, blockHash, index];
     return (await this.JSONRPC('getTransactionByBlockHashAndIndex', params)) as TransactionData;
   }
 
@@ -211,58 +227,58 @@ export class PhantasmaAPI {
     page: number,
     pageSize: number
   ): Promise<Paginated<AccountTransactions>> {
-    let params: Array<any> = [account, page, pageSize];
+    const params: JsonRpcParam[] = [account, page, pageSize];
     return (await this.JSONRPC('getAddressTransactions', params)) as Paginated<AccountTransactions>;
   }
 
   //Get number of transactions in a specific address and chain
   async getAddressTransactionCount(account: string, chainInput: string): Promise<number> {
-    let params: Array<any> = [account, chainInput];
+    const params: JsonRpcParam[] = [account, chainInput];
     return (await this.JSONRPC('getAddressTransactionCount', params)) as number;
   }
 
   // Broadcasts a manually built signed operation to the network.
   async sendRawTransaction(txData: string): Promise<string> {
-    let params: Array<any> = [txData];
+    const params: JsonRpcParam[] = [txData];
     return (await this.JSONRPC('sendRawTransaction', params)) as string;
   }
 
   // Broadcasts a signed Carbon transaction to the network.
   async sendCarbonTransaction(txData: string): Promise<string> {
-    let params: Array<any> = [txData];
+    const params: JsonRpcParam[] = [txData];
     return (await this.JSONRPC('sendCarbonTransaction', params)) as string;
   }
 
   // Invokes a script against network state without state changes.
   async invokeRawScript(chainInput: string, scriptData: string): Promise<Script> {
-    let params: Array<any> = [chainInput, scriptData];
+    const params: JsonRpcParam[] = [chainInput, scriptData];
     return (await this.JSONRPC('invokeRawScript', params)) as Script;
   }
 
   //Returns information about a transaction by hash.
   async getTransaction(hashText: string): Promise<TransactionData> {
-    let params: Array<any> = [hashText];
+    const params: JsonRpcParam[] = [hashText];
     return (await this.JSONRPC('getTransaction', params)) as TransactionData;
   }
 
   //Returns an array of all chains deployed in Phantasma.
   // Warning: current Carbon RPC endpoint is stubbed and returns an empty array.
   async getChains(extended: boolean = true): Promise<Chain[]> {
-    let params: Array<any> = [extended];
+    const params: JsonRpcParam[] = [extended];
     return (await this.JSONRPC('getChains', params)) as Chain[];
   }
 
   //Return the chain
   // Warning: current Carbon RPC endpoint is stubbed and returns a default chain object.
   async getChain(name: string, extended: boolean = true): Promise<Chain> {
-    let params: Array<any> = [name, extended];
+    const params: JsonRpcParam[] = [name, extended];
     return (await this.JSONRPC('getChain', params)) as Chain;
   }
 
   //Returns info about the nexus.
   // Warning: current Carbon RPC endpoint is stubbed and returns a default nexus object.
   async getNexus(extended: boolean = true): Promise<Nexus> {
-    let params: Array<any> = [extended];
+    const params: JsonRpcParam[] = [extended];
     return (await this.JSONRPC('getNexus', params)) as Nexus;
   }
 
@@ -271,13 +287,13 @@ export class PhantasmaAPI {
     chainAddressOrName: string = 'main',
     extended: boolean = true
   ): Promise<Contract[]> {
-    let params: Array<any> = [chainAddressOrName, extended];
+    const params: JsonRpcParam[] = [chainAddressOrName, extended];
     return (await this.JSONRPC('getContracts', params)) as Contract[];
   }
 
   //Returns the contract info deployed in Phantasma.
   async getContract(chainAddressOrName: string = 'main', contractName: string): Promise<Contract> {
-    let params: Array<any> = [chainAddressOrName, contractName];
+    const params: JsonRpcParam[] = [chainAddressOrName, contractName];
     return (await this.JSONRPC('getContract', params)) as Contract;
   }
 
@@ -285,33 +301,33 @@ export class PhantasmaAPI {
     chainAddressOrName: string = 'main',
     contractAddress: string
   ): Promise<Contract> {
-    let params: Array<any> = [chainAddressOrName, contractAddress];
+    const params: JsonRpcParam[] = [chainAddressOrName, contractAddress];
     return (await this.JSONRPC('getContractByAddress', params)) as Contract;
   }
 
   //Returns info about an organization.
   // Warning: current Carbon RPC endpoint is stubbed and returns a default organization object.
   async getOrganization(ID: string, extended: boolean = true): Promise<Organization> {
-    let params: Array<any> = [ID, extended];
+    const params: JsonRpcParam[] = [ID, extended];
     return (await this.JSONRPC('getOrganization', params)) as Organization;
   }
 
   // Warning: current Carbon RPC endpoint is stubbed and returns a default organization object.
   async getOrganizationByName(name: string, extended: boolean = true): Promise<Organization> {
-    let params: Array<any> = [name, extended];
+    const params: JsonRpcParam[] = [name, extended];
     return (await this.JSONRPC('getOrganizationByName', params)) as Organization;
   }
 
   // Warning: current Carbon RPC endpoint is stubbed and returns an empty array.
   async getOrganizations(extended: boolean = false): Promise<Organization[]> {
-    let params: Array<any> = [extended];
+    const params: JsonRpcParam[] = [extended];
     return (await this.JSONRPC('getOrganizations', params)) as Organization[];
   }
 
   //Returns content of a Phantasma leaderboard.
   // Warning: current Carbon RPC endpoint is stubbed and returns a default leaderboard object.
   async getLeaderboard(name: string): Promise<Leaderboard> {
-    let params: Array<any> = [name];
+    const params: JsonRpcParam[] = [name];
     return (await this.JSONRPC('getLeaderboard', params)) as Leaderboard;
   }
 
@@ -320,7 +336,7 @@ export class PhantasmaAPI {
     ownerAddress: string | undefined | null,
     extended: boolean = true
   ): Promise<Token[]> {
-    let params: Array<any> = [extended, ownerAddress];
+    const params: JsonRpcParam[] = [extended, ownerAddress];
     return (await this.JSONRPC('getTokens', params)) as Token[];
   }
 
@@ -330,13 +346,13 @@ export class PhantasmaAPI {
     extended: boolean = true,
     carbonTokenId: bigint = 0n
   ): Promise<Token> {
-    let params: Array<any> = [symbol, extended, carbonTokenId.toString()];
+    const params: JsonRpcParam[] = [symbol, extended, carbonTokenId.toString()];
     return (await this.JSONRPC('getToken', params)) as Token;
   }
 
   //Returns data of a non-fungible token, in hexadecimal format.
   async getTokenData(symbol: string, IDtext: string): Promise<TokenData> {
-    let params: Array<any> = [symbol, IDtext];
+    const params: JsonRpcParam[] = [symbol, IDtext];
     return (await this.JSONRPC('getTokenData', params)) as TokenData;
   }
 
@@ -347,7 +363,7 @@ export class PhantasmaAPI {
     chainInput: string,
     checkAddressResevedByte: boolean = true
   ): Promise<Balance> {
-    let params: Array<any> = [account, tokenSymbol, chainInput, checkAddressResevedByte];
+    const params: JsonRpcParam[] = [account, tokenSymbol, chainInput, checkAddressResevedByte];
     return (await this.JSONRPC('getTokenBalance', params)) as Balance;
   }
 
@@ -359,7 +375,7 @@ export class PhantasmaAPI {
     pageSize: number = 10,
     cursor: string = ''
   ): Promise<CursorPaginatedResult<TokenSeriesResult[]>> {
-    let params: Array<any> = [symbol, carbonTokenId.toString(), pageSize, cursor];
+    const params: JsonRpcParam[] = [symbol, carbonTokenId.toString(), pageSize, cursor];
     return (await this.JSONRPC('getTokenSeries', params)) as CursorPaginatedResult<
       TokenSeriesResult[]
     >;
@@ -372,7 +388,7 @@ export class PhantasmaAPI {
     seriesId: string,
     carbonSeriesId: number
   ): Promise<TokenSeriesResult> {
-    const params: Array<any> = [symbol, carbonTokenId.toString(), seriesId, carbonSeriesId];
+    const params: JsonRpcParam[] = [symbol, carbonTokenId.toString(), seriesId, carbonSeriesId];
     return (await this.JSONRPC('getTokenSeriesById', params)) as TokenSeriesResult;
   }
 
@@ -384,7 +400,13 @@ export class PhantasmaAPI {
     cursor: string = '',
     extended: boolean = false
   ): Promise<CursorPaginatedResult<NFT[]>> {
-    let params: Array<any> = [carbonTokenId.toString(), carbonSeriesId, pageSize, cursor, extended];
+    const params: JsonRpcParam[] = [
+      carbonTokenId.toString(),
+      carbonSeriesId,
+      pageSize,
+      cursor,
+      extended,
+    ];
     return (await this.JSONRPC('getTokenNFTs', params)) as CursorPaginatedResult<NFT[]>;
   }
 
@@ -397,7 +419,7 @@ export class PhantasmaAPI {
     cursor: string = '',
     checkAddressReservedByte: boolean = true
   ): Promise<CursorPaginatedResult<Balance[]>> {
-    let params: Array<any> = [
+    const params: JsonRpcParam[] = [
       account,
       tokenSymbol,
       carbonTokenId.toString(),
@@ -421,7 +443,7 @@ export class PhantasmaAPI {
     extended: boolean = false,
     checkAddressReservedByte: boolean = true
   ): Promise<CursorPaginatedResult<NFT[]>> {
-    let params: Array<any> = [
+    const params: JsonRpcParam[] = [
       account,
       tokenSymbol,
       carbonTokenId.toString(),
@@ -443,7 +465,7 @@ export class PhantasmaAPI {
     cursor: string = '',
     checkAddressReservedByte: boolean = true
   ): Promise<CursorPaginatedResult<Token[]>> {
-    let params: Array<any> = [
+    const params: JsonRpcParam[] = [
       account,
       tokenSymbol,
       carbonTokenId.toString(),
@@ -463,7 +485,7 @@ export class PhantasmaAPI {
     cursor: string = '',
     checkAddressReservedByte: boolean = true
   ): Promise<CursorPaginatedResult<TokenSeriesResult[]>> {
-    let params: Array<any> = [
+    const params: JsonRpcParam[] = [
       account,
       tokenSymbol,
       carbonTokenId.toString(),
@@ -478,7 +500,7 @@ export class PhantasmaAPI {
 
   //Returns the number of active auctions.
   async getAuctionsCount(chainAddressOrName: string, symbol: string): Promise<number> {
-    let params: Array<any> = [chainAddressOrName, symbol];
+    const params: JsonRpcParam[] = [chainAddressOrName, symbol];
     return (await this.JSONRPC('getAuctionsCount', params)) as number;
   }
 
@@ -489,38 +511,38 @@ export class PhantasmaAPI {
     page: number,
     pageSize: number
   ): Promise<Auction> {
-    let params: Array<any> = [chainAddressOrName, symbol, page, pageSize];
+    const params: JsonRpcParam[] = [chainAddressOrName, symbol, page, pageSize];
     return (await this.JSONRPC('getAuctions', params)) as Auction;
   }
 
   //Returns the auction for a specific token.
   async getAuction(chainAddressOrName: string, symbol: string, IDtext: string): Promise<Auction> {
-    let params: Array<any> = [chainAddressOrName, symbol, IDtext];
+    const params: JsonRpcParam[] = [chainAddressOrName, symbol, IDtext];
     return (await this.JSONRPC('getAuction', params)) as Auction;
   }
 
   //Returns info about a specific archive.
   // Warning: current Carbon RPC endpoint is stubbed and returns a default archive object.
   async getArchive(hashText: string): Promise<Archive> {
-    let params: Array<any> = [hashText];
+    const params: JsonRpcParam[] = [hashText];
     return (await this.JSONRPC('getArchive', params)) as Archive;
   }
 
   //Writes the contents of an incomplete archive.
   // Warning: current Carbon RPC endpoint is stubbed and returns false without persisting data.
   async writeArchive(hashText: string, blockIndex: number, blockContent: string): Promise<boolean> {
-    let params: Array<any> = [hashText, blockIndex, blockContent];
+    const params: JsonRpcParam[] = [hashText, blockIndex, blockContent];
     return (await this.JSONRPC('writeArchive', params)) as boolean;
   }
 
   //Returns info of a nft.
   async getNFT(symbol: string, nftId: string, extended: boolean = true): Promise<NFT> {
-    let params: Array<any> = [symbol, nftId, extended];
+    const params: JsonRpcParam[] = [symbol, nftId, extended];
     return (await this.JSONRPC('getNFT', params)) as NFT;
   }
 
   async getNFTs(symbol: string, nftIDs: string[], extended: boolean = true): Promise<NFT[]> {
-    let params: Array<any> = [symbol, nftIDs.join(','), extended];
+    const params: JsonRpcParam[] = [symbol, nftIDs.join(','), extended];
     return (await this.JSONRPC('getNFTs', params)) as NFT[];
   }
 
@@ -529,7 +551,7 @@ export class PhantasmaAPI {
   }
 
   async getPhantasmaVmConfig(chainAddressOrName: string): Promise<PhantasmaVmConfig> {
-    const params: Array<any> = [chainAddressOrName];
+    const params: JsonRpcParam[] = [chainAddressOrName];
     return (await this.JSONRPC('getPhantasmaVmConfig', params)) as PhantasmaVmConfig;
   }
 }

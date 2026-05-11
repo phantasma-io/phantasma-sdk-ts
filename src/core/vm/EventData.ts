@@ -1,7 +1,4 @@
-import bigInt from "big-integer";
-import { isCallSignatureDeclaration } from "typescript";
-import { Decoder } from "./Decoder.js";
-import { VMType } from "./VMType.js";
+import { Decoder } from './Decoder.js';
 
 export enum EventKind {
   Unknown = 0,
@@ -84,12 +81,12 @@ export enum TypeAuction {
 }
 
 export function decodeVMObject(str: string) {
-  var dec = new Decoder(str);
+  const dec = new Decoder(str);
   return dec.readVmObject();
 }
 
 export function getTokenEventData(str: string) {
-  var dec = new Decoder(str);
+  const dec = new Decoder(str);
 
   return {
     symbol: dec.readString(),
@@ -99,7 +96,7 @@ export function getTokenEventData(str: string) {
 }
 
 export function getChainValueEventData(str: string) {
-  var dec = new Decoder(str);
+  const dec = new Decoder(str);
   return {
     name: dec.readString,
     value: dec.readBigInt(),
@@ -107,7 +104,7 @@ export function getChainValueEventData(str: string) {
 }
 
 export function getTransactionSettleEventData(str: string) {
-  var dec = new Decoder(str);
+  const dec = new Decoder(str);
   return {
     hash: dec.read(dec.readByte()),
     platform: dec.readString(),
@@ -117,7 +114,7 @@ export function getTransactionSettleEventData(str: string) {
 }
 
 export function getGasEventData(str: string) {
-  var dec = new Decoder(str);
+  const dec = new Decoder(str);
   return {
     address: dec.read(dec.readByte()),
     price: dec.readBigInt(),
@@ -127,7 +124,7 @@ export function getGasEventData(str: string) {
 }
 
 export function getInfusionEventData(str: string) {
-  var dec = new Decoder(str);
+  const dec = new Decoder(str);
   return {
     baseSymbol: dec.readString(),
     TokenID: dec.readBigIntAccurate(),
@@ -138,7 +135,7 @@ export function getInfusionEventData(str: string) {
 }
 
 export function getMarketEventData(str: string) {
-  var dec = new Decoder(str);
+  const dec = new Decoder(str);
   return {
     baseSymbol: dec.readString(),
     quoteSymbol: dec.readString(),

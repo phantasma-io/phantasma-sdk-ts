@@ -30,7 +30,7 @@ export function getAddressFromWif(wif: string): string {
   const privateKey = getPrivateKeyFromWif(wif);
   const privateKeyBuffer = Buffer.from(privateKey, 'hex');
   const publicKey = curve.keyFromSecret(privateKeyBuffer).getPublic('hex');
-  var addressHex = Buffer.from('0100' + publicKey, 'hex');
+  const addressHex = Buffer.from('0100' + publicKey, 'hex');
 
   return 'P' + base58.encode(addressHex);
 }
@@ -42,35 +42,33 @@ export function getPublicKeyFromPrivateKey(privateKey: string): string {
 }
 
 export function generateNewSeed(): string {
-  let buffer = new Uint8Array(32);
-  let privateKey = Buffer.alloc(32);
+  const buffer = new Uint8Array(32);
+  const privateKey = Buffer.alloc(32);
   crypto.getRandomValues(buffer);
   for (let i = 0; i < 32; ++i) {
     privateKey.writeUInt8(buffer[i], i);
   }
 
-  const wif = WIF.encode(128, privateKey, true);
   const mnemonic = bip39.generateMnemonic();
   return mnemonic;
 }
 
 export function generateNewSeedWords(): string[] {
-  let buffer = new Uint8Array(32);
-  let privateKey = Buffer.alloc(32);
+  const buffer = new Uint8Array(32);
+  const privateKey = Buffer.alloc(32);
   crypto.getRandomValues(buffer);
   for (let i = 0; i < 32; ++i) {
     privateKey.writeUInt8(buffer[i], i);
   }
 
-  const wif = WIF.encode(128, privateKey, true);
   const mnemonic = bip39.generateMnemonic();
   const seedWords = mnemonic.split(' ');
   return seedWords;
 }
 
 export function generateNewWif(): string {
-  let buffer = new Uint8Array(32);
-  let privateKey = Buffer.alloc(32);
+  const buffer = new Uint8Array(32);
+  const privateKey = Buffer.alloc(32);
   crypto.getRandomValues(buffer);
   for (let i = 0; i < 32; ++i) {
     privateKey.writeUInt8(buffer[i], i);

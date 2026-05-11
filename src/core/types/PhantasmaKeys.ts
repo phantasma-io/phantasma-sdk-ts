@@ -7,12 +7,6 @@ import { bytesToHex } from '../utils/index.js';
 import { Ed25519Signature } from './Ed25519Signature.js';
 import pkg from 'elliptic';
 import { Entropy } from './Entropy.js';
-import {
-  generateNewWif,
-  getAddressFromWif,
-  getPublicKeyFromPrivateKey,
-  getWifFromPrivateKey,
-} from '../tx/index.js';
 const { eddsa } = pkg;
 const ed25519 = new eddsa('ed25519');
 
@@ -42,8 +36,6 @@ export class PhantasmaKeys implements IKeyPair {
 
     this._privateKey = new Uint8Array(PhantasmaKeys.PrivateKeyLength);
     this._privateKey.set(privateKey);
-    let wif = getWifFromPrivateKey(bytesToHex(privateKey));
-
     const privateKeyString = bytesToHex(this._privateKey);
     const privateKeyBuffer = Buffer.from(privateKeyString, 'hex');
     const publicKey = ed25519.keyFromSecret(privateKeyBuffer).getPublic();
@@ -107,6 +99,7 @@ export class PhantasmaKeys implements IKeyPair {
       publicKey: Uint8Array
     ) => Uint8Array
   ): Signature {
+    void customSignFunction;
     return Ed25519Signature.Generate(this, msg);
   }
 }

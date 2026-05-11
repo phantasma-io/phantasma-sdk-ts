@@ -28,7 +28,7 @@ export class CarbonBlob {
     const t = CarbonBlob.New(ctor, r);
 
     if (!allowTrailingBytes) {
-      const rem = (r as any).readRemaining?.() as Uint8Array | undefined;
+      const rem = r.readRemaining();
       if (rem && rem.length !== 0) {
         throw new Error('unexpected trailing bytes');
       }

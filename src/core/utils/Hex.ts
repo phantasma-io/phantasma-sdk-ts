@@ -8,7 +8,7 @@ export function bytesToHex(bytes: ArrayLike<number>): string {
   const len = bytes.length >>> 0;
   let out = '';
   for (let i = 0; i < len; i++) {
-    const v = Number((bytes as any)[i]);
+    const v = Number(bytes[i]);
     if (!Number.isInteger(v) || v < 0 || v > 255) {
       throw new Error(`Invalid byte at index ${i}: ${v}`);
     }
@@ -19,7 +19,8 @@ export function bytesToHex(bytes: ArrayLike<number>): string {
 
 export function hexToBytes(hex: string): Uint8Array {
   const trimmed = hex.trim();
-  const normalized = trimmed.startsWith('0x') || trimmed.startsWith('0X') ? trimmed.slice(2) : trimmed;
+  const normalized =
+    trimmed.startsWith('0x') || trimmed.startsWith('0X') ? trimmed.slice(2) : trimmed;
   if (normalized.length === 0) {
     return new Uint8Array();
   }

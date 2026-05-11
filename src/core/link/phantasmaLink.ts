@@ -1,5 +1,3 @@
-import { Storage } from '../rpc/interfaces/Storage.js';
-import { Stake } from '../rpc/interfaces/Stake.js';
 import { Transaction } from '../tx/Transaction.js';
 import { ScriptBuilder } from '../vm/index.js';
 import { ProofOfWork } from './interfaces/ProofOfWork.js';
@@ -16,22 +14,68 @@ export interface PrebuiltTransactionSignResult {
   signedTx: string;
 }
 
+interface PhantasmaLinkSocketLike {
+  close(): void;
+  send(request: string): void;
+  readyState?: number;
+  onopen?: (event: unknown) => void;
+  onmessage?: (event: { data: string }) => void;
+  onclose?: (event: { reason?: string; wasClean?: boolean }) => void;
+  onerror?: (error: unknown) => void;
+}
+
+declare global {
+  interface Window {
+    PhantasmaLinkSocket?: new () => PhantasmaLinkSocketLike;
+  }
+}
+
+type LinkResponse = Record<string, unknown> & {
+  success?: boolean;
+  error?: unknown;
+  message?: string;
+  hash?: string | { error?: string };
+  signature?: string;
+  token?: unknown;
+  wallet?: unknown;
+  nexus?: unknown;
+};
+
+type LinkCallback = (result: LinkResponse) => void;
+type LinkErrorCallback = (message?: string) => void;
+
+const errorMessage = (error: unknown, fallback: string): string => {
+  if (error instanceof Error && error.message.length > 0) {
+    return error.message;
+  }
+  if (
+    error &&
+    typeof error === 'object' &&
+    'message' in error &&
+    typeof error.message === 'string' &&
+    error.message.length > 0
+  ) {
+    return error.message;
+  }
+  return fallback;
+};
+
 export class PhantasmaLink {
   //Declarations
   host: string;
-  dapp: any;
-  onLogin: (succ: any) => void;
-  providerHint: any;
-  onError: (message: any) => void;
-  socket: any;
-  requestCallback: any;
+  dapp: string;
+  onLogin: ((success: boolean) => void) | null;
+  providerHint: string;
+  onError: LinkErrorCallback | null;
+  socket: PhantasmaLinkSocketLike | null;
+  requestCallback: LinkCallback | null;
   private lastSocketErrorMessage: string | null = null;
   socketTransport: 'websocket' | 'injected' | null = null;
   socketOpen: boolean = false;
-  token: any;
+  token: unknown;
   requestID: number = 0;
-  account: IAccount;
-  wallet: any;
+  account: IAccount | null;
+  wallet: unknown;
   messageLogging: boolean;
   version: number;
   nexus: string;
@@ -39,7 +83,7 @@ export class PhantasmaLink {
   platform: string;
 
   //Construct The Link
-  constructor(dappID: any, logging: boolean = true) {
+  constructor(dappID: string, logging: boolean = true) {
     this.version = 4;
     this.nexus = '';
     this.chain = 'main';
@@ -57,8 +101,13 @@ export class PhantasmaLink {
     //Standard Sets
     this.host = 'localhost:7090';
     this.dapp = dappID;
-    this.onLogin = function (succ) {}; //Does Nothing for Now
-    this.onError = function (message) {}; //Does Nothing for Now
+    this.onLogin = () => {}; //Does Nothing for Now
+    this.onError = () => {}; //Does Nothing for Now
+    this.socket = null;
+    this.requestCallback = null;
+    this.token = null;
+    this.account = null;
+    this.wallet = null;
   }
 
   //Message Logging
@@ -69,16 +118,33 @@ export class PhantasmaLink {
   };
 
   // Preserve wallet-side failure details whenever the transport provides them.
-  private describeFailure(result: any, fallback: string): string {
+  private describeFailure(result: unknown, fallback: string): string {
     if (typeof result === 'string' && result.length > 0) {
       return result;
     }
 
-    if (result && typeof result.error === 'string' && result.error.length > 0) {
-      return result.error;
+    if (result && typeof result === 'object' && 'error' in result) {
+      const error = result.error;
+      if (typeof error === 'string' && error.length > 0) {
+        return error;
+      }
+      if (
+        error &&
+        typeof error === 'object' &&
+        'message' in error &&
+        typeof error.message === 'string'
+      ) {
+        return error.message;
+      }
     }
 
-    if (result && typeof result.message === 'string' && result.message.length > 0) {
+    if (
+      result &&
+      typeof result === 'object' &&
+      'message' in result &&
+      typeof result.message === 'string' &&
+      result.message.length > 0
+    ) {
       return result.message;
     }
 
@@ -103,7 +169,7 @@ export class PhantasmaLink {
   }
 
   //Script Invoking With Wallet Connection
-  invokeScript(script: string, callback: (message: string) => void) {
+  invokeScript(script: string, callback: (message: string | LinkResponse) => void) {
     this.onMessage('Relaying transaction to wallet...');
     if (!this.socket) {
       callback('not logged in');
@@ -121,12 +187,11 @@ export class PhantasmaLink {
       requestStr = this.nexus + '/' + requestStr;
     }
 
-    let invokeScriptRequest = 'invokeScript/' + requestStr;
+    const invokeScriptRequest = 'invokeScript/' + requestStr;
 
-    var that = this;
-    this.sendLinkRequest(invokeScriptRequest, function (result) {
+    this.sendLinkRequest(invokeScriptRequest, (result) => {
       if (result.success) {
-        that.onMessage('Invoke successful, hash: ' + result + '...');
+        this.onMessage('Invoke successful, hash: ' + result + '...');
         if (callback) {
           callback(result);
         }
@@ -136,10 +201,10 @@ export class PhantasmaLink {
 
   //Wallet Transaction Signing + Sending
   signTx(
-    script: any,
+    script: string,
     payload: string | null,
-    callback: (arg0: string) => void,
-    onErrorCallback: () => void,
+    callback: LinkCallback,
+    onErrorCallback: LinkErrorCallback,
     pow = ProofOfWork.None,
     signature = 'Ed25519'
   ) {
@@ -157,8 +222,8 @@ export class PhantasmaLink {
       payload = '7068616e7461736d612d7473'; //Says 'Phantasma-ts' in hex
     } else if (typeof payload === 'string') {
       //Turn String Payload -> Bytes -> Hex
-      let sb = new ScriptBuilder();
-      let bytes = sb.RawString(payload);
+      const sb = new ScriptBuilder();
+      const bytes = sb.RawString(payload);
       sb.AppendBytes(bytes);
       payload = sb.EndScript();
     } else {
@@ -170,8 +235,6 @@ export class PhantasmaLink {
     }
 
     this.onError = onErrorCallback; //Sets Error Callback Function
-    let that = this;
-
     let request =
       'signTx/' +
       this.chain +
@@ -191,13 +254,15 @@ export class PhantasmaLink {
     }
 
     // Send the signature request to the connected wallet.
-    this.sendLinkRequest(request, function (result) {
+    this.sendLinkRequest(request, (result) => {
       if (result.success) {
-        if (result.hash.error) {
-          that.onMessage('Error: ' + result.hash.error);
+        const hash = result.hash;
+        if (hash && typeof hash === 'object' && hash.error) {
+          this.onMessage('Error: ' + hash.error);
           return;
         }
-        that.onMessage('Transaction successful, hash: ' + result.hash.substr(0, 15) + '...');
+        const hashText = typeof hash === 'string' ? hash : '';
+        this.onMessage('Transaction successful, hash: ' + hashText.substring(0, 15) + '...');
         if (callback) {
           callback(result);
         }
@@ -212,7 +277,7 @@ export class PhantasmaLink {
   // Wallet Transaction Signing
   signCarbonTxAndBroadcast(
     txMsg: TxMsg,
-    callback: (result: any) => void = () => {},
+    callback: LinkCallback = () => {},
     onErrorCallback: (message?: string) => void = () => {}
   ) {
     if (!txMsg) {
@@ -235,9 +300,9 @@ export class PhantasmaLink {
     let txHex: string;
     try {
       txHex = this.serializeCarbonTx(txMsg);
-    } catch (err: any) {
+    } catch (err: unknown) {
       const message = 'Error: Unable to serialize Carbon transaction';
-      this.onMessage(message + (err?.message ? ` (${err.message})` : ''));
+      this.onMessage(message + ` (${errorMessage(err, 'unknown error')})`);
       onErrorCallback(message);
       return;
     }
@@ -259,7 +324,7 @@ export class PhantasmaLink {
         callback(result);
       } else {
         if (onErrorCallback) {
-          onErrorCallback(result.error || 'Carbon transaction signing failed');
+          onErrorCallback(this.describeFailure(result, 'Carbon transaction signing failed'));
         }
       }
     });
@@ -267,7 +332,7 @@ export class PhantasmaLink {
 
   signTxSignature(
     tx: string,
-    callback: (result: string) => void,
+    callback: LinkCallback,
     onErrorCallback: (message?: string) => void,
     signature: string = 'Ed25519'
   ) {
@@ -295,19 +360,17 @@ export class PhantasmaLink {
     }
 
     this.onError = onErrorCallback;
-    let signDataStr = 'signTxSignature/' + tx + '/' + signature + '/' + this.platform;
+    const signDataStr = 'signTxSignature/' + tx + '/' + signature + '/' + this.platform;
 
-    var that = this;
-
-    this.sendLinkRequest(signDataStr, function (result) {
+    this.sendLinkRequest(signDataStr, (result) => {
       if (result.success) {
-        that.onMessage('Data successfully signed');
+        this.onMessage('Data successfully signed');
         if (callback) {
           callback(result);
         }
       } else {
         if (onErrorCallback) {
-          onErrorCallback(that.describeFailure(result, 'Wallet rejected transaction signature'));
+          onErrorCallback(this.describeFailure(result, 'Wallet rejected transaction signature'));
         }
       }
     });
@@ -346,9 +409,9 @@ export class PhantasmaLink {
     let unsignedTxHex: string;
     try {
       unsignedTxHex = tx.ToStringEncoded(false).toUpperCase();
-    } catch (err: any) {
+    } catch (err: unknown) {
       const message = 'Error: Unable to encode unsigned transaction';
-      this.onMessage(message + (err?.message ? ` (${err.message})` : ''));
+      this.onMessage(message + ` (${errorMessage(err, 'unknown error')})`);
       if (onErrorCallback) {
         onErrorCallback(message);
       }
@@ -357,7 +420,7 @@ export class PhantasmaLink {
 
     this.signTxSignature(
       unsignedTxHex,
-      (result: any) => {
+      (result) => {
         if (
           !result?.success ||
           typeof result.signature !== 'string' ||
@@ -387,8 +450,8 @@ export class PhantasmaLink {
             signature: result.signature,
             signedTx: signedTx.ToStringEncoded(true).toUpperCase(),
           });
-        } catch (err: any) {
-          const message = err?.message || 'Unable to assemble signed transaction';
+        } catch (err: unknown) {
+          const message = errorMessage(err, 'Unable to assemble signed transaction');
           if (onErrorCallback) {
             onErrorCallback(message);
           }
@@ -407,7 +470,7 @@ export class PhantasmaLink {
 
   multiSig(
     subject: string,
-    callback: (result: string) => void,
+    callback: LinkCallback,
     onErrorCallback: () => void,
     signature: string = 'Ed25519'
   ) {
@@ -428,13 +491,11 @@ export class PhantasmaLink {
       return;
     }
 
-    let signDataStr = 'multiSig/' + subject + '/' + signature + '/' + this.platform;
+    const signDataStr = 'multiSig/' + subject + '/' + signature + '/' + this.platform;
 
-    var that = this;
-
-    this.sendLinkRequest(signDataStr, function (result) {
+    this.sendLinkRequest(signDataStr, (result) => {
       if (result.success) {
-        that.onMessage('Data successfully signed');
+        this.onMessage('Data successfully signed');
         if (callback) {
           callback(result);
         }
@@ -448,14 +509,12 @@ export class PhantasmaLink {
 
   getPeer(callback: (result: string) => void, onErrorCallback: () => void) {
     this.onError = onErrorCallback; //Sets Error Callback Function
-    let that = this;
-
     // Send the peer query to the connected wallet.
-    this.sendLinkRequest('getPeer/', function (result) {
+    this.sendLinkRequest('getPeer/', (result) => {
       if (result.success) {
-        that.onMessage('Peer Query,: ' + result);
+        this.onMessage('Peer Query,: ' + result);
         if (callback) {
-          callback(result);
+          callback(String(result));
         }
       } else {
         if (onErrorCallback) {
@@ -465,17 +524,16 @@ export class PhantasmaLink {
     });
   }
 
-  fetchWallet(callback: (result: any) => void, onErrorCallback: (message: any) => void) {
-    let that = this;
-    let getAccountRequest = 'getAccount/' + this.platform;
-    this.sendLinkRequest(getAccountRequest, function (result) {
+  fetchWallet(callback?: LinkCallback, onErrorCallback?: LinkErrorCallback) {
+    const getAccountRequest = 'getAccount/' + this.platform;
+    this.sendLinkRequest(getAccountRequest, (result) => {
       if (result.success) {
-        that.account = result;
-        callback(result);
+        this.account = result as unknown as IAccount;
+        callback?.(result);
       } else {
-        onErrorCallback(
+        onErrorCallback?.(
           'Could not obtain account info... Make sure you have an account currently open in ' +
-            that.wallet +
+            this.wallet +
             '...'
         );
         //that.disconnect("Unable to optain Account Info");
@@ -486,17 +544,16 @@ export class PhantasmaLink {
     });
   }
 
-  getNexus(callback: (message: any) => void, onErrorCallback: (message: any) => void) {
+  getNexus(callback: LinkCallback, onErrorCallback: LinkErrorCallback) {
     this.onError = onErrorCallback; //Sets Error Callback Function
-    let that = this;
 
     // Send the nexus query to the connected wallet.
-    this.sendLinkRequest('getNexus/', function (result) {
+    this.sendLinkRequest('getNexus/', (result) => {
       if (result.success) {
         if (typeof result.nexus === 'string') {
-          that.nexus = result.nexus;
+          this.nexus = result.nexus;
         }
-        that.onMessage('Nexus Query,: ' + result);
+        this.onMessage('Nexus Query,: ' + result);
         if (callback) {
           callback(result);
         }
@@ -508,14 +565,13 @@ export class PhantasmaLink {
     });
   }
 
-  getWalletVersion(callback: (message: any) => void, onErrorCallback: (message: any) => void) {
+  getWalletVersion(callback: LinkCallback, onErrorCallback: LinkErrorCallback) {
     this.onError = onErrorCallback; //Sets Error Callback Function
-    let that = this;
 
     // Send the wallet-version query to the connected wallet.
-    this.sendLinkRequest('getWalletVersion/', function (result) {
+    this.sendLinkRequest('getWalletVersion/', (result) => {
       if (result.success) {
-        that.onMessage('Wallet Version Query,: ' + result);
+        this.onMessage('Wallet Version Query,: ' + result);
         if (callback) {
           callback(result);
         }
@@ -530,7 +586,7 @@ export class PhantasmaLink {
   // Uses the connected wallet to sign Base16-encoded data.
   signData(
     data: string,
-    callback: (success: string) => void,
+    callback: LinkCallback,
     onErrorCallback: (message: string) => void,
     signature: string = 'Ed25519'
   ) {
@@ -551,19 +607,17 @@ export class PhantasmaLink {
       return;
     }
 
-    let signDataStr = 'signData/' + data + '/' + signature + '/' + this.platform;
+    const signDataStr = 'signData/' + data + '/' + signature + '/' + this.platform;
 
-    var that = this;
-
-    this.sendLinkRequest(signDataStr, function (result) {
+    this.sendLinkRequest(signDataStr, (result) => {
       if (result.success) {
-        that.onMessage('Data successfully signed');
+        this.onMessage('Data successfully signed');
         if (callback) {
           callback(result);
         }
       } else {
         if (onErrorCallback) {
-          onErrorCallback(result);
+          onErrorCallback(this.describeFailure(result, 'Data signing failed'));
         }
       }
     });
@@ -571,16 +625,15 @@ export class PhantasmaLink {
 
   //Wallet Socket Connection Creation
   createSocket(isResume: boolean = false) {
-    let path = 'ws://' + this.host + '/phantasma';
+    const path = 'ws://' + this.host + '/phantasma';
     this.onMessage('Phantasma Link connecting...');
 
     if (this.socket) {
       this.socket.close();
     }
 
-    const useInjectedSocket =
-      // @ts-ignore
-      !!window.PhantasmaLinkSocket && this.providerHint !== 'poltergeist';
+    const injectedSocket = typeof window !== 'undefined' ? window.PhantasmaLinkSocket : undefined;
+    const useInjectedSocket = !!injectedSocket && this.providerHint !== 'poltergeist';
     this.socketTransport = useInjectedSocket ? 'injected' : 'websocket';
     this.socketOpen = false;
     this.onMessage(
@@ -589,11 +642,7 @@ export class PhantasmaLink {
         : `Using raw WebSocket transport: ${path}`
     );
 
-    //@ts-ignore
-    this.socket = useInjectedSocket
-      ? // @ts-ignore
-        new PhantasmaLinkSocket()
-      : new WebSocket(path);
+    this.socket = useInjectedSocket && injectedSocket ? new injectedSocket() : new WebSocket(path);
 
     this.requestCallback = null;
     this.lastSocketErrorMessage = null;
@@ -601,94 +650,88 @@ export class PhantasmaLink {
     this.account = null;
     this.nexus = '';
     this.requestID = 0;
-    let authorizeRequest = 'authorize/' + this.dapp + '/' + this.version;
-    let getAccountRequest = 'getAccount/' + this.platform;
-    let that = this;
-
+    const authorizeRequest = 'authorize/' + this.dapp + '/' + this.version;
+    const getAccountRequest = 'getAccount/' + this.platform;
     //Once Socket Opened
-    this.socket.onopen = function (e) {
-      that.socketOpen = true;
-      that.onMessage('Connection established, authorizing dapp in wallet...');
+    this.socket.onopen = () => {
+      this.socketOpen = true;
+      this.onMessage('Connection established, authorizing dapp in wallet...');
       if (isResume) {
-        that.fetchWallet(undefined, undefined);
+        this.fetchWallet(undefined, undefined);
       } else {
-        that.sendLinkRequest(authorizeRequest, function (result) {
+        this.sendLinkRequest(authorizeRequest, (result) => {
           //Set Global Variables With Successful Account Query
           if (result.success) {
-            that.token = result.token;
-            that.wallet = result.wallet;
-            that.nexus = typeof result.nexus === 'string' ? result.nexus : '';
-            that.onMessage('Authorized, obtaining account info...');
-            that.sendLinkRequest(getAccountRequest, function (result) {
+            this.token = result.token;
+            this.wallet = result.wallet;
+            this.nexus = typeof result.nexus === 'string' ? result.nexus : '';
+            this.onMessage('Authorized, obtaining account info...');
+            this.sendLinkRequest(getAccountRequest, (result) => {
               if (result.success) {
-                that.account = result;
+                this.account = result as unknown as IAccount;
               } else {
-                that.onError(
+                this.onError?.(
                   'Could not obtain account info... Make sure you have an account currently open in ' +
-                    that.wallet +
+                    this.wallet +
                     '...'
                 );
-                that.disconnect('Unable to optain Account Info');
+                this.disconnect('Unable to optain Account Info');
               }
 
-              that.onLogin(result.success);
-              that.onLogin = null;
+              this.onLogin?.(result.success === true);
+              this.onLogin = null;
             });
           } else {
-            that.onError(that.describeFailure(result, 'Authorization failed...'));
-            that.disconnect('Auth Failure');
+            this.onError?.(this.describeFailure(result, 'Authorization failed...'));
+            this.disconnect('Auth Failure');
           }
         });
       }
     };
 
     //Retrieves Message From Socket and Processes It
-    this.socket.onmessage = function (event) {
-      const obj = JSON.parse(event.data);
-      if (that.messageLogging == true) {
+    this.socket.onmessage = (event) => {
+      const obj = JSON.parse(event.data) as LinkResponse;
+      if (this.messageLogging == true) {
         logger.log('%c' + event.data, 'color:blue');
       }
 
       //Checks What To Do Based On Message
       switch (obj.message) {
         case 'Wallet is Closed':
-          that.onError(
+          this.onError?.(
             'Could not obtain account info... Make sure you have an account currently open in ' +
-              that.wallet
+              this.wallet
           );
-          that.disconnect(true);
+          this.disconnect(true);
           break;
 
         case 'not logged in':
-          that.onError(
+          this.onError?.(
             'Could not obtain account info... Make sure you have an account currently logged in'
           );
-          that.disconnect(true);
+          this.disconnect(true);
           break;
 
         case 'A previouus request is still pending':
         case 'A previous request is still pending':
-          that.onError(that.describeFailure(obj, 'You have a pending action in your wallet'));
+          this.onError?.(this.describeFailure(obj, 'You have a pending action in your wallet'));
           break;
 
         case 'user rejected':
-          that.onError('Transaction cancelled by user in ' + that.wallet);
-          break;
-
-        case 'user rejected':
-          that.onError('Transaction cancelled by user in ' + that.wallet);
+          this.onError?.('Transaction cancelled by user in ' + this.wallet);
           break;
 
         default:
           if (obj.message && obj.message.startsWith('nexus mismatch')) {
-            that.onError(obj.message);
+            this.onError?.(obj.message);
           } else {
-            let temp = that.requestCallback;
+            const temp = this.requestCallback;
             if (temp == null) {
-              that.onError('Something bad happened');
+              this.onError?.('Something bad happened');
               return;
             }
-            that.requestCallback = null;
+            this.requestCallback = null;
             temp(obj);
           }
           break;
@@ -696,30 +739,27 @@ export class PhantasmaLink {
     };
 
     //Cleanup After Socket Closes
-    this.socket.onclose = function (event) {
-      that.socketOpen = false;
+    this.socket.onclose = (event) => {
+      this.socketOpen = false;
       const reason =
         event.reason && event.reason.length > 0
           ? event.reason
-          : that.lastSocketErrorMessage ||
+          : this.lastSocketErrorMessage ||
             (event.wasClean ? 'Wallet connection closed' : 'Connection terminated unexpectedly');
-      that.lastSocketErrorMessage = null;
+      this.lastSocketErrorMessage = null;
 
-      if (that.requestCallback) {
-        that.handleSocketFailure(reason);
+      if (this.requestCallback) {
+        this.handleSocketFailure(reason);
       } else if (!event.wasClean) {
-        that.handleSocketFailure(reason);
+        this.handleSocketFailure(reason);
       }
     };
 
     //Error Callback When Socket Has Error
-    this.socket.onerror = function (error: any) {
-      const errMsg =
-        error && typeof error.message === 'string' && error.message.length > 0
-          ? error.message
-          : 'WebSocket error';
-      that.lastSocketErrorMessage = errMsg;
-      that.onMessage('Error: ' + errMsg);
+    this.socket.onerror = (error) => {
+      const errMsg = errorMessage(error, 'WebSocket error');
+      this.lastSocketErrorMessage = errMsg;
+      this.onMessage('Error: ' + errMsg);
     };
   }
 
@@ -732,7 +772,7 @@ export class PhantasmaLink {
     }
   }
 
-  resume(token: any) {
+  resume(token: unknown) {
     this.token = token;
     this.retry();
   }
@@ -743,7 +783,7 @@ export class PhantasmaLink {
   }
 
   //Get Dapp ID Name Util
-  set dappID(dapp) {
+  set dappID(dapp: string) {
     this.dapp = dapp;
   }
 
@@ -752,7 +792,7 @@ export class PhantasmaLink {
   }
 
   //Build Request and Send To Wallet Via Socket
-  sendLinkRequest(request: string, callback: (T: any) => void) {
+  sendLinkRequest(request: string, callback: LinkCallback) {
     this.onMessage('Sending Phantasma Link request: ' + request);
 
     this.requestCallback = callback;
@@ -779,11 +819,8 @@ export class PhantasmaLink {
 
     try {
       socket.send(request);
-    } catch (err: any) {
-      const errMessage =
-        err && typeof err.message === 'string' && err.message.length > 0
-          ? err.message
-          : 'Failed to send request to wallet';
+    } catch (err: unknown) {
+      const errMessage = errorMessage(err, 'Failed to send request to wallet');
       this.handleSocketFailure(errMessage);
     }
   }

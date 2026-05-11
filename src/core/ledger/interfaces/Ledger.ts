@@ -1,6 +1,6 @@
 import { Device } from './Device.js';
 
-interface ILedger {
+export interface ILedger {
   device: Device;
   publicKey: string;
   address: string;

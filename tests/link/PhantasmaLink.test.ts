@@ -11,6 +11,7 @@ import { bytesToHex } from '../../src/core/utils/Hex';
 import { ScriptBuilder } from '../../src/core/vm';
 import { ProofOfWork } from '../../src/core/link/interfaces/ProofOfWork';
 import { EasyConnect } from '../../src/core/link/easyConnect';
+import { IAccount } from '../../src/core/link/interfaces/IAccount';
 import { Transaction } from '../../src/core/tx/Transaction';
 import { PhantasmaKeys } from '../../src/core/types/PhantasmaKeys';
 import { Ed25519Signature } from '../../src/core/types/Ed25519Signature';
@@ -33,6 +34,58 @@ const buildCarbonTransfer = (): TxMsg => {
   );
 };
 
+type LinkResponse = Record<string, unknown> & {
+  success?: boolean;
+  error?: unknown;
+  message?: string;
+  signedTx?: string;
+  signature?: string;
+};
+
+type LinkCallback = (result: LinkResponse) => void;
+
+type TestSocket = {
+  readyState?: number;
+  send: ReturnType<typeof jest.fn>;
+  close: ReturnType<typeof jest.fn>;
+  onopen?: (event: unknown) => void;
+  onmessage?: (event: { data: string }) => void;
+};
+
+type TestablePhantasmaLink = PhantasmaLink & {
+  sendLinkRequest(request: string, callback: LinkCallback): void;
+  socket: TestSocket | null;
+  requestCallback: LinkCallback | null;
+  handleSocketFailure(message: string): void;
+  socketOpen: boolean;
+};
+
+type MutableGlobal = typeof globalThis & {
+  window?: unknown;
+  WebSocket?: unknown;
+};
+
+const asTestLink = (link: PhantasmaLink): TestablePhantasmaLink =>
+  link as unknown as TestablePhantasmaLink;
+
+const buildTestSocket = (overrides: Partial<TestSocket> = {}): TestSocket => ({
+  close: jest.fn(),
+  send: jest.fn(),
+  readyState: 1,
+  ...overrides,
+});
+
+const buildAccount = (address: string): IAccount => ({
+  alias: '',
+  name: '',
+  address,
+  avatar: '',
+  platform: '',
+  external: '',
+  balances: [],
+  files: [],
+});
+
 describe('PhantasmaLink.signCarbonTxAndBroadcast', () => {
   afterEach(() => {
     jest.restoreAllMocks();
@@ -45,8 +98,8 @@ describe('PhantasmaLink.signCarbonTxAndBroadcast', () => {
     const expectedHex = bytesToHex(CarbonBlob.Serialize(txMsg));
 
     const sendLinkSpy = jest
-      .spyOn(link as any, 'sendLinkRequest')
-      .mockImplementation((_request: string, callback: (result: any) => void) => {
+      .spyOn(asTestLink(link), 'sendLinkRequest')
+      .mockImplementation((_request: string, callback: LinkCallback) => {
         callback({ success: true, signedTx: 'deadbeef' });
       });
 
@@ -70,7 +123,9 @@ describe('PhantasmaLink.signCarbonTxAndBroadcast', () => {
     link.signCarbonTxAndBroadcast(txMsg, jest.fn(), onError);
 
     expect(onError).toHaveBeenCalledWith(
-      expect.stringContaining('Carbon transactions require a wallet that supports Phantasma Link v4 or higher')
+      expect.stringContaining(
+        'Carbon transactions require a wallet that supports Phantasma Link v4 or higher'
+      )
     );
   });
 });
@@ -82,7 +137,9 @@ describe('PhantasmaLink.signTx', () => {
 
   it('converts string payloads to script bytes before sending to the wallet', () => {
     const link = new PhantasmaLink('test', false);
-    const sendLinkSpy = jest.spyOn(link as any, 'sendLinkRequest').mockImplementation(() => {});
+    const sendLinkSpy = jest
+      .spyOn(asTestLink(link), 'sendLinkRequest')
+      .mockImplementation(() => {});
     const payload = 'plain payload';
     const script = 'DEADBEEF';
 
@@ -107,8 +164,10 @@ describe('PhantasmaLink.signTxSignature', () => {
 
   it('allows serialized transactions larger than the old 1KB guard', () => {
     const link = new PhantasmaLink('test', false);
-    (link as any).socket = { readyState: 1, send: jest.fn() };
-    const sendLinkSpy = jest.spyOn(link as any, 'sendLinkRequest').mockImplementation(() => {});
+    asTestLink(link).socket = buildTestSocket();
+    const sendLinkSpy = jest
+      .spyOn(asTestLink(link), 'sendLinkRequest')
+      .mockImplementation(() => {});
     const tx = 'AB'.repeat(2000);
 
     link.signTxSignature(tx, jest.fn(), jest.fn());
@@ -121,10 +180,15 @@ describe('PhantasmaLink.signTxSignature', () => {
 
   it('propagates wallet-side rejection details to the error callback', () => {
     const link = new PhantasmaLink('test', false);
-    (link as any).socket = { readyState: 1, send: jest.fn() };
-    jest.spyOn(link as any, 'sendLinkRequest').mockImplementation((_request: string, callback: (result: any) => void) => {
-      callback({ success: false, message: 'signData: Expected nexus mainnet, instead got testnet' });
-    });
+    asTestLink(link).socket = buildTestSocket();
+    jest
+      .spyOn(asTestLink(link), 'sendLinkRequest')
+      .mockImplementation((_request: string, callback: LinkCallback) => {
+        callback({
+          success: false,
+          message: 'signData: Expected nexus mainnet, instead got testnet',
+        });
+      });
 
     const onError = jest.fn();
 
@@ -141,9 +205,9 @@ describe('PhantasmaLink.signPrebuiltTransaction', () => {
 
   it('assembles a signed transaction from a wallet signature response', () => {
     const link = new PhantasmaLink('test', false);
-    (link as any).socket = { readyState: 1, send: jest.fn() };
+    asTestLink(link).socket = buildTestSocket();
     const keys = PhantasmaKeys.generate();
-    link.account = { address: keys.Address.Text } as any;
+    link.account = buildAccount(keys.Address.Text);
 
     const tx = new Transaction(
       'testnet',
@@ -154,13 +218,17 @@ describe('PhantasmaLink.signPrebuiltTransaction', () => {
     );
 
     const signatureBytes = Ed25519Signature.Generate(keys, tx.GetUnsignedBytes()).Bytes;
-    const walletSignatureHex = bytesToHex(new Uint8Array([signatureBytes.length, ...signatureBytes]));
+    const walletSignatureHex = bytesToHex(
+      new Uint8Array([signatureBytes.length, ...signatureBytes])
+    );
     const expectedSignedTx = Transaction.FromBytes(tx.ToStringEncoded(false).toUpperCase());
     expectedSignedTx.signatures = [new Ed25519Signature(signatureBytes)];
 
-    jest.spyOn(link as any, 'sendLinkRequest').mockImplementation((_request: string, callback: (result: any) => void) => {
-      callback({ success: true, signature: walletSignatureHex });
-    });
+    jest
+      .spyOn(asTestLink(link), 'sendLinkRequest')
+      .mockImplementation((_request: string, callback: LinkCallback) => {
+        callback({ success: true, signature: walletSignatureHex });
+      });
 
     const onSuccess = jest.fn();
     const onError = jest.fn();
@@ -199,7 +267,8 @@ describe('PhantasmaLink.signPrebuiltTransaction', () => {
 
 describe('EasyConnect.signCarbonTransaction', () => {
   beforeAll(() => {
-    (globalThis as any).window = (globalThis as any).window || {};
+    const mutableGlobal = globalThis as MutableGlobal;
+    mutableGlobal.window = mutableGlobal.window || {};
   });
 
   afterEach(() => {
@@ -254,9 +323,9 @@ describe('PhantasmaLink socket error handling', () => {
   it('propagates socket failures to the pending request callback', () => {
     const link = new PhantasmaLink('test', false);
     const callback = jest.fn();
-    (link as any).requestCallback = callback;
+    asTestLink(link).requestCallback = callback;
 
-    (link as any).handleSocketFailure('Connection lost');
+    asTestLink(link).handleSocketFailure('Connection lost');
 
     expect(callback).toHaveBeenCalledWith({ success: false, error: 'Connection lost' });
   });
@@ -266,59 +335,56 @@ describe('PhantasmaLink socket error handling', () => {
     const errorSpy = jest.fn();
     link.onError = errorSpy;
 
-    (link as any).handleSocketFailure('');
+    asTestLink(link).handleSocketFailure('');
 
     expect(errorSpy).toHaveBeenCalledWith('Connection lost with Phantasma Link wallet');
   });
 });
 
 describe('PhantasmaLink wallet error reporting', () => {
-  const originalWindow = (globalThis as any).window;
-  const originalWebSocket = (globalThis as any).WebSocket;
+  const mutableGlobal = globalThis as MutableGlobal;
+  const originalWindow = mutableGlobal.window;
+  const originalWebSocket = mutableGlobal.WebSocket;
 
   afterEach(() => {
     jest.restoreAllMocks();
-    (globalThis as any).window = originalWindow;
-    (globalThis as any).WebSocket = originalWebSocket;
+    mutableGlobal.window = originalWindow;
+    mutableGlobal.WebSocket = originalWebSocket;
   });
 
   it('preserves wallet-side authorize errors instead of collapsing them', () => {
-    const fakeSocket: Record<string, any> = {
-      close: jest.fn(),
-      readyState: 1,
-    };
+    const fakeSocket = buildTestSocket();
 
-    (globalThis as any).window = {};
-    (globalThis as any).WebSocket = jest.fn(() => fakeSocket);
+    mutableGlobal.window = {};
+    mutableGlobal.WebSocket = jest.fn(() => fakeSocket);
 
     const link = new PhantasmaLink('test', false);
     const onError = jest.fn();
-    jest.spyOn(link as any, 'sendLinkRequest').mockImplementation((_request: string, callback: (result: any) => void) => {
-      callback({ success: false, message: 'A previous request is still pending' });
-    });
+    jest
+      .spyOn(asTestLink(link), 'sendLinkRequest')
+      .mockImplementation((_request: string, callback: LinkCallback) => {
+        callback({ success: false, message: 'A previous request is still pending' });
+      });
     const disconnectSpy = jest.spyOn(link, 'disconnect').mockImplementation(() => {});
 
     link.login(jest.fn(), onError);
-    fakeSocket.onopen({});
+    fakeSocket.onopen?.({});
 
     expect(onError).toHaveBeenCalledWith('A previous request is still pending');
     expect(disconnectSpy).toHaveBeenCalledWith('Auth Failure');
   });
 
   it('surfaces pending-request wallet messages from socket events', () => {
-    const fakeSocket: Record<string, any> = {
-      close: jest.fn(),
-      readyState: 1,
-    };
+    const fakeSocket = buildTestSocket();
 
-    (globalThis as any).window = {};
-    (globalThis as any).WebSocket = jest.fn(() => fakeSocket);
+    mutableGlobal.window = {};
+    mutableGlobal.WebSocket = jest.fn(() => fakeSocket);
 
     const link = new PhantasmaLink('test', false);
     const onError = jest.fn();
 
     link.login(jest.fn(), onError);
-    fakeSocket.onmessage({
+    fakeSocket.onmessage?.({
       data: JSON.stringify({ message: 'A previous request is still pending', success: false }),
     });
 
@@ -326,13 +392,10 @@ describe('PhantasmaLink wallet error reporting', () => {
   });
 
   it('starts with no nexus and syncs the wallet nexus from authorize responses', () => {
-    const fakeSocket: Record<string, any> = {
-      close: jest.fn(),
-      readyState: 1,
-    };
+    const fakeSocket = buildTestSocket();
 
-    (globalThis as any).window = {};
-    (globalThis as any).WebSocket = jest.fn(() => fakeSocket);
+    mutableGlobal.window = {};
+    mutableGlobal.WebSocket = jest.fn(() => fakeSocket);
 
     const link = new PhantasmaLink('test', false);
     const onLogin = jest.fn();
@@ -340,8 +403,8 @@ describe('PhantasmaLink wallet error reporting', () => {
     expect(link.nexus).toBe('');
 
     jest
-      .spyOn(link as any, 'sendLinkRequest')
-      .mockImplementation((request: string, callback: (result: any) => void) => {
+      .spyOn(asTestLink(link), 'sendLinkRequest')
+      .mockImplementation((request: string, callback: LinkCallback) => {
         if (request.startsWith('authorize/')) {
           callback({
             success: true,
@@ -364,7 +427,7 @@ describe('PhantasmaLink wallet error reporting', () => {
       });
 
     link.login(onLogin, jest.fn());
-    fakeSocket.onopen({});
+    fakeSocket.onopen?.({});
 
     expect(link.nexus).toBe('simnet');
     expect(onLogin).toHaveBeenCalledWith(true);
@@ -374,40 +437,43 @@ describe('PhantasmaLink wallet error reporting', () => {
 describe('PhantasmaLink.sendLinkRequest safeguards', () => {
   it('fails fast when socket is missing or closed', () => {
     const link = new PhantasmaLink('test', false);
-    (link as any).socket = { readyState: 3, send: jest.fn() };
+    const testLink = asTestLink(link);
+    testLink.socket = buildTestSocket({ readyState: 3 });
     const callback = jest.fn();
 
-    (link as any).sendLinkRequest('signTx/foo', callback);
+    testLink.sendLinkRequest('signTx/foo', callback);
 
     expect(callback).toHaveBeenCalledWith({
       success: false,
       error: expect.stringContaining('Wallet connection is closed'),
     });
-    expect((link as any).socket.send).not.toHaveBeenCalled();
+    expect(testLink.socket?.send).not.toHaveBeenCalled();
   });
 
   it('propagates send errors as callback failures', () => {
     const link = new PhantasmaLink('test', false);
-    (link as any).socket = {
+    const testLink = asTestLink(link);
+    testLink.socket = buildTestSocket({
       readyState: 1,
       send: jest.fn(() => {
         throw new Error('boom');
       }),
-    };
+    });
     const callback = jest.fn();
 
-    (link as any).sendLinkRequest('signTx/foo', callback);
+    testLink.sendLinkRequest('signTx/foo', callback);
 
     expect(callback).toHaveBeenCalledWith({ success: false, error: 'boom' });
   });
 
   it('accepts injected sockets that do not expose readyState once onopen fired', () => {
     const link = new PhantasmaLink('test', false);
-    (link as any).socket = { send: jest.fn() };
-    (link as any).socketOpen = true;
+    const testLink = asTestLink(link);
+    testLink.socket = buildTestSocket({ readyState: undefined });
+    testLink.socketOpen = true;
 
-    (link as any).sendLinkRequest('signTx/foo', jest.fn());
+    testLink.sendLinkRequest('signTx/foo', jest.fn());
 
-    expect((link as any).socket.send).toHaveBeenCalledWith('1,signTx/foo');
+    expect(testLink.socket?.send).toHaveBeenCalledWith('1,signTx/foo');
   });
 });

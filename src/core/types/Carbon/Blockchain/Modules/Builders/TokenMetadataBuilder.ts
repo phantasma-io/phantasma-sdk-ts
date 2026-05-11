@@ -2,8 +2,7 @@ import { CarbonBinaryWriter } from '../../../../CarbonSerialization.js';
 import { VmDynamicStruct, VmNamedDynamicVariable, VmType } from '../../Vm/index.js';
 
 export class TokenMetadataBuilder {
-  private static readonly iconDataUriPrefixPattern =
-    /^data:image\/(png|jpeg|webp);base64,/i;
+  private static readonly iconDataUriPrefixPattern = /^data:image\/(png|jpeg|webp);base64,/i;
   private static readonly base64PayloadPattern = /^[A-Za-z0-9+/]+={0,2}$/;
 
   static buildAndSerialize(fields?: Record<string, unknown>): Uint8Array {
@@ -13,12 +12,12 @@ export class TokenMetadataBuilder {
       throw new Error('Token metadata is mandatory');
     }
 
-    if (Object.values(fields).some(v => typeof v !== 'string')) {
-      throw new Error('All metadata fields must be strings')
+    if (Object.values(fields).some((v) => typeof v !== 'string')) {
+      throw new Error('All metadata fields must be strings');
     }
 
     const missing = requiredFields.filter(
-      field => typeof fields[field] !== 'string' || (fields[field] as string).trim() === '',
+      (field) => typeof fields[field] !== 'string' || (fields[field] as string).trim() === ''
     );
 
     if (missing.length > 0) {
@@ -29,7 +28,7 @@ export class TokenMetadataBuilder {
 
     const metadataFields: VmNamedDynamicVariable[] = [];
     for (const [key, value] of Object.entries(fields)) {
-      metadataFields.push(VmNamedDynamicVariable.from(key, VmType.String, value));
+      metadataFields.push(VmNamedDynamicVariable.from(key, VmType.String, value as string));
     }
 
     const struct = new VmDynamicStruct();
@@ -69,7 +68,7 @@ export class TokenMetadataBuilder {
       if (normalizedPayload !== normalizedInput) {
         throw new Error('Token metadata icon payload is not valid base64');
       }
-    } catch (err) {
+    } catch {
       throw new Error('Token metadata icon payload is not valid base64');
     }
   }

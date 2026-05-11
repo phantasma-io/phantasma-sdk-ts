@@ -1,8 +1,6 @@
-//import { BinaryWriter, BinaryReader, Encoding } from "csharp-binary-stream";
-import bigInt from 'big-integer';
 import { BinaryWriter, Encoding } from 'csharp-binary-stream';
 import { hexToBytes } from '../../utils/index.js';
-import { ISignature, Signature, SignatureKind } from '../../interfaces/index.js';
+import { Signature, SignatureKind } from '../../interfaces/index.js';
 import { Timestamp } from '../Timestamp.js';
 
 type byte = number;
@@ -118,17 +116,17 @@ export class PBinaryWriter {
     if (value < 0xfd) {
       this.appendByte(value);
     } else if (value <= 0xffff) {
-      let B = (value & 0x0000ff00) >> 8;
-      let A = value & 0x000000ff;
+      const B = (value & 0x0000ff00) >> 8;
+      const A = value & 0x000000ff;
 
       // VM variable integers append the least significant byte first.
       this.appendByte(0xfd);
       this.appendByte(A);
       this.appendByte(B);
     } else if (value <= 0xffffffff) {
-      let C = (value & 0x00ff0000) >> 16;
-      let B = (value & 0x0000ff00) >> 8;
-      let A = value & 0x000000ff;
+      const C = (value & 0x00ff0000) >> 16;
+      const B = (value & 0x0000ff00) >> 8;
+      const A = value & 0x000000ff;
 
       // VM variable integers append the least significant byte first.
       this.appendByte(0xfe);
@@ -136,10 +134,10 @@ export class PBinaryWriter {
       this.appendByte(B);
       this.appendByte(C);
     } else {
-      let D = (value & 0xff000000) >> 24;
-      let C = (value & 0x00ff0000) >> 16;
-      let B = (value & 0x0000ff00) >> 8;
-      let A = value & 0x000000ff;
+      const D = (value & 0xff000000) >> 24;
+      const C = (value & 0x00ff0000) >> 16;
+      const B = (value & 0x0000ff00) >> 8;
+      const A = value & 0x000000ff;
 
       // VM variable integers append the least significant byte first.
       this.appendByte(0xff);
@@ -152,34 +150,34 @@ export class PBinaryWriter {
   }
 
   public writeTimestamp(obj: Timestamp): this {
-    let num = obj.value;
+    const num = obj.value;
 
-    let a = (num & 0xff000000) >> 24;
-    let b = (num & 0x00ff0000) >> 16;
-    let c = (num & 0x0000ff00) >> 8;
-    let d = num & 0x000000ff;
+    const a = (num & 0xff000000) >> 24;
+    const b = (num & 0x00ff0000) >> 16;
+    const c = (num & 0x0000ff00) >> 8;
+    const d = num & 0x000000ff;
 
-    let bytes = Uint8Array.from([d, c, b, a]);
+    const bytes = Uint8Array.from([d, c, b, a]);
     this.appendBytes(bytes);
     return this;
   }
 
   public writeDateTime(obj: Date): this {
-    let num = (obj.getTime() / 1000) | 0;
+    const num = (obj.getTime() / 1000) | 0;
 
-    let a = (num & 0xff000000) >> 24;
-    let b = (num & 0x00ff0000) >> 16;
-    let c = (num & 0x0000ff00) >> 8;
-    let d = num & 0x000000ff;
+    const a = (num & 0xff000000) >> 24;
+    const b = (num & 0x00ff0000) >> 16;
+    const c = (num & 0x0000ff00) >> 8;
+    const d = num & 0x000000ff;
 
-    let bytes = Uint8Array.from([d, c, b, a]);
+    const bytes = Uint8Array.from([d, c, b, a]);
     this.appendBytes(bytes);
     return this;
   }
 
   rawString(value: string): number[] {
-    var data = [];
-    for (var i = 0; i < value.length; i++) {
+    const data = [];
+    for (let i = 0; i < value.length; i++) {
       data.push(value.charCodeAt(i));
     }
     return data;
@@ -195,7 +193,7 @@ export class PBinaryWriter {
   }
 
   public writeString(text: string): this {
-    let bytes = this.rawString(text);
+    const bytes = this.rawString(text);
     this.writeVarInt(bytes.length);
     this.writeBytes(bytes);
     return this;
@@ -204,10 +202,10 @@ export class PBinaryWriter {
   public emitUInt32(value: number): this {
     if (value < 0) throw 'negative value invalid';
 
-    let D = (value & 0xff000000) >> 24;
-    let C = (value & 0x00ff0000) >> 16;
-    let B = (value & 0x0000ff00) >> 8;
-    let A = value & 0x000000ff;
+    const D = (value & 0xff000000) >> 24;
+    const C = (value & 0x00ff0000) >> 16;
+    const B = (value & 0x0000ff00) >> 8;
+    const A = value & 0x000000ff;
 
     // VM integers append the least significant byte first.
     this.appendByte(0xff);
@@ -219,7 +217,7 @@ export class PBinaryWriter {
     return this;
   }
 
-  public writeBigInteger(value: BigInt) {
+  public writeBigInteger(value: bigint) {
     return this.writeBigIntegerString(value.toString());
   }
 
@@ -234,8 +232,8 @@ export class PBinaryWriter {
       let hex = BigInt(value).toString(16);
       if (hex.length % 2) hex = '0' + hex;
       const len = hex.length / 2;
-      var i = 0;
-      var j = 0;
+      let i = 0;
+      let j = 0;
       while (i < len) {
         bytes.unshift(parseInt(hex.slice(j, j + 2), 16)); // little endian
         i += 1;
@@ -257,7 +255,7 @@ export class PBinaryWriter {
   }
 
   public AppendHexEncoded(bytesHex: string): this {
-    let bytes = hexToBytes(bytesHex);
+    const bytes = hexToBytes(bytesHex);
     this.writeVarInt(bytes.length);
     this.appendBytes(bytes);
     return this;
