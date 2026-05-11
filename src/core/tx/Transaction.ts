@@ -1,6 +1,4 @@
-import pkg from 'elliptic';
 import { logger } from '../utils/logger.js';
-const { eddsa } = pkg;
 import { Decoder, ScriptBuilder } from '../vm/index.js';
 import { bytesToHex, hexToBytes, getDifficulty } from '../utils/index.js';
 import hexEncoding from 'crypto-js/enc-hex.js';
@@ -8,7 +6,7 @@ import SHA256 from 'crypto-js/sha256.js';
 import { ISerializable, Signature } from '../interfaces/index.js';
 import { Address, Base16, PBinaryReader, PBinaryWriter, PhantasmaKeys } from '../types/index.js';
 import { getWifFromPrivateKey } from './utils.js';
-const curve = new eddsa('ed25519');
+import { signEd25519 } from '../types/Ed25519.js';
 
 export class Transaction implements ISerializable {
   script: string; // Should be HexString
@@ -265,12 +263,7 @@ export class Transaction implements ISerializable {
   }
 
   private getSign(msgHex: string, privateKey: string): string {
-    const msgHashHex = Buffer.from(msgHex, 'hex');
-    const privateKeyBuffer = Buffer.from(privateKey, 'hex');
-
-    const sig = curve.sign(msgHashHex, privateKeyBuffer);
-
-    return sig.toHex();
+    return bytesToHex(signEd25519(hexToBytes(msgHex), hexToBytes(privateKey))).toUpperCase();
   }
 
   public unserialize(serializedData: string): Transaction {

@@ -1,11 +1,15 @@
 import {} from '../../src';
 import crypto from 'crypto';
-import wif from 'wif';
+import { encode as encodeWif } from 'wif';
 
 describe('Address Transcode', () => {
   test('Get a new address', () => {
     const privateKey = crypto.randomBytes(32).toString('hex').toUpperCase();
-    /*const walletWif = */ wif.encode(128, Buffer.from(privateKey, 'hex'), true);
+    /*const walletWif = */ encodeWif({
+      version: 128,
+      privateKey: Uint8Array.from(Buffer.from(privateKey, 'hex')),
+      compressed: true,
+    });
     //const expectedAddress = phantasmaJS.getAddressFromWif(walletWif);
     //const actualAddress = addressTranscodeUtil.getAddressFromPrivateKey(privateKey);
   });

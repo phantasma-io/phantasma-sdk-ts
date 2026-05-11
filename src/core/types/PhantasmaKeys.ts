@@ -1,14 +1,12 @@
 import { IKeyPair } from '../interfaces/IKeyPair.js';
 import { Address } from './Address.js';
 import base58 from 'bs58';
-import WIF from 'wif';
+import { encode as encodeWif } from 'wif';
 import { Signature } from '../interfaces/Signature.js';
 import { bytesToHex } from '../utils/index.js';
 import { Ed25519Signature } from './Ed25519Signature.js';
-import pkg from 'elliptic';
 import { Entropy } from './Entropy.js';
-const { eddsa } = pkg;
-const ed25519 = new eddsa('ed25519');
+import { getEd25519PublicKey } from './Ed25519.js';
 
 export class PhantasmaKeys implements IKeyPair {
   private _privateKey: Uint8Array;
@@ -36,10 +34,7 @@ export class PhantasmaKeys implements IKeyPair {
 
     this._privateKey = new Uint8Array(PhantasmaKeys.PrivateKeyLength);
     this._privateKey.set(privateKey);
-    const privateKeyString = bytesToHex(this._privateKey);
-    const privateKeyBuffer = Buffer.from(privateKeyString, 'hex');
-    const publicKey = ed25519.keyFromSecret(privateKeyBuffer).getPublic();
-    this._publicKey = publicKey;
+    this._publicKey = getEd25519PublicKey(this._privateKey);
 
     this.Address = Address.FromKey(this);
   }
@@ -76,7 +71,11 @@ export class PhantasmaKeys implements IKeyPair {
   public toWIF(): string {
     const privateKeyString = bytesToHex(this._privateKey);
     const privatekeyBuffer = Buffer.from(privateKeyString, 'hex');
-    const wif = WIF.encode(128, privatekeyBuffer, true); //uint8ArrayToHex(data); // .base58CheckEncode();
+    const wif = encodeWif({
+      version: 128,
+      privateKey: Uint8Array.from(privatekeyBuffer),
+      compressed: true,
+    }); //uint8ArrayToHex(data); // .base58CheckEncode();
     return wif;
   }
 

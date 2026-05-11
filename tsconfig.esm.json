@@ -3,7 +3,7 @@
   "compilerOptions": {
     "outDir": "./dist/esm",
     "module": "ES2020",
-    "moduleResolution": "NodeNext",
+    "moduleResolution": "bundler",
     "declaration": false,
     "declarationMap": false,
     "emitDeclarationOnly": false

@@ -1,12 +1,10 @@
 import { IKeyPair } from '../interfaces/IKeyPair.js';
 import { Signature, SignatureKind } from '../interfaces/Signature.js';
 import { Address } from './Address.js';
-import pkg from 'elliptic';
 
-import { stringToUint8Array, bytesToHex } from '../utils/index.js';
+import { stringToUint8Array } from '../utils/index.js';
 import { PBinaryWriter, PBinaryReader } from './Extensions/index.js';
-const { eddsa } = pkg;
-const ed25519 = new eddsa('ed25519');
+import { signEd25519, verifyEd25519 } from './Ed25519.js';
 
 export class Ed25519Signature implements Signature {
   public Bytes: Uint8Array;
@@ -26,10 +24,7 @@ export class Ed25519Signature implements Signature {
         continue;
       }
       const pubKey = address.ToByteArray().slice(2);
-      const msgBytes = Buffer.from(message);
-      const sigHex = bytesToHex(this.Bytes);
-      const pubKeyHex = bytesToHex(pubKey);
-      if (ed25519.verify(msgBytes, sigHex, pubKeyHex)) {
+      if (verifyEd25519(message, this.Bytes, pubKey)) {
         return true;
       }
     }
@@ -53,12 +48,6 @@ export class Ed25519Signature implements Signature {
   }
 
   public static Generate(keypair: IKeyPair, message: Uint8Array): Ed25519Signature {
-    const msgHashHex = Buffer.from(bytesToHex(message), 'hex');
-    //const msgHashHex = uint8ArrayToString(message);
-    const privateKeyBuffer = Buffer.from(bytesToHex(keypair.PrivateKey), 'hex');
-    //const privateKeyBuffer = uint8ArrayToString(keypair.PrivateKey);
-
-    const sign = ed25519.sign(msgHashHex, privateKeyBuffer);
-    return new Ed25519Signature(sign.toBytes());
+    return new Ed25519Signature(signEd25519(message, keypair.PrivateKey));
   }
 }

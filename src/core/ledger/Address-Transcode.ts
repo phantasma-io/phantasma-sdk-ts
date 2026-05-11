@@ -1,4 +1,4 @@
-import * as bs58 from 'bs58';
+import bs58 from 'bs58';
 import { Address, Base16, PhantasmaKeys } from '../types/index.js';
 
 /**

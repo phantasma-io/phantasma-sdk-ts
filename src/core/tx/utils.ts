@@ -1,10 +1,9 @@
-import WIF from 'wif';
-import pkg from 'elliptic';
+import { decode as decodeWif, encode as encodeWif } from 'wif';
 import base58 from 'bs58';
 import * as bip39 from 'bip39';
 import crypto from 'crypto';
-const { eddsa } = pkg;
-const curve = new eddsa('ed25519');
+import { getEd25519PublicKeyHex, signEd25519, verifyEd25519 } from '../types/Ed25519.js';
+import { bytesToHex, hexToBytes } from '../utils/index.js';
 
 function ab2hexstring(arr: ArrayBuffer | ArrayLike<number>): string {
   if (typeof arr !== 'object') {
@@ -21,24 +20,19 @@ function ab2hexstring(arr: ArrayBuffer | ArrayLike<number>): string {
 }
 
 export function getPrivateKeyFromWif(wif: string): string {
-  return ab2hexstring(WIF.decode(wif, 128).privateKey);
+  return ab2hexstring(decodeWif(wif, 128).privateKey);
 }
 
 export function getAddressFromWif(wif: string): string {
-  const curve = new eddsa('ed25519');
-
   const privateKey = getPrivateKeyFromWif(wif);
-  const privateKeyBuffer = Buffer.from(privateKey, 'hex');
-  const publicKey = curve.keyFromSecret(privateKeyBuffer).getPublic('hex');
+  const publicKey = getPublicKeyFromPrivateKey(privateKey);
   const addressHex = Buffer.from('0100' + publicKey, 'hex');
 
-  return 'P' + base58.encode(addressHex);
+  return 'P' + base58.encode(Uint8Array.from(addressHex));
 }
 
 export function getPublicKeyFromPrivateKey(privateKey: string): string {
-  const privateKeyBuffer = Buffer.from(privateKey, 'hex');
-  const publicKey = curve.keyFromSecret(privateKeyBuffer).getPublic('hex');
-  return publicKey;
+  return getEd25519PublicKeyHex(privateKey);
 }
 
 export function generateNewSeed(): string {
@@ -74,24 +68,29 @@ export function generateNewWif(): string {
     privateKey.writeUInt8(buffer[i], i);
   }
 
-  const wif = WIF.encode(128, privateKey, true);
+  const wif = encodeWif({
+    version: 128,
+    privateKey: Uint8Array.from(privateKey),
+    compressed: true,
+  });
   return wif;
 }
 
 export function getWifFromPrivateKey(privateKey: string): string {
   const privateKeyBuffer = Buffer.from(privateKey, 'hex');
-  const wif = WIF.encode(128, privateKeyBuffer, true);
+  const wif = encodeWif({
+    version: 128,
+    privateKey: Uint8Array.from(privateKeyBuffer),
+    compressed: true,
+  });
   return wif;
 }
 
 export function signData(msgHex: string, privateKey: string): string {
-  const msgHashHex = Buffer.from(msgHex, 'hex');
-  const privateKeyBuffer = Buffer.from(privateKey, 'hex');
+  const sig = signEd25519(hexToBytes(msgHex), hexToBytes(privateKey));
+  const numBytes = sig.length;
 
-  const sig = curve.sign(msgHashHex, privateKeyBuffer);
-  const numBytes = sig.toBytes().length;
-
-  return '01' + (numBytes < 16 ? '0' : '') + numBytes.toString(16) + sig.toHex();
+  return '01' + (numBytes < 16 ? '0' : '') + numBytes.toString(16) + bytesToHex(sig).toUpperCase();
 }
 
 export function verifyData(msgHex: string, phaSig: string, address: string): boolean {
@@ -99,5 +98,5 @@ export function verifyData(msgHex: string, phaSig: string, address: string): boo
   const realSig = phaSig.substring(4);
   const pubKey = base58.decode(address.substring(1)).slice(2);
 
-  return curve.verify(msgBytes, realSig, ab2hexstring(pubKey));
+  return verifyEd25519(Uint8Array.from(msgBytes), hexToBytes(realSig), Uint8Array.from(pubKey));
 }

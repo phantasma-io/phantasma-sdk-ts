@@ -3,9 +3,8 @@
   "compilerOptions": {
     "target": "ES2020",
     "module": "commonjs",
-    "moduleResolution": "node",
+    "moduleResolution": "bundler",
     "esModuleInterop": true,
-    "downlevelIteration": true,
     "sourceMap": false,
     "emitDecoratorMetadata": true,
     "experimentalDecorators": true,
@@ -23,8 +22,10 @@
     "noUnusedLocals": false,
     "noUnusedParameters": false,
     "preserveWatchOutput": true,
-    "skipLibCheck": true
-    //"strict": true
+    "skipLibCheck": true,
+    // TypeScript 6 defaults strict to true. Keep the existing non-strict SDK
+    // baseline here; enabling strict mode is a separate hardening change.
+    "strict": false
   },
   "include": ["src"]
 }

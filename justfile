@@ -8,7 +8,7 @@ test:
 
 alias t := test
 
-# Reinstall all modules. Don't forget 'nvm use 20'!
+# Reinstall all modules. Don't forget 'nvm use 22'!
 [group('manage')]
 reinstall:
     rm -rf node_modules package-lock.json

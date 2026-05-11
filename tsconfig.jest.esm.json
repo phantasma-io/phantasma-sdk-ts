@@ -1,0 +1,8 @@
+{
+  "extends": "./tsconfig.esm.json",
+  "compilerOptions": {
+    // ts-jest 29.4.x forces Node10 module resolution inside its transform path.
+    // Keep this scoped to Jest until ts-jest stops injecting Node10.
+    "ignoreDeprecations": "6.0"
+  }
+}
