@@ -1,1 +1,1 @@
-export * from './ICarbonBlob.js';
+export * from '../../../interfaces/Carbon/index.js';

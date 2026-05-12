@@ -1,4 +1,1 @@
-export enum VmStructFlags {
-  None = 0,
-  DynamicExtras = 1,
-}
+export * from '../../../../../types/Carbon/Blockchain/Vm/VmStructFlags.js';

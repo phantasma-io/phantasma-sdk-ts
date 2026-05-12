@@ -1,4 +1,1 @@
-export interface Governance {
-  name: string;
-  value: string;
-}
+export * from '../../../rpc/interfaces/Governance.js';

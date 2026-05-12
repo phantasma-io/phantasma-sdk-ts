@@ -1,6 +1,1 @@
-export enum ModuleId {
-  Governance = 0,
-  Token = 1,
-  PhantasmaVm = 2,
-  Organization = 3,
-}
+export * from '../../../../types/Carbon/Blockchain/ModuleId.js';

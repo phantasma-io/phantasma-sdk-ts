@@ -1,5 +1,1 @@
-export interface ApplicationNameResponse {
-  success: boolean;
-  message: string;
-  applicationName?: string;
-}
+export * from '../../../ledger/interfaces/ApplicationNameResponse.js';

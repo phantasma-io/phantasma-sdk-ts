@@ -1,5 +1,1 @@
-export interface BuildInfoResult {
-  version: string;
-  commit: string;
-  buildTimeUtc: string;
-}
+export * from '../../../rpc/interfaces/BuildInfoResult.js';

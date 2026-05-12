@@ -1,11 +1,1 @@
-export enum VMType {
-  None,
-  Struct,
-  Bytes,
-  Number,
-  String,
-  Timestamp,
-  Bool,
-  Enum,
-  Object,
-}
+export * from '../../vm/VMType.js';

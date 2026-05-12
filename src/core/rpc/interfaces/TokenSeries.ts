@@ -1,3 +1,1 @@
-import type { TokenSeriesResult } from './TokenSeriesResult.js';
-
-export type TokenSeries = TokenSeriesResult;
+export * from '../../../rpc/interfaces/TokenSeries.js';

@@ -1,4 +1,1 @@
-export interface Interop {
-  local: string;
-  external: string;
-}
+export * from '../../../rpc/interfaces/Interop.js';

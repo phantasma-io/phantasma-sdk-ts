@@ -1,4 +1,1 @@
-export interface TokenExternal {
-  platform: string;
-  hash: string;
-}
+export * from '../../../rpc/interfaces/TokenExternal.js';

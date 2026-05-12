@@ -1,4 +1,4 @@
-export { PhantasmaAPI } from './core/rpc/phantasma.js';
+export { PhantasmaAPI } from './rpc/phantasma.js';
 export type {
   ABIContract,
   ABIEvent,
@@ -51,11 +51,8 @@ export type {
   VmNamedVariableSchemaResult,
   VmStructSchemaResult,
   VmVariableSchemaResult,
-} from './core/rpc/interfaces/index.js';
-export {
-  vmStructSchemaFromRpcResult,
-  vmVariableSchemaFromRpcResult,
-} from './core/rpc/helpers/index.js';
+} from './rpc/interfaces/index.js';
+export { vmStructSchemaFromRpcResult, vmVariableSchemaFromRpcResult } from './rpc/helpers/index.js';
 
 export {
   ContractTxHelper,
@@ -65,7 +62,7 @@ export {
   normalizeContractName,
   ExecutionState,
   Transaction,
-} from './core/tx/index.js';
+} from './tx/index.js';
 export type {
   BuildContractArtifactBundleParams,
   BuildContractArtifactManifestParams,
@@ -76,7 +73,7 @@ export type {
   ContractScriptBuildParams,
   ContractTransactionBuildParams,
   ContractTransactionSignParams,
-} from './core/tx/index.js';
+} from './tx/index.js';
 
 export {
   Contracts,
@@ -95,7 +92,7 @@ export {
   getString,
   getTokenEventData,
   getTransactionSettleEventData,
-} from './core/vm/index.js';
+} from './vm/index.js';
 
 export {
   AccountTrigger,
@@ -133,8 +130,8 @@ export {
   readBlob,
   twosComplementLEToBigInt,
   writeBlob,
-} from './core/types/index.js';
-export type { CustomReader, CustomWriter } from './core/types/index.js';
+} from './types/index.js';
+export type { CustomReader, CustomWriter } from './types/index.js';
 
 export {
   Bytes16,
@@ -206,8 +203,8 @@ export {
   pushMetadataField,
   seriesDefaultMetadataFields,
   standardMetadataFields,
-} from './core/types/Carbon/index.js';
-export type { MetadataValueInput } from './core/types/Carbon/index.js';
+} from './types/Carbon/index.js';
+export type { MetadataValueInput } from './types/Carbon/index.js';
 
 export {
   ANONYMOUS_NAME,
@@ -233,8 +230,8 @@ export {
   uint8ArrayToNumberArray,
   uint8ArrayToString,
   uint8ArrayToStringDefault,
-} from './core/utils/index.js';
-export type { Logger } from './core/utils/index.js';
+} from './utils/index.js';
+export type { Logger } from './utils/index.js';
 
 export {
   generateNewSeed,
@@ -246,32 +243,28 @@ export {
   getWifFromPrivateKey,
   signData,
   verifyData,
-} from './core/tx/utils.js';
+} from './tx/utils.js';
 
-export { EasyConnect } from './core/link/easyConnect.js';
-export { EasyScript, Nexus } from './core/link/easyScript.js';
-export { PhantasmaLink } from './core/link/phantasmaLink.js';
-export { ProofOfWork } from './core/link/interfaces/ProofOfWork.js';
-export type { LinkAccount, LinkFile } from './core/link/index.js';
-export type { PrebuiltTransactionSignResult } from './core/link/phantasmaLink.js';
+export { EasyConnect } from './link/easyConnect.js';
+export { EasyScript, Nexus } from './link/easyScript.js';
+export { PhantasmaLink } from './link/phantasmaLink.js';
+export { ProofOfWork } from './link/interfaces/ProofOfWork.js';
+export type { LinkAccount, LinkFile } from './link/index.js';
+export type { PrebuiltTransactionSignResult } from './link/phantasmaLink.js';
 
+export { Signature, SignatureKind } from './interfaces/Signature.js';
+export { NativeContractKind } from './interfaces/IContract.js';
+export { TokenFlags, TokenSeriesMode } from './interfaces/IToken.js';
 export {
-  Signature,
-  SignatureKind,
-  NativeContractKind,
-  TokenFlags,
-  TokenSeriesMode,
   getAddressFromLedger,
   getAddressFromPrivateKey,
   getAddressFromPublicKey,
   getAddressPublicKeyFromPublicKey,
-} from './core/index.js';
-export type {
-  CarbonBlobLike,
-  ContractDescriptor,
-  FeeOptionsLike,
-  KeyPair,
-  Ledger,
-  StackLike,
-  TokenDescriptor,
-} from './core/index.js';
+} from './ledger/index.js';
+export type { CarbonBlobLike } from './interfaces/Carbon/ICarbonBlob.js';
+export type { ContractDescriptor } from './interfaces/IContract.js';
+export type { FeeOptionsLike } from './types/Carbon/Blockchain/TxHelpers/FeeOptions.js';
+export type { KeyPair } from './interfaces/IKeyPair.js';
+export type { Ledger } from './ledger/interfaces/Ledger.js';
+export type { StackLike } from './interfaces/IStack.js';
+export type { TokenDescriptor } from './interfaces/IToken.js';

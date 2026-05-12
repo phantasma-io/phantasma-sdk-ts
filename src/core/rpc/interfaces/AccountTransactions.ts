@@ -1,6 +1,1 @@
-import { TransactionData } from './TransactionData.js';
-
-export interface AccountTransactions {
-  address: string;
-  txs: Array<TransactionData>; //List of transactions
-}
+export * from '../../../rpc/interfaces/AccountTransactions.js';

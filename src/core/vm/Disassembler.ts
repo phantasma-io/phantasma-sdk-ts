@@ -1,1 +1,1 @@
-export class Dissassembler {}
+export * from '../../vm/Disassembler.js';

@@ -1,11 +1,1 @@
-export interface LedgerTransportDevice {
-  exchange(request: Buffer): Promise<Buffer>;
-  close(): Promise<void>;
-}
-
-export interface Device {
-  enabled: boolean;
-  error?: boolean;
-  message?: string;
-  device?: LedgerTransportDevice;
-}
+export * from '../../../ledger/interfaces/Device.js';

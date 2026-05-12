@@ -1,5 +1,1 @@
-export interface PublicKeyResponse {
-  success: boolean;
-  message: string;
-  publicKey?: string;
-}
+export * from '../../../ledger/interfaces/PublicKeyResponse.js';

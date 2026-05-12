@@ -15,6 +15,14 @@ const requiredPublicExports = [
   'VMObject',
 ];
 const excludedPublicExports = ['PhantasmaTS', 'IKeyPair', 'IContract', 'IToken', 'ISerializable'];
+const deepImportChecks = [
+  ['phantasma-sdk-ts/core/tx/Transaction', ['Transaction']],
+  ['phantasma-sdk-ts/core/vm', ['ScriptBuilder', 'VMObject']],
+  ['phantasma-sdk-ts/core/types/Address', ['Address']],
+  ['phantasma-sdk-ts/tx/Transaction', ['Transaction']],
+  ['phantasma-sdk-ts/vm', ['ScriptBuilder', 'VMObject']],
+  ['phantasma-sdk-ts/types/Address', ['Address']],
+];
 
 function assertExports(moduleName, moduleApi, requiredExports) {
   for (const name of requiredExports) {
@@ -40,7 +48,13 @@ function exercisePublicApi(publicApi) {
   }
 
   const script = new publicApi.ScriptBuilder().beginScript().emitVarString('exports').endScript();
-  const tx = new publicApi.Transaction('testnet', 'main', script, new Date('2026-01-01T00:00:00Z'));
+  const tx = new publicApi.Transaction(
+    'testnet',
+    'main',
+    script,
+    new Date('2026-01-01T00:00:00Z'),
+    ''
+  );
   const decoded = publicApi.Transaction.fromBytes(tx.toByteArray(false));
   if (decoded.toStringEncoded(false) !== tx.toStringEncoded(false)) {
     throw new Error('public entrypoint Transaction.fromBytes did not round-trip');
@@ -60,3 +74,8 @@ assertNoExports('CommonJS public export', cjsPublic, excludedPublicExports);
 assertNoExports('ESM public export', esmPublic, excludedPublicExports);
 exercisePublicApi(cjsPublic);
 exercisePublicApi(esmPublic);
+
+for (const [moduleName, requiredExports] of deepImportChecks) {
+  assertExports(`CommonJS ${moduleName}`, require(moduleName), requiredExports);
+  assertExports(`ESM ${moduleName}`, await import(moduleName), requiredExports);
+}

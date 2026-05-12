@@ -1,12 +1,1 @@
-export interface PhantasmaVmConfig {
-  isStored: boolean;
-  featureLevel: number;
-  gasConstructor: string;
-  gasNexus: string;
-  gasOrganization: string;
-  gasAccount: string;
-  gasLeaderboard: string;
-  gasStandard: string;
-  gasOracle: string;
-  fuelPerContractDeploy: string;
-}
+export * from '../../../rpc/interfaces/PhantasmaVmConfig.js';

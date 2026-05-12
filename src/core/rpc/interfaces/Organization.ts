@@ -1,5 +1,1 @@
-export interface Organization {
-  id: string;
-  name: string;
-  members: Array<string>;
-}
+export * from '../../../rpc/interfaces/Organization.js';

@@ -3,7 +3,9 @@ import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 
 const root = process.cwd();
-const tempDir = fs.mkdtempSync(path.join(root, '.tmp-public-types-'));
+const tempRoot = path.join(root, 'node_modules', '.cache');
+fs.mkdirSync(tempRoot, { recursive: true });
+const tempDir = fs.mkdtempSync(path.join(tempRoot, 'phantasma-sdk-public-types-'));
 const tscBin = path.join(root, 'node_modules', 'typescript', 'bin', 'tsc');
 
 const compilerArgs = [
@@ -124,6 +126,28 @@ void legacy;
 `
 );
 
+const deepImportConsumer = writeFile(
+  'deep-import-consumer.ts',
+  `
+import { Transaction as NewTransaction } from 'phantasma-sdk-ts/tx/Transaction';
+import { ScriptBuilder as NewScriptBuilder } from 'phantasma-sdk-ts/vm';
+import { Address as NewAddress } from 'phantasma-sdk-ts/types/Address';
+import { Transaction as LegacyTransaction } from 'phantasma-sdk-ts/core/tx/Transaction';
+import { ScriptBuilder as LegacyScriptBuilder } from 'phantasma-sdk-ts/core/vm';
+import { Address as LegacyAddress } from 'phantasma-sdk-ts/core/types/Address';
+
+const script = new NewScriptBuilder().beginScript().emitVarString('deep-imports').endScript();
+const tx = new NewTransaction('testnet', 'main', script, new Date('2026-01-01T00:00:00Z'), '');
+const legacyTx = LegacyTransaction.fromBytes(tx.toByteArray(false));
+const legacyScript = new LegacyScriptBuilder().beginScript().emitVarString('legacy').endScript();
+
+void legacyTx;
+void legacyScript;
+void NewAddress.nullText;
+void LegacyAddress.NullText;
+`
+);
+
 const legacyPublicConsumer = writeFile(
   'legacy-public-consumer.ts',
   `
@@ -137,6 +161,7 @@ void legacy;
 try {
   expectTscSuccess(publicConsumer);
   expectTscSuccess(legacyRootConsumer);
+  expectTscSuccess(deepImportConsumer);
   expectTscFailure(legacyPublicConsumer, "has no exported member named 'IKeyPair'");
 } finally {
   fs.rmSync(tempDir, { recursive: true, force: true });

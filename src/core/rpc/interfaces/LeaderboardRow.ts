@@ -1,4 +1,1 @@
-export interface LeaderboardRow {
-  address: string;
-  value: string;
-}
+export * from '../../../rpc/interfaces/LeaderboardRow.js';

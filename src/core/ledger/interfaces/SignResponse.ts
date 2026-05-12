@@ -1,5 +1,1 @@
-export interface SignResponse {
-  success: boolean;
-  message: string;
-  signature?: string;
-}
+export * from '../../../ledger/interfaces/SignResponse.js';

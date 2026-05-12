@@ -1,6 +1,1 @@
-import { Address } from '../../types/index.js';
-
-export interface LedgerSigner {
-  GetPublicKey: () => string;
-  GetAccount: () => Address;
-}
+export * from '../../../ledger/interfaces/LedgerSigner.js';

@@ -1,4 +1,1 @@
-export interface KeyValue {
-  key: string;
-  value: string;
-}
+export * from '../../../rpc/interfaces/KeyValue.js';

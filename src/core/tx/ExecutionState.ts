@@ -1,6 +1,1 @@
-export enum ExecutionState {
-  Running,
-  Break,
-  Fault,
-  Halt,
-}
+export * from '../../tx/ExecutionState.js';

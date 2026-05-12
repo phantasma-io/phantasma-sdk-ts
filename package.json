@@ -17,6 +17,91 @@
       "import": "./dist/esm/public.js",
       "require": "./dist/cjs/public.js"
     },
+    "./interfaces": {
+      "types": "./dist/types/interfaces/index.d.ts",
+      "import": "./dist/esm/interfaces/index.js",
+      "require": "./dist/cjs/interfaces/index.js"
+    },
+    "./ledger": {
+      "types": "./dist/types/ledger/index.d.ts",
+      "import": "./dist/esm/ledger/index.js",
+      "require": "./dist/cjs/ledger/index.js"
+    },
+    "./link": {
+      "types": "./dist/types/link/index.d.ts",
+      "import": "./dist/esm/link/index.js",
+      "require": "./dist/cjs/link/index.js"
+    },
+    "./rpc": {
+      "types": "./dist/types/rpc/index.d.ts",
+      "import": "./dist/esm/rpc/index.js",
+      "require": "./dist/cjs/rpc/index.js"
+    },
+    "./tx": {
+      "types": "./dist/types/tx/index.d.ts",
+      "import": "./dist/esm/tx/index.js",
+      "require": "./dist/cjs/tx/index.js"
+    },
+    "./types": {
+      "types": "./dist/types/types/index.d.ts",
+      "import": "./dist/esm/types/index.js",
+      "require": "./dist/cjs/types/index.js"
+    },
+    "./utils": {
+      "types": "./dist/types/utils/index.d.ts",
+      "import": "./dist/esm/utils/index.js",
+      "require": "./dist/cjs/utils/index.js"
+    },
+    "./vm": {
+      "types": "./dist/types/vm/index.d.ts",
+      "import": "./dist/esm/vm/index.js",
+      "require": "./dist/cjs/vm/index.js"
+    },
+    "./core": {
+      "types": "./dist/types/core/index.d.ts",
+      "import": "./dist/esm/core/index.js",
+      "require": "./dist/cjs/core/index.js"
+    },
+    "./core/interfaces": {
+      "types": "./dist/types/core/interfaces/index.d.ts",
+      "import": "./dist/esm/core/interfaces/index.js",
+      "require": "./dist/cjs/core/interfaces/index.js"
+    },
+    "./core/ledger": {
+      "types": "./dist/types/core/ledger/index.d.ts",
+      "import": "./dist/esm/core/ledger/index.js",
+      "require": "./dist/cjs/core/ledger/index.js"
+    },
+    "./core/link": {
+      "types": "./dist/types/core/link/index.d.ts",
+      "import": "./dist/esm/core/link/index.js",
+      "require": "./dist/cjs/core/link/index.js"
+    },
+    "./core/rpc": {
+      "types": "./dist/types/core/rpc/index.d.ts",
+      "import": "./dist/esm/core/rpc/index.js",
+      "require": "./dist/cjs/core/rpc/index.js"
+    },
+    "./core/tx": {
+      "types": "./dist/types/core/tx/index.d.ts",
+      "import": "./dist/esm/core/tx/index.js",
+      "require": "./dist/cjs/core/tx/index.js"
+    },
+    "./core/types": {
+      "types": "./dist/types/core/types/index.d.ts",
+      "import": "./dist/esm/core/types/index.js",
+      "require": "./dist/cjs/core/types/index.js"
+    },
+    "./core/utils": {
+      "types": "./dist/types/core/utils/index.d.ts",
+      "import": "./dist/esm/core/utils/index.js",
+      "require": "./dist/cjs/core/utils/index.js"
+    },
+    "./core/vm": {
+      "types": "./dist/types/core/vm/index.d.ts",
+      "import": "./dist/esm/core/vm/index.js",
+      "require": "./dist/cjs/core/vm/index.js"
+    },
     "./*": {
       "types": "./dist/types/*.d.ts",
       "import": "./dist/esm/*.js",
@@ -28,6 +113,57 @@
     "*": {
       "public": [
         "dist/types/public.d.ts"
+      ],
+      "interfaces": [
+        "dist/types/interfaces/index.d.ts"
+      ],
+      "ledger": [
+        "dist/types/ledger/index.d.ts"
+      ],
+      "link": [
+        "dist/types/link/index.d.ts"
+      ],
+      "rpc": [
+        "dist/types/rpc/index.d.ts"
+      ],
+      "tx": [
+        "dist/types/tx/index.d.ts"
+      ],
+      "types": [
+        "dist/types/types/index.d.ts"
+      ],
+      "utils": [
+        "dist/types/utils/index.d.ts"
+      ],
+      "vm": [
+        "dist/types/vm/index.d.ts"
+      ],
+      "core": [
+        "dist/types/core/index.d.ts"
+      ],
+      "core/interfaces": [
+        "dist/types/core/interfaces/index.d.ts"
+      ],
+      "core/ledger": [
+        "dist/types/core/ledger/index.d.ts"
+      ],
+      "core/link": [
+        "dist/types/core/link/index.d.ts"
+      ],
+      "core/rpc": [
+        "dist/types/core/rpc/index.d.ts"
+      ],
+      "core/tx": [
+        "dist/types/core/tx/index.d.ts"
+      ],
+      "core/types": [
+        "dist/types/core/types/index.d.ts"
+      ],
+      "core/utils": [
+        "dist/types/core/utils/index.d.ts"
+      ],
+      "core/vm": [
+        "dist/types/core/vm/index.d.ts"
       ],
       "*": [
         "dist/types/*"
@@ -54,7 +190,7 @@
     "test:esm-runtime": "npm run test:package-exports",
     "test:package-exports": "npm run build && node scripts/check-package-exports.mjs && node scripts/check-public-types.mjs",
     "coverage": "jest --coverage",
-    "lint": "node scripts/check-deprecated-api-usage.mjs && prettier --check . && eslint .",
+    "lint": "node scripts/check-deprecated-api-usage.mjs && node scripts/check-compat-shims.mjs && prettier --check . && eslint .",
     "format": "prettier --write .",
     "prettier-watch": "onchange 'src/**/*.ts' -- prettier --write {{changed}}"
   },

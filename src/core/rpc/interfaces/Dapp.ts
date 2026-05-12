@@ -1,5 +1,1 @@
-export interface Dapp {
-  name: string;
-  address: string;
-  chain: string;
-}
+export * from '../../../rpc/interfaces/Dapp.js';

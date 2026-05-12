@@ -1,4 +1,1 @@
-export interface SignatureResult {
-  Kind: string;
-  Data: string;
-}
+export * from '../../../rpc/interfaces/SignatureResult.js';
