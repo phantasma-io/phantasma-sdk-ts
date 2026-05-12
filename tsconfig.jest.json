@@ -1,10 +1,13 @@
 {
-  "extends": "./tsconfig.json",
+  "extends": "./tsconfig.base.json",
   "compilerOptions": {
+    "module": "CommonJS",
+    "moduleResolution": "Node10",
     // ts-jest 29.4.x forces Node10 module resolution for its CommonJS transform
     // path. Keep this scoped to Jest until ts-jest stops injecting Node10.
     "ignoreDeprecations": "6.0",
     "sourceMap": true,
     "inlineSources": true
-  }
+  },
+  "include": ["src"]
 }
