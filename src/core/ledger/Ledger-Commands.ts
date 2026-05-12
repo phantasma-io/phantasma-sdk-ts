@@ -8,7 +8,7 @@ import {
 import { logger } from '../utils/logger.js';
 import { Transaction } from '../tx/index.js';
 import { Address, Base16, Ed25519Signature } from '../types/index.js';
-import { GetAddressFromPublicKey, GetAddressPublicKeyFromPublicKey } from './Address-Transcode.js';
+import { getAddressFromPublicKey, getAddressPublicKeyFromPublicKey } from './Address-Transcode.js';
 import { LedgerConfig } from './interfaces/LedgerConfig.js';
 import { GetPublicFromPrivate, Verify } from './Transaction-Sign.js';
 import { GetExpirationDate } from './Transaction-Transcode.js';
@@ -151,7 +151,7 @@ export async function GetLedgerSignerData(
 
   const msg = await GetPublicKey(config.Transport, options);
   const response: LedgerSignerData = {
-    address: Address.Null,
+    address: Address.nullAddress,
     publicKey: '',
     success: false,
     message: '',
@@ -168,7 +168,7 @@ export async function GetLedgerSignerData(
     response.message = 'Ledger did not return a public key.';
     return response;
   }
-  const address = GetAddressPublicKeyFromPublicKey(publicKey);
+  const address = getAddressPublicKeyFromPublicKey(publicKey);
   response.success = true;
   response.message = 'success';
   response.address = address;
@@ -200,7 +200,7 @@ export const GetBalanceFromLedger = async (
     logger.log('getBalanceFromLedger', 'msg', msg);
   }
   const response: LedgerBalanceFromLedgerResponse = {
-    address: Address.Null,
+    address: Address.nullAddress,
     publicKey: '',
     balances: new Map<string, string>(),
     success: false,
@@ -217,15 +217,15 @@ export const GetBalanceFromLedger = async (
     response.message = 'Ledger did not return a public key.';
     return response;
   }
-  const address = GetAddressPublicKeyFromPublicKey(publicKey);
+  const address = getAddressPublicKeyFromPublicKey(publicKey);
   /* istanbul ignore if */
   if (config.Debug) {
     logger.log('address', address);
     logger.log('rpc', config.RPC);
   }
 
-  logger.log('rpcAwait', await config.RPC.getAccount(address.Text));
-  const rpcResponse = await config.RPC.getAccount(address.Text);
+  logger.log('rpcAwait', await config.RPC.getAccount(address.text));
+  const rpcResponse = await config.RPC.getAccount(address.text);
   if (config.Debug) {
     logger.log('rpcResponse', rpcResponse);
   }
@@ -250,7 +250,7 @@ export const GetBalanceFromLedger = async (
  * @param options
  * @returns
  */
-export const GetAddressFromLedeger = async (
+export const getAddressFromLedger = async (
   config: LedgerConfig,
   options: LedgerPublicKeyOptions
 ): Promise<string | PublicKeyResponse> => {
@@ -272,12 +272,15 @@ export const GetAddressFromLedeger = async (
     if (!publicKey) {
       return { success: false, message: 'Ledger did not return a public key.' };
     }
-    const address = GetAddressFromPublicKey(publicKey);
+    const address = getAddressFromPublicKey(publicKey);
     return address;
   } else {
     return msg;
   }
 };
+
+/** @deprecated Use `getAddressFromLedger` instead. This typoed alias will be removed in v1.0. */
+export const GetAddressFromLedeger = getAddressFromLedger;
 
 /**
  *
@@ -342,7 +345,7 @@ export async function SendTransactionLedger(
     payload
   ); // Extra Info to attach to Transaction in Serialized Hex
 
-  const encodedTx = Base16.encodeUint8Array(myTransaction.ToByteAray(false));
+  const encodedTx = Base16.encodeUint8Array(myTransaction.toByteArray(false));
 
   try {
     if (config.Debug) {
@@ -378,7 +381,7 @@ export async function SendTransactionLedger(
       logger.log('signedTx', myTransaction);
     }
 
-    const encodedSignedTx = Base16.encodeUint8Array(myTransaction.ToByteAray(true));
+    const encodedSignedTx = Base16.encodeUint8Array(myTransaction.toByteArray(true));
     logger.log('encoded signed tx: ', encodedSignedTx);
 
     const txHash = await config.RPC.sendRawTransaction(encodedSignedTx);
@@ -437,7 +440,7 @@ export const GetBalanceFromPrivateKey = async (
   if (config.Debug) {
     logger.log('publicKey', publicKey);
   }
-  const address = GetAddressFromPublicKey(publicKey);
+  const address = getAddressFromPublicKey(publicKey);
   /* istanbul ignore if */
   if (config.Debug) {
     logger.log('address', address);
@@ -449,7 +452,7 @@ export const GetBalanceFromPrivateKey = async (
     logger.log('rpcResponse', rpcResponse);
   }
   const response: LedgerBalanceFromLedgerResponse = {
-    address: Address.Null,
+    address: Address.nullAddress,
     publicKey,
     balances: new Map<string, string>(),
     success: false,
@@ -463,7 +466,7 @@ export const GetBalanceFromPrivateKey = async (
       );
     });
   }
-  response.address = Address.FromText(address);
+  response.address = Address.fromText(address);
   response.success = true;
   // const lastRefPath = `/transaction/last-ref/${address}`;
   // const lastRefResponse = await httpRequestUtil.get(config, lastRefPath);

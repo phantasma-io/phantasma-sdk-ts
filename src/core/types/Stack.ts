@@ -1,6 +1,6 @@
-import { IStack } from '../interfaces/index.js';
+import { StackLike } from '../interfaces/index.js';
 
-export class Stack<T> implements IStack<T> {
+export class Stack<T> implements StackLike<T> {
   private storage: T[] = [];
 
   constructor(private capacity: number = Infinity) {}

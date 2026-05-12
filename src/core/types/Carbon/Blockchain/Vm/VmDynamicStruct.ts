@@ -1,11 +1,11 @@
-import { ICarbonBlob } from '../../../../interfaces/Carbon/ICarbonBlob.js';
+import { CarbonBlobLike } from '../../../../interfaces/Carbon/ICarbonBlob.js';
 import type { CarbonBinaryReader, CarbonBinaryWriter } from '../../../CarbonSerialization.js';
 import { SmallString } from '../../SmallString.js';
 import { VmNamedDynamicVariable } from './VmNamedDynamicVariable.js';
 import { VmDynamicVariable } from './VmDynamicVariable.js';
 import { VmStructSchema } from './VmStructSchema.js';
 
-export class VmDynamicStruct implements ICarbonBlob {
+export class VmDynamicStruct implements CarbonBlobLike {
   // NOTE: fields must be sorted by name
   fields: VmNamedDynamicVariable[] = [];
 

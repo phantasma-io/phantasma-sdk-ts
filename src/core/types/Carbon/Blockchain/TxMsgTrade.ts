@@ -1,4 +1,4 @@
-import { ICarbonBlob } from '../../../interfaces/Carbon/ICarbonBlob.js';
+import { CarbonBlobLike } from '../../../interfaces/Carbon/ICarbonBlob.js';
 import { CarbonBinaryReader, CarbonBinaryWriter } from '../../CarbonSerialization.js';
 import { TxMsgBurnFungibleGasPayer } from './TxMsgBurnFungibleGasPayer.js';
 import { TxMsgBurnNonFungibleGasPayer } from './TxMsgBurnNonFungibleGasPayer.js';
@@ -7,7 +7,7 @@ import { TxMsgMintNonFungible } from './TxMsgMintNonFungible.js';
 import { TxMsgTransferFungibleGasPayer } from './TxMsgTransferFungibleGasPayer.js';
 import { TxMsgTransferNonFungibleSingleGasPayer } from './TxMsgTransferNonFungibleSingleGasPayer.js';
 
-export class TxMsgTrade implements ICarbonBlob {
+export class TxMsgTrade implements CarbonBlobLike {
   transferF: TxMsgTransferFungibleGasPayer[];
   transferN: TxMsgTransferNonFungibleSingleGasPayer[];
   mintF: TxMsgMintFungible[];

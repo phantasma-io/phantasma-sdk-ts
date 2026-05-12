@@ -1,7 +1,7 @@
 import crypto from 'crypto';
 export class Entropy {
   //private static rnd = crypto.randomBytes(24);
-  public static GetRandomBytes(targetLength: number): Buffer {
+  public static getRandomBytes(targetLength: number): Buffer {
     const rnd = new Uint8Array(targetLength);
     const privateKey = Buffer.alloc(rnd.byteLength);
 
@@ -12,5 +12,10 @@ export class Entropy {
     }
     //let pk = this.ToBuffer(rnd);
     return privateKey;
+  }
+
+  /** @deprecated Use `getRandomBytes` instead. This alias will be removed in v1.0. */
+  public static GetRandomBytes(targetLength: number): Buffer {
+    return Entropy.getRandomBytes(targetLength);
   }
 }

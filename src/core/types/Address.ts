@@ -2,7 +2,7 @@ import base58 from 'bs58';
 import { uint8ArrayToString } from '../utils/index.js';
 import SHA256 from 'crypto-js/sha256.js';
 import hexEncoding from 'crypto-js/enc-hex.js';
-import { IKeyPair, ISerializable } from '../interfaces/index.js';
+import { IKeyPair, ISerializable, KeyPair } from '../interfaces/index.js';
 import { getPrivateKeyFromWif, getPublicKeyFromPrivateKey } from '../tx/index.js';
 import { Base16, PBinaryWriter, PBinaryReader } from './Extensions/index.js';
 
@@ -14,12 +14,22 @@ export enum AddressKind {
 }
 
 export class Address implements ISerializable {
-  public static readonly NullText: string = 'NULL';
-  public static readonly LengthInBytes: number = 34;
-  public static readonly MaxPlatformNameLength: number = 10;
+  public static readonly nullText: string = 'NULL';
+  /** @deprecated Use `nullText` instead. This alias will be removed in v1.0. */
+  public static readonly NullText: string = Address.nullText;
 
-  private static NullPublicKey = new Uint8Array(Address.LengthInBytes);
-  public static readonly Null: Address = new Address(Address.NullPublicKey);
+  public static readonly lengthInBytes: number = 34;
+  /** @deprecated Use `lengthInBytes` instead. This alias will be removed in v1.0. */
+  public static readonly LengthInBytes: number = Address.lengthInBytes;
+
+  public static readonly maxPlatformNameLength: number = 10;
+  /** @deprecated Use `maxPlatformNameLength` instead. This alias will be removed in v1.0. */
+  public static readonly MaxPlatformNameLength: number = Address.maxPlatformNameLength;
+
+  private static nullPublicKey = new Uint8Array(Address.lengthInBytes);
+  public static readonly nullAddress: Address = new Address(Address.nullPublicKey);
+  /** @deprecated Use `nullAddress` instead. This alias will be removed in v1.0. */
+  public static readonly Null: Address = Address.nullAddress;
 
   private _bytes: Uint8Array;
 
@@ -28,8 +38,8 @@ export class Address implements ISerializable {
             : (AddressKind)this._bytes[0];
     }*/
 
-  public get Kind(): AddressKind {
-    if (this.IsNull) {
+  public get kind(): AddressKind {
+    if (this.isNull) {
       return AddressKind.System;
     } else if (this._bytes[0] >= 3) {
       return AddressKind.Interop;
@@ -38,16 +48,36 @@ export class Address implements ISerializable {
     }
   }
 
+  /** @deprecated Use `kind` instead. This alias will be removed in v1.0. */
+  public get Kind(): AddressKind {
+    return this.kind;
+  }
+
+  public get isSystem(): boolean {
+    return this.kind == AddressKind.System;
+  }
+
+  /** @deprecated Use `isSystem` instead. This alias will be removed in v1.0. */
   public get IsSystem(): boolean {
-    return this.Kind == AddressKind.System;
+    return this.isSystem;
   }
 
+  public get isInterop(): boolean {
+    return this.kind == AddressKind.Interop;
+  }
+
+  /** @deprecated Use `isInterop` instead. This alias will be removed in v1.0. */
   public get IsInterop(): boolean {
-    return this.Kind == AddressKind.Interop;
+    return this.isInterop;
   }
 
+  public get isUser(): boolean {
+    return this.kind == AddressKind.User;
+  }
+
+  /** @deprecated Use `isUser` instead. This alias will be removed in v1.0. */
   public get IsUser(): boolean {
-    return this.Kind == AddressKind.User;
+    return this.isUser;
   }
 
   /*public get TendermintAddress(): string {
@@ -58,7 +88,7 @@ export class Address implements ISerializable {
     }   
     */
 
-  public get IsNull(): boolean {
+  public get isNull(): boolean {
     if (this._bytes == null || this._bytes.length == 0) {
       return true;
     }
@@ -72,13 +102,18 @@ export class Address implements ISerializable {
     return true;
   }
 
+  /** @deprecated Use `isNull` instead. This alias will be removed in v1.0. */
+  public get IsNull(): boolean {
+    return this.isNull;
+  }
+
   private _text: string | null;
 
   private static _keyToTextCache = new Map<Uint8Array, string>();
 
-  public get Text(): string {
-    if (this.IsNull) {
-      return Address.NullText;
+  public get text(): string {
+    if (this.isNull) {
+      return Address.nullText;
     }
 
     if (!this._text) {
@@ -92,7 +127,7 @@ export class Address implements ISerializable {
       if (!this._text) {
         let prefix: string;
 
-        switch (this.Kind) {
+        switch (this.kind) {
           case AddressKind.User:
             prefix = 'P';
             break;
@@ -111,33 +146,54 @@ export class Address implements ISerializable {
     return this._text;
   }
 
-  private constructor(publicKey: Uint8Array) {
-    if (publicKey.length != Address.LengthInBytes) {
+  /** @deprecated Use `text` instead. This alias will be removed in v1.0. */
+  public get Text(): string {
+    return this.text;
+  }
+
+  private constructor(bytes: Uint8Array) {
+    if (bytes.length != Address.lengthInBytes) {
       throw new Error(
-        `publicKey length must be ${Address.LengthInBytes}, it was ${publicKey.length}}`
+        `address byte length must be ${Address.lengthInBytes}, it was ${bytes.length}`
       );
     }
-    this._bytes = new Uint8Array(Address.LengthInBytes);
-    this._bytes.set(publicKey);
+    this._bytes = new Uint8Array(Address.lengthInBytes);
+    this._bytes.set(bytes);
     this._text = null;
   }
 
-  public static FromPublickKey(publicKey: Uint8Array): Address {
-    publicKey = publicKey.slice(0, 34);
-    return new Address(publicKey);
-  }
-
-  public static FromText(text: string): Address {
-    return Address.Parse(text);
-  }
-
-  public static Parse(text: string): Address {
-    if (text == null) {
-      return Address.Null;
+  public static fromPublicKey(publicKey: Uint8Array): Address {
+    if (publicKey.length !== 32) {
+      throw new Error(`publicKey length must be 32, it was ${publicKey.length}`);
     }
 
-    if (text == Address.NullText) {
-      return Address.Null;
+    const bytes = new Uint8Array(Address.lengthInBytes);
+    bytes[0] = AddressKind.User;
+    bytes.set(publicKey, 2);
+    return new Address(bytes);
+  }
+
+  /** @deprecated Use `fromBytes` for 34-byte address data. This typoed alias will be removed in v1.0. */
+  public static FromPublickKey(bytes: Uint8Array): Address {
+    return Address.fromBytes(bytes);
+  }
+
+  public static fromText(text: string): Address {
+    return Address.parse(text);
+  }
+
+  /** @deprecated Use `fromText` instead. This alias will be removed in v1.0. */
+  public static FromText(text: string): Address {
+    return Address.fromText(text);
+  }
+
+  public static parse(text: string): Address {
+    if (text == null) {
+      return Address.nullAddress;
+    }
+
+    if (text == Address.nullText) {
+      return Address.nullAddress;
     }
 
     const prefix = text[0];
@@ -149,17 +205,17 @@ export class Address implements ISerializable {
 
     switch (prefix) {
       case 'P':
-        if (addr.Kind != AddressKind.User) {
+        if (addr.kind != AddressKind.User) {
           throw new Error(`Invalid address prefix. Expected 'P', got '${prefix}'`);
         }
         break;
       case 'S':
-        if (addr.Kind != AddressKind.System) {
+        if (addr.kind != AddressKind.System) {
           throw new Error(`Invalid address prefix. Expected 'S', got '${prefix}'`);
         }
         break;
       case 'X':
-        if (addr.Kind < AddressKind.Interop) {
+        if (addr.kind < AddressKind.Interop) {
           throw new Error(`Invalid address prefix. Expected 'X', got '${prefix}'`);
         }
         break;
@@ -169,45 +225,70 @@ export class Address implements ISerializable {
 
     /*this._keyToTextCache.values().forEach((value) => {
       if (value == text) {
-        return Address.FromHash(this._keyToTextCache(value));
+        return Address.fromHash(this._keyToTextCache(value));
       }*/
 
     return addr;
   }
 
-  public static IsValidAddress(text: string): boolean {
+  /** @deprecated Use `parse` instead. This alias will be removed in v1.0. */
+  public static Parse(text: string): Address {
+    return Address.parse(text);
+  }
+
+  public static isValidAddress(text: string): boolean {
     try {
-      Address.FromText(text);
+      Address.fromText(text);
       return true;
     } catch {
       return false;
     }
   }
 
-  public static FromBytes(bytes: Uint8Array): Address {
+  /** @deprecated Use `isValidAddress` instead. This alias will be removed in v1.0. */
+  public static IsValidAddress(text: string): boolean {
+    return Address.isValidAddress(text);
+  }
+
+  public static fromBytes(bytes: Uint8Array): Address {
     return new Address(bytes);
   }
 
-  public static FromKey(key: IKeyPair): Address {
-    const bytes = new Uint8Array(Address.LengthInBytes);
-    bytes[0] = AddressKind.User;
+  /** @deprecated Use `fromBytes` instead. This alias will be removed in v1.0. */
+  public static FromBytes(bytes: Uint8Array): Address {
+    return Address.fromBytes(bytes);
+  }
 
-    if (key.PublicKey.length == 32) {
-      bytes.set(key.PublicKey, 2);
-    } else if (key.PublicKey.length == 33) {
-      bytes.set(key.PublicKey, 1);
-    } else if (key.PublicKey.length == 64) {
-      bytes.set(key.PublicKey.slice(0, 32), 1);
+  public static fromKey(key: KeyPair): Address;
+  public static fromKey(key: IKeyPair): Address;
+  public static fromKey(key: KeyPair | IKeyPair): Address {
+    const publicKey = 'publicKey' in key ? key.publicKey : key.PublicKey;
+
+    if (publicKey.length == 32) {
+      return Address.fromPublicKey(publicKey);
+    }
+
+    const bytes = new Uint8Array(Address.lengthInBytes);
+    bytes[0] = AddressKind.User;
+    if (publicKey.length == 33) {
+      bytes.set(publicKey, 1);
+    } else if (publicKey.length == 64) {
+      bytes.set(publicKey.slice(0, 32), 1);
     } else {
-      throw new Error('Invalid public key length: ' + key.PublicKey.length);
+      throw new Error('Invalid public key length: ' + publicKey.length);
     }
 
     return new Address(bytes);
   }
 
-  public static FromHash(str: string): Address;
-  public static FromHash(input: Uint8Array): Address;
-  public static FromHash(input: string | Uint8Array): Address {
+  /** @deprecated Use `fromKey` instead. This alias will be removed in v1.0. */
+  public static FromKey(key: IKeyPair): Address {
+    return Address.fromKey(key);
+  }
+
+  public static fromHash(str: string): Address;
+  public static fromHash(input: Uint8Array): Address;
+  public static fromHash(input: string | Uint8Array): Address {
     let bytes: Uint8Array;
     if (typeof input === 'string') {
       bytes = new TextEncoder().encode(input);
@@ -216,21 +297,33 @@ export class Address implements ISerializable {
     }
 
     const hash = SHA256(hexEncoding.parse(uint8ArrayToString(bytes)));
-    bytes = new Uint8Array(Address.LengthInBytes);
+    bytes = new Uint8Array(Address.lengthInBytes);
     bytes[0] = AddressKind.User;
     bytes.set(hash.words.slice(0, 32), 2);
     return new Address(bytes);
   }
 
-  public static FromWif(wif: string): Address {
+  /** @deprecated Use `fromHash` instead. This alias will be removed in v1.0. */
+  public static FromHash(str: string): Address;
+  public static FromHash(input: Uint8Array): Address;
+  public static FromHash(input: string | Uint8Array): Address {
+    return typeof input === 'string' ? Address.fromHash(input) : Address.fromHash(input);
+  }
+
+  public static fromWif(wif: string): Address {
     const privateKey = getPrivateKeyFromWif(wif);
     const publicKey = getPublicKeyFromPrivateKey(privateKey);
     const addressHex = Buffer.from('0100' + publicKey, 'hex');
-    return this.FromBytes(addressHex);
+    return Address.fromBytes(addressHex);
+  }
+
+  /** @deprecated Use `fromWif` instead. This alias will be removed in v1.0. */
+  public static FromWif(wif: string): Address {
+    return Address.fromWif(wif);
   }
 
   public compareTo(other: Address): number {
-    for (let i = 0; i < Address.LengthInBytes; i++) {
+    for (let i = 0; i < Address.lengthInBytes; i++) {
       if (this._bytes[i] < other._bytes[i]) {
         return -1;
       } else if (this._bytes[i] > other._bytes[i]) {
@@ -249,13 +342,13 @@ export class Address implements ISerializable {
   }
 
   public toString(): string {
-    if (this.IsNull) {
-      return Address.NullText;
+    if (this.isNull) {
+      return Address.nullText;
     }
 
     if (!this._text) {
       let prefix: string;
-      switch (this.Kind) {
+      switch (this.kind) {
         case AddressKind.User:
           prefix = 'P';
           break;
@@ -271,16 +364,26 @@ export class Address implements ISerializable {
     return this._text;
   }
 
-  public GetPublicKey(): Uint8Array {
-    if (!this._bytes || this._bytes.length !== Address.LengthInBytes) {
+  public getPublicKey(): Uint8Array {
+    if (!this._bytes || this._bytes.length !== Address.lengthInBytes) {
       throw new Error('invalid address byte length');
     }
 
-    return this._bytes.slice(2, 34);
+    return this._bytes.slice(2, Address.lengthInBytes);
   }
 
-  public ToByteArray(): Uint8Array {
+  /** @deprecated Use `getPublicKey` instead. This alias will be removed in v1.0. */
+  public GetPublicKey(): Uint8Array {
+    return this.getPublicKey();
+  }
+
+  public toByteArray(): Uint8Array {
     return this._bytes;
+  }
+
+  /** @deprecated Use `toByteArray` instead. This alias will be removed in v1.0. */
+  public ToByteArray(): Uint8Array {
+    return this.toByteArray();
   }
 
   SerializeData(writer: PBinaryWriter) {

@@ -1,6 +1,6 @@
 import { Device } from './Device.js';
 
-export interface ILedger {
+export interface Ledger {
   device: Device;
   publicKey: string;
   address: string;
@@ -8,3 +8,6 @@ export interface ILedger {
   error?: boolean;
   message?: string;
 }
+
+/** @deprecated Use `Ledger` instead. This compatibility interface will be removed in v1.0. */
+export type ILedger = Ledger;

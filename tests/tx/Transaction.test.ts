@@ -56,16 +56,16 @@ describe('test phantasma_ts', function () {
     const tx = new Transaction(nexusName, chainName, script, expiration, payload);
 
     const wif = keys.toWIF();
-    const pk = bytesToHex(keys.PrivateKey);
+    const pk = bytesToHex(keys.privateKey);
 
     tx.sign(wif);
 
     tx.signWithPrivateKey(pk);
 
     /*let wif = getWifFromPrivateKey(
-      uint8ArrayToString(Array.from(keys.PrivateKey) as Uint8Array)
+      uint8ArrayToString(Array.from(keys.privateKey) as Uint8Array)
     );
-    let pk = uint8ArrayToString(Array.from(keys.PrivateKey));
+    let pk = uint8ArrayToString(Array.from(keys.privateKey));
 
     console.log(wif, getAddressFromWif(wif), pk);
 
@@ -93,7 +93,7 @@ describe('test phantasma_ts', function () {
       '07746573746E6574046D61696E03010203D2029649077061796C6F61640101404C033859A20A4FC2E469B3741FB05ACEDFEC24BFE92E07633680488665D79F916773FF40D0E81C4468E1C1487E6E1E6EEFDA5C5D7C53C15C4FB349C2349A1802';
     const fromCsharpBytes = Buffer.Buffer.from(fromCsharp, 'hex');
     /*const bytes =*/ stringToUint8Array(fromCsharp);
-    const fromCsharpTx = Transaction.Unserialize(fromCsharpBytes);
+    const fromCsharpTx = Transaction.deserialize(fromCsharpBytes);
 
     expect(fromCsharpTx.chainName).toBe(tx.chainName);
     expect(fromCsharpTx.nexusName).toBe(tx.nexusName);
@@ -102,7 +102,7 @@ describe('test phantasma_ts', function () {
     expect(fromCsharpTx.expiration).toStrictEqual(tx.expiration);
     expect(fromCsharpTx.signatures.length).toBe(tx.signatures.length);
     expect(fromCsharpTx.signatures[0].Kind).toBe(tx.signatures[0].Kind);
-    expect(fromCsharpTx.signatures[0].ToByteArray()).toStrictEqual(tx.signatures[0].ToByteArray());
+    expect(fromCsharpTx.signatures[0].toByteArray()).toStrictEqual(tx.signatures[0].toByteArray());
 
     done();
   });
@@ -131,10 +131,10 @@ describe('test phantasma_ts', function () {
     const gasPrice = 210000;
 
     const script = sb
-      .AllowGas(keys.Address, Address.Null, gasLimit, gasPrice)
-      .CallContract('consensus', 'SingleVote', [keys.Address.Text, subject, 0])
-      .SpendGas(keys.Address)
-      .EndScript();
+      .allowGas(keys.address, Address.nullAddress, gasLimit, gasPrice)
+      .callContract('consensus', 'SingleVote', [keys.address.text, subject, 0])
+      .spendGas(keys.address)
+      .endScript();
 
     expect(script).toBe(
       '0D00040632313030303003000D000405313030303003000D000223220000000000000000000000000000000000000000000000000000000000000000000003000D000223220100AA53BE71FC41BC0889B694F4D6D03F7906A3D9A21705943CAF9632EEAFBB489503000D000408416C6C6F7747617303000D0004036761732D00012E010D0004013003000D00041D73797374656D2E6E657875732E70726F746F636F6C2E76657273696F6E03000D00042F50324B464579466576705166536157384734566A536D6857555A585234517247395951523148624D7054554370434C03000D00040A53696E676C65566F746503000D000409636F6E73656E7375732D00012E010D000223220100AA53BE71FC41BC0889B694F4D6D03F7906A3D9A21705943CAF9632EEAFBB489503000D0004085370656E6447617303000D0004036761732D00012E010B'
@@ -144,7 +144,7 @@ describe('test phantasma_ts', function () {
 
     tx.signWithKeys(keys);
 
-    expect(bytesToHex(tx.ToByteAray(true)).toUpperCase()).toBe(
+    expect(bytesToHex(tx.toByteArray(true)).toUpperCase()).toBe(
       '07746573746E6574046D61696EFD48010D00040632313030303003000D000405313030303003000D000223220000000000000000000000000000000000000000000000000000000000000000000003000D000223220100AA53BE71FC41BC0889B694F4D6D03F7906A3D9A21705943CAF9632EEAFBB489503000D000408416C6C6F7747617303000D0004036761732D00012E010D0004013003000D00041D73797374656D2E6E657875732E70726F746F636F6C2E76657273696F6E03000D00042F50324B464579466576705166536157384734566A536D6857555A585234517247395951523148624D7054554370434C03000D00040A53696E676C65566F746503000D000409636F6E73656E7375732D00012E010D000223220100AA53BE71FC41BC0889B694F4D6D03F7906A3D9A21705943CAF9632EEAFBB489503000D0004085370656E6447617303000D0004036761732D00012E010BD202964909436F6E73656E737573010140016F0F8D6C38E37F00C9CE9969104F42AF933BEB8C4291CBC9107CD11FDC6CBBDA86ACCD731742EA01642A26D14CA7E56361E73997BB3BEA55BAA3911AB62002'
     );
     done();
@@ -163,8 +163,8 @@ describe('test phantasma_ts', function () {
     const tx = new Transaction(nexusName, chainName, script, expiration, payload);
     tx.signWithKeys(keys);
 
-    const serialized = tx.ToByteAray(true);
-    const roundtrip = Transaction.Unserialize(serialized);
+    const serialized = tx.toByteArray(true);
+    const roundtrip = Transaction.deserialize(serialized);
 
     expect(roundtrip.script).toBe(script);
     expect(roundtrip.payload).toBe(payload);
@@ -183,11 +183,38 @@ describe('test phantasma_ts', function () {
     const tx = new Transaction(nexusName, chainName, script, expiration, payload);
     tx.signWithKeys(keys);
 
-    const serialized = tx.ToByteAray(true);
-    const roundtrip = Transaction.Unserialize(serialized);
-    const reserialized = roundtrip.ToByteAray(true);
+    const serialized = tx.toByteArray(true);
+    const roundtrip = Transaction.deserialize(serialized);
+    const reserialized = roundtrip.toByteArray(true);
 
     expect(Base16.encodeUint8Array(reserialized)).toBe(Base16.encodeUint8Array(serialized));
+  });
+
+  test('Transaction.fromBytes and fromHex parse signed and unsigned serialized transactions', () => {
+    // Behavior: byte and hex constructors should preserve the same transaction data for both signed and unsigned wire shapes.
+    const keys = PhantasmaKeys.fromWIF('L5UEVHBjujaR1721aZM5Zm5ayjDyamMZS9W35RE9Y9giRkdf3dVx');
+    const script = bytesToHex(Uint8Array.from([0x01, 0x02, 0x03]));
+    const payload = bytesToHex(Uint8Array.from([0x04, 0x05]));
+    const tx = new Transaction('simnet', 'main', script, new Date(1700000000000), payload);
+    tx.signWithKeys(keys);
+
+    const unsignedBytes = tx.toByteArray(false);
+    const unsignedHex = tx.toStringEncoded(false);
+    const signedBytes = tx.toByteArray(true);
+    const signedHex = tx.toStringEncoded(true);
+    const unsignedFromBytes = Transaction.fromBytes(unsignedBytes);
+    const unsignedFromHex = Transaction.fromHex(unsignedHex);
+    const signedFromBytes = Transaction.fromBytes(signedBytes);
+    const signedFromHex = Transaction.fromHex(signedHex);
+
+    expect(Base16.encodeUint8Array(unsignedFromBytes.toByteArray(false))).toBe(unsignedHex);
+    expect(Base16.encodeUint8Array(unsignedFromHex.toByteArray(false))).toBe(unsignedHex);
+    expect(unsignedFromBytes.signatures).toHaveLength(0);
+    expect(unsignedFromHex.signatures).toHaveLength(0);
+    expect(Base16.encodeUint8Array(signedFromBytes.toByteArray(true))).toBe(signedHex);
+    expect(Base16.encodeUint8Array(signedFromHex.toByteArray(true))).toBe(signedHex);
+    expect(signedFromBytes.verifySignature(keys.address)).toBe(true);
+    expect(signedFromHex.verifySignature(keys.address)).toBe(true);
   });
 
   test('Transaction.VerifySignature returns true for the signer and false for others', () => {
@@ -201,9 +228,9 @@ describe('test phantasma_ts', function () {
     const tx = new Transaction('simnet', 'main', script, new Date(1700000000000), payload);
     tx.signWithKeys(keysA);
 
-    expect(tx.VerifySignature(keysA.Address)).toBe(true);
-    expect(tx.VerifySignature(keysA.Address.Text)).toBe(true);
-    expect(tx.VerifySignature(keysB.Address)).toBe(false);
+    expect(tx.verifySignature(keysA.address)).toBe(true);
+    expect(tx.verifySignature(keysA.address.text)).toBe(true);
+    expect(tx.verifySignature(keysB.address)).toBe(false);
   });
 
   test('Transaction.VerifySignature returns false when no signatures exist', () => {
@@ -214,7 +241,7 @@ describe('test phantasma_ts', function () {
     const payload = bytesToHex(Uint8Array.from([0x01]));
     const tx = new Transaction('simnet', 'main', script, new Date(1700000000000), payload);
 
-    expect(tx.VerifySignature(keys.Address)).toBe(false);
+    expect(tx.verifySignature(keys.address)).toBe(false);
   });
 
   test('Transaction.VerifySignature survives roundtrip with multiple signatures', () => {
@@ -229,11 +256,11 @@ describe('test phantasma_ts', function () {
     tx.signWithKeys(keysA);
     tx.signWithKeys(keysB);
 
-    const raw = tx.ToByteAray(true);
-    const roundtrip = Transaction.Unserialize(raw);
+    const raw = tx.toByteArray(true);
+    const roundtrip = Transaction.deserialize(raw);
 
-    expect(roundtrip.VerifySignature(keysA.Address)).toBe(true);
-    expect(roundtrip.VerifySignature(keysB.Address)).toBe(true);
+    expect(roundtrip.verifySignature(keysA.address)).toBe(true);
+    expect(roundtrip.verifySignature(keysB.address)).toBe(true);
   });
 
   test('Transaction.VerifySignatures returns matched signer addresses', () => {
@@ -250,11 +277,11 @@ describe('test phantasma_ts', function () {
     tx.signWithKeys(keysA);
     tx.signWithKeys(keysB);
 
-    const result = tx.VerifySignatures([keysA.Address, keysB.Address.Text, keysC.Address.Text]);
+    const result = tx.verifySignatures([keysA.address, keysB.address.text, keysC.address.text]);
     expect(result.ok).toBe(true);
-    expect(result.matched).toStrictEqual([keysA.Address.Text, keysB.Address.Text]);
+    expect(result.matched).toStrictEqual([keysA.address.text, keysB.address.text]);
 
-    const noMatch = tx.VerifySignatures([keysC.Address.Text]);
+    const noMatch = tx.verifySignatures([keysC.address.text]);
     expect(noMatch.ok).toBe(false);
     expect(noMatch.matched).toStrictEqual([]);
   });
@@ -268,10 +295,10 @@ describe('test phantasma_ts', function () {
     const tx = new Transaction('simnet', 'main', script, new Date(1700000000000), payload);
     tx.signWithKeys(keys);
 
-    const unsigned = tx.GetUnsignedBytes();
-    const expected = tx.ToByteAray(false);
+    const unsigned = tx.getUnsignedBytes();
+    const expected = tx.toByteArray(false);
     expect(Base16.encodeUint8Array(unsigned)).toBe(Base16.encodeUint8Array(expected));
-    const signed = tx.ToByteAray(true);
+    const signed = tx.toByteArray(true);
     expect(unsigned.length).toBeLessThan(signed.length);
   });
 
@@ -287,7 +314,7 @@ describe('test phantasma_ts', function () {
     tx.signWithKeys(keysA);
     tx.signWithKeys(keysB);
 
-    const info = tx.GetSignatureInfo();
+    const info = tx.getSignatureInfo();
     expect(info.length).toBe(2);
     expect(info[0].kind).toBe(SignatureKind.Ed25519);
     expect(info[0].length).toBe(64);
@@ -304,9 +331,9 @@ describe('test phantasma_ts', function () {
     const tx = new Transaction('simnet', 'main', script, new Date(1700000000000), payload);
     tx.signWithKeys(keys);
 
-    expect(tx.VerifySignature(keys.Address)).toBe(true);
+    expect(tx.verifySignature(keys.address)).toBe(true);
     tx.script = bytesToHex(Uint8Array.from([0x01, 0x02, 0x03]));
-    expect(tx.VerifySignature(keys.Address)).toBe(false);
+    expect(tx.verifySignature(keys.address)).toBe(false);
   });
 
   test('New MultiSig Tests', function (done) {
@@ -316,7 +343,7 @@ describe('test phantasma_ts', function () {
     const chainName = 'main';
     const subject = 'teste';
     const listOfUsers: Array<string> = [
-      keys.Address.Text,
+      keys.address.text,
       'P2KFEyFevpQfSaW8G4VjSmhWUZXR4QrG9YQR1HbMpTUCpCL',
     ];
 
@@ -330,15 +357,15 @@ describe('test phantasma_ts', function () {
     // const txBytes = '';
     const sb = new ScriptBuilder();
 
-    expect(Base16.encodeUint8Array(transaction.ToByteAray(false))).toBe(
+    expect(Base16.encodeUint8Array(transaction.toByteArray(false))).toBe(
       '07746573746E6574046D61696E00D2029649057465737465'
     );
 
     const script = sb
-      //.AllowGas(keys.Address, Address.Null, gasLimit, gasPrice)
-      .CallContract('consensus', 'CreateTransaction', [1, listOfUsers])
-      //.SpendGas(keys.Address)
-      .EndScript();
+      //.allowGas(keys.address, Address.nullAddress, gasLimit, gasPrice)
+      .callContract('consensus', 'CreateTransaction', [1, listOfUsers])
+      //.spendGas(keys.address)
+      .endScript();
 
     expect(script).toBe(
       '0E0000000D01042F50324B464579466576705166536157384734566A536D6857555A585234517247395951523148624D7054554370434C0D020301002F0100020D01042F50324B464579466576705166536157384734566A536D6857555A585234517247395951523148624D7054554370434C0D020301012F01000203000D0004013103000D0004114372656174655472616E73616374696F6E03000D000409636F6E73656E7375732D00012E010B'
@@ -358,7 +385,7 @@ describe('test phantasma_ts', function () {
       'P2KFEyFevpQfSaW8G4VjSmhWUZXR4QrG9YQR1HbMpTUCpCL',
     ];
 
-    const listUserAddr = listOfUsers.map((user) => Address.FromText(user));
+    const listUserAddr = listOfUsers.map((user) => Address.fromText(user));
 
     const time = new Timestamp(1234567890);
     const date = new Date(time.toString());
@@ -370,7 +397,7 @@ describe('test phantasma_ts', function () {
     //let txBytes = transaction.SerializeData();
     const sb = new ScriptBuilder();
 
-    expect(Base16.encodeUint8Array(transaction.ToByteAray(false))).toBe(
+    expect(Base16.encodeUint8Array(transaction.toByteArray(false))).toBe(
       '07746573746E6574046D61696E00D2029649057465737465'
     );
 
@@ -379,15 +406,15 @@ describe('test phantasma_ts', function () {
     );
 
     const script = sb
-      .AllowGas(keys.Address, Address.Null, gasLimit, gasPrice)
-      .CallContract('consensus', 'CreateTransaction', [
-        keys.Address.Text,
+      .allowGas(keys.address, Address.nullAddress, gasLimit, gasPrice)
+      .callContract('consensus', 'CreateTransaction', [
+        keys.address.text,
         subject,
         Serialization.Serialize(transaction),
         listUserAddr,
       ])
-      .SpendGas(keys.Address)
-      .EndScript();
+      .spendGas(keys.address)
+      .endScript();
 
     expect(script).toBe(
       '0D00040632313030303003000D00040631303030303003000D000223220000000000000000000000000000000000000000000000000000000000000000000003000D000223220100AA53BE71FC41BC0889B694F4D6D03F7906A3D9A21705943CAF9632EEAFBB489503000D000408416C6C6F7747617303000D0004036761732D00012E010E0000000D010223220100AA53BE71FC41BC0889B694F4D6D03F7906A3D9A21705943CAF9632EEAFBB48950D020301002F0100020D010223220100AA53BE71FC41BC0889B694F4D6D03F7906A3D9A21705943CAF9632EEAFBB48950D020301012F01000203000D00021907746573746E6574046D61696E00D20296490574657374650003000D000405746573746503000D00042F50324B464579466576705166536157384734566A536D6857555A585234517247395951523148624D7054554370434C03000D0004114372656174655472616E73616374696F6E03000D000409636F6E73656E7375732D00012E010D000223220100AA53BE71FC41BC0889B694F4D6D03F7906A3D9A21705943CAF9632EEAFBB489503000D0004085370656E6447617303000D0004036761732D00012E010B'
@@ -401,25 +428,25 @@ describe('test phantasma_ts', function () {
 
     const sb = new ScriptBuilder();
 
-    /*const script =*/ sb.CallContract('stake', 'Stake', [
-      keys.Address.Text,
-      keys.Address.Text,
-    ]).EndScript();
+    /*const script =*/ sb.callContract('stake', 'Stake', [
+      keys.address.text,
+      keys.address.text,
+    ]).endScript();
 
     done();
   });
 
   test('Test ScriptBuilder', function (done) {
-    // Behavior: ScriptBuilder can build AllowGas + TransferTokens + SpendGas flow.
+    // Behavior: ScriptBuilder can build allowGas + transferTokens + spendGas flow.
     const keys = PhantasmaKeys.fromWIF('L5UEVHBjujaR1721aZM5Zm5ayjDyamMZS9W35RE9Y9giRkdf3dVx');
 
     const sb = new ScriptBuilder();
 
     const amount = 10000000;
-    /*const script =*/ sb.AllowGas(keys.Address.Text, Address.NullText, 10000, 21000)
-      .CallInterop('Runtime.TransferTokens', [keys.Address.Text, keys.Address.Text, 'SOUL', amount])
-      .SpendGas(keys.Address.Text)
-      .EndScript();
+    /*const script =*/ sb.allowGas(keys.address.text, Address.nullText, 10000, 21000)
+      .callInterop('Runtime.TransferTokens', [keys.address.text, keys.address.text, 'SOUL', amount])
+      .spendGas(keys.address.text)
+      .endScript();
 
     // console.log('script', script);
 

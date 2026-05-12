@@ -35,8 +35,13 @@ export class ScriptBuilder {
 
   public NullAddress = 'S1111111111111111111111111111111111';
 
-  public static ScriptBuilder(): ScriptBuilder {
+  public static create(): ScriptBuilder {
     return new ScriptBuilder();
+  }
+
+  /** @deprecated Use `ScriptBuilder.create()` instead. This alias will be removed in v1.0. */
+  public static ScriptBuilder(): ScriptBuilder {
+    return ScriptBuilder.create();
   }
 
   public constructor() {
@@ -44,55 +49,55 @@ export class ScriptBuilder {
     this.writer = new PBinaryWriter();
   }
 
-  public BeginScript() {
+  public beginScript() {
     this.str = '';
     this.writer = new PBinaryWriter();
     return this;
   }
 
-  public GetScript(): string {
+  public getScript(): string {
     return bytesToHex(this.writer.toUint8Array());
   }
 
-  public EndScript(): string {
-    this.Emit(Opcode.RET);
+  public endScript(): string {
+    this.emit(Opcode.RET);
     return bytesToHex(this.writer.toUint8Array()).toUpperCase();
   }
 
-  public Emit(opcode: Opcode, bytes?: number[]): this {
-    this.AppendByte(opcode);
+  public emit(opcode: Opcode, bytes?: number[]): this {
+    this.appendByte(opcode);
     if (bytes) {
-      this.EmitBytes(bytes);
+      this.emitBytes(bytes);
     }
     return this;
   }
 
-  public EmitThorw(reg: byte): this {
-    this.Emit(Opcode.THROW);
-    this.AppendByte(reg);
+  public emitThrow(reg: byte): this {
+    this.emit(Opcode.THROW);
+    this.appendByte(reg);
     return this;
   }
 
-  public EmitPush(reg: byte): this {
-    this.Emit(Opcode.PUSH);
-    this.AppendByte(reg);
+  public emitPush(reg: byte): this {
+    this.emit(Opcode.PUSH);
+    this.appendByte(reg);
     return this;
   }
 
-  public EmitPop(reg: byte): this {
-    this.Emit(Opcode.POP);
-    this.AppendByte(reg);
+  public emitPop(reg: byte): this {
+    this.emit(Opcode.POP);
+    this.appendByte(reg);
     return this;
   }
 
-  public EmitExtCall(method: string, reg: byte = 0): this {
-    this.EmitLoad(reg, method);
-    this.Emit(Opcode.EXTCALL);
-    this.AppendByte(reg);
+  public emitExtCall(method: string, reg: byte = 0): this {
+    this.emitLoad(reg, method);
+    this.emit(Opcode.EXTCALL);
+    this.appendByte(reg);
     return this;
   }
 
-  public EmitBigInteger(value: string) {
+  public emitBigInteger(value: string) {
     let bytes: number[] = [];
 
     if (value == '0') {
@@ -112,15 +117,15 @@ export class ScriptBuilder {
       }
       bytes.push(0); // add sign at the end
     }
-    return this.EmitByteArray(bytes);
+    return this.emitByteArray(bytes);
   }
 
-  public EmitAddress(textAddress: string) {
+  public emitAddress(textAddress: string) {
     const bytes = [...base58.decode(textAddress.substring(1))];
-    return this.EmitByteArray(bytes);
+    return this.emitByteArray(bytes);
   }
 
-  RawString(value: string) {
+  rawString(value: string) {
     //let bytes = stringToUint8Array(value);
     //console.log(Array.from(bytes))
     //return Array.from(bytes);
@@ -131,28 +136,28 @@ export class ScriptBuilder {
     return data;
   }
 
-  private EmitLoadBigInt(reg: number, value: bigint): this {
+  private emitLoadBigInt(reg: number, value: bigint): this {
     const bytes = Array.from(bigIntToTwosComplementLE(value));
-    this.EmitLoadBytes(reg, bytes, VMType.Number);
+    this.emitLoadBytes(reg, bytes, VMType.Number);
     return this;
   }
 
-  public EmitLoad(reg: number, obj: ScriptLoadValue): this {
+  public emitLoad(reg: number, obj: ScriptLoadValue): this {
     switch (typeof obj) {
       case 'string': {
-        const bytes = this.RawString(obj);
-        this.EmitLoadBytes(reg, bytes, VMType.String);
+        const bytes = this.rawString(obj);
+        this.emitLoadBytes(reg, bytes, VMType.String);
         break;
       }
 
       case 'boolean': {
         const bytes = [(obj as boolean) ? 1 : 0];
-        this.EmitLoadBytes(reg, bytes, VMType.Bool);
+        this.emitLoadBytes(reg, bytes, VMType.Bool);
         break;
       }
 
       case 'bigint': {
-        this.EmitLoadBigInt(reg, obj as bigint);
+        this.emitLoadBigInt(reg, obj as bigint);
         break;
       }
 
@@ -160,10 +165,10 @@ export class ScriptBuilder {
         // obj is BigInteger
         // var bytes = val.ToSignedByteArray();
         // this.emitLoadBytes(reg, bytes, VMType.Number);
-        //let bytes = this.RawString(BigInt(obj).toString());
-        // this.EmitLoadVarInt(reg, obj);
-        const bytes = this.RawString(obj.toString());
-        this.EmitLoadBytes(reg, bytes, VMType.String);
+        //let bytes = this.rawString(BigInt(obj).toString());
+        // this.emitLoadVarInt(reg, obj);
+        const bytes = this.rawString(obj.toString());
+        this.emitLoadBytes(reg, bytes, VMType.String);
         break;
       }
 
@@ -172,20 +177,20 @@ export class ScriptBuilder {
           throw Error('Load type object not supported');
         }
         if (obj instanceof Uint8Array) {
-          this.EmitLoadBytes(reg, Array.from(obj));
+          this.emitLoadBytes(reg, Array.from(obj));
         } else if (obj instanceof VMObject) {
-          this.EmitLoadVMObject(reg, obj);
+          this.emitLoadVmObject(reg, obj);
         } else if (Array.isArray(obj)) {
-          this.EmitLoadArray(reg, obj);
+          this.emitLoadArray(reg, obj);
         } else if (obj instanceof Date || obj instanceof Timestamp) {
-          this.EmitLoadTimestamp(reg, obj);
+          this.emitLoadTimestamp(reg, obj);
         } else if (obj instanceof Address) {
-          this.EmitLoadAddress(reg, obj);
+          this.emitLoadAddress(reg, obj);
         } else if (isSerializableLike(obj)) {
-          this.EmitLoadISerializable(reg, obj);
+          this.emitLoadSerializable(reg, obj);
         } else {
           if (Array.isArray(obj)) {
-            this.EmitLoadArray(reg, obj);
+            this.emitLoadArray(reg, obj);
           } else {
             throw Error('Load type ' + typeof obj + ' not supported');
           }
@@ -197,84 +202,84 @@ export class ScriptBuilder {
     return this;
   }
 
-  public EmitLoadBytes(reg: number, bytes: byte[], type: VMType = VMType.Bytes): this {
+  public emitLoadBytes(reg: number, bytes: byte[], type: VMType = VMType.Bytes): this {
     if (bytes.length > 0xffff) throw new Error('tried to load too much data');
-    this.Emit(Opcode.LOAD);
-    this.AppendByte(reg);
-    this.AppendByte(type);
+    this.emit(Opcode.LOAD);
+    this.appendByte(reg);
+    this.appendByte(type);
 
-    this.EmitVarInt(bytes.length);
-    this.EmitBytes(bytes);
+    this.emitVarInt(bytes.length);
+    this.emitBytes(bytes);
     return this;
   }
 
-  public EmitLoadArray(reg: number, obj: unknown[]): this {
-    this.Emit(Opcode.CAST, [reg, reg, VMType.None]);
+  public emitLoadArray(reg: number, obj: unknown[]): this {
+    this.emit(Opcode.CAST, [reg, reg, VMType.None]);
 
     for (let i = 0; i < obj.length; i++) {
       const element = obj[i];
       const temp_regVal = reg + 1;
       const temp_regKey = reg + 2;
 
-      this.EmitLoad(temp_regVal, element);
-      this.EmitLoad(temp_regKey, BigInt(i));
-      this.Emit(Opcode.PUT, [temp_regVal, reg, temp_regKey]);
-      //this.EmitLoad(reg, element);
-      //this.EmitPush(reg);
+      this.emitLoad(temp_regVal, element);
+      this.emitLoad(temp_regKey, BigInt(i));
+      this.emit(Opcode.PUT, [temp_regVal, reg, temp_regKey]);
+      //this.emitLoad(reg, element);
+      //this.emitPush(reg);
       //reg++;
     }
 
     return this;
   }
 
-  public EmitLoadISerializable(reg: number, obj: ISerializable): this {
+  public emitLoadSerializable(reg: number, obj: ISerializable): this {
     const writer: PBinaryWriter = new PBinaryWriter();
     obj.SerializeData(writer);
-    this.EmitLoadBytes(reg, writer.toArray(), VMType.Bytes);
+    this.emitLoadBytes(reg, writer.toArray(), VMType.Bytes);
     return this;
   }
 
-  public EmitLoadVMObject(reg: number, obj: VMObject): this {
+  public emitLoadVmObject(reg: number, obj: VMObject): this {
     const writer: PBinaryWriter = new PBinaryWriter();
-    const result = obj.SerializeObjectCall(writer);
+    const result = obj.serializeObjectCall(writer);
 
-    this.Emit(Opcode.LOAD);
-    this.AppendByte(reg);
-    this.AppendByte(obj.Type);
+    this.emit(Opcode.LOAD);
+    this.appendByte(reg);
+    this.appendByte(obj.Type);
 
     if (result == undefined) {
       //console.log("enter");
       if (obj.Data instanceof Map || (obj.Data instanceof Map && obj.Data instanceof VMObject)) {
         const resultData = obj.Data as Map<VMObject, VMObject>;
-        this.EmitVarInt(resultData.size);
+        this.emitVarInt(resultData.size);
         for (const entry of resultData) {
           //console.log(entry[0]);
           const key = entry[0];
           const value = entry[1];
-          this.EmitLoadVMObject(reg + 1, key);
-          this.EmitLoadVMObject(reg + 2, value);
-          this.Emit(Opcode.PUT, [reg + 1, reg, reg + 2]);
+          this.emitLoadVmObject(reg + 1, key);
+          this.emitLoadVmObject(reg + 2, value);
+          this.emit(Opcode.PUT, [reg + 1, reg, reg + 2]);
         }
       } else if (obj.Data instanceof VMObject) {
         const writerNew: PBinaryWriter = new PBinaryWriter();
         obj.Data.SerializeData(writerNew);
         const bytes = writerNew.toUint8Array();
-        this.EmitVarInt(bytes.length);
-        this.AppendBytes(Array.from(bytes));
+        this.emitVarInt(bytes.length);
+        this.appendBytes(Array.from(bytes));
       }
     } else {
       //console.log("reg", reg);
 
       const bytes = Array.from(result);
       //console.log(bytes.length);
-      this.EmitVarInt(bytes.length);
-      this.AppendBytes(bytes);
+      this.emitVarInt(bytes.length);
+      this.appendBytes(bytes);
     }
-    //this.EmitLoadBytes(reg, Array.from(result), obj.Type);
+    //this.emitLoadBytes(reg, Array.from(result), obj.Type);
     return this;
   }
 
-  public EmitLoadEnum(reg: number, enumVal: number): this {
+  public emitLoadEnum(reg: number, enumVal: number): this {
     // var temp = Convert.ToUInt32(enumVal);
     // var bytes = BitConverter.GetBytes(temp);
 
@@ -286,22 +291,22 @@ export class ScriptBuilder {
       enumVal = (enumVal - byte) / 256;
     }
 
-    this.EmitLoadBytes(reg, bytes, VMType.Enum);
+    this.emitLoadBytes(reg, bytes, VMType.Enum);
     return this;
   }
 
-  public EmitLoadAddress(reg: number, obj: Address): this {
+  public emitLoadAddress(reg: number, obj: Address): this {
     const writer = new PBinaryWriter();
     obj.SerializeData(writer);
     const byteArray = Array.from(writer.toUint8Array());
-    this.EmitLoadBytes(reg, byteArray, VMType.Bytes);
+    this.emitLoadBytes(reg, byteArray, VMType.Bytes);
     return this;
   }
 
-  public EmitLoadTimestamp(reg: number, obj: Date | Timestamp): this {
+  public emitLoadTimestamp(reg: number, obj: Date | Timestamp): this {
     if (obj instanceof Timestamp) {
       const bytes = Array.from(Serialization.Serialize(obj));
-      this.EmitLoadBytes(reg, bytes, VMType.Timestamp);
+      this.emitLoadBytes(reg, bytes, VMType.Timestamp);
     } else if (obj instanceof Date) {
       const num = (obj.getTime() / 1000) | 0;
 
@@ -311,49 +316,49 @@ export class ScriptBuilder {
       const d = num & 0x000000ff;
 
       const bytes = [d, c, b, a];
-      this.EmitLoadBytes(reg, bytes, VMType.Timestamp);
+      this.emitLoadBytes(reg, bytes, VMType.Timestamp);
     }
     return this;
   }
 
-  public EmitLoadVarInt(reg: number, val: number): this {
+  public emitLoadVarInt(reg: number, val: number): this {
     const bytes = numberToByteArray(val);
 
-    this.Emit(Opcode.LOAD);
-    this.AppendByte(reg);
-    this.AppendByte(VMType.Number);
+    this.emit(Opcode.LOAD);
+    this.appendByte(reg);
+    this.appendByte(VMType.Number);
 
-    this.AppendByte(bytes.length);
-    this.EmitBytes(Array.from(bytes));
+    this.appendByte(bytes.length);
+    this.emitBytes(Array.from(bytes));
     return this;
   }
 
-  public EmitMove(src_reg: number, dst_reg: number): this {
-    this.Emit(Opcode.MOVE);
-    this.AppendByte(src_reg);
-    this.AppendByte(dst_reg);
+  public emitMove(src_reg: number, dst_reg: number): this {
+    this.emit(Opcode.MOVE);
+    this.appendByte(src_reg);
+    this.appendByte(dst_reg);
     return this;
   }
 
-  public EmitCopy(src_reg: number, dst_reg: number): this {
-    this.Emit(Opcode.COPY);
-    this.AppendByte(src_reg);
-    this.AppendByte(dst_reg);
+  public emitCopy(src_reg: number, dst_reg: number): this {
+    this.emit(Opcode.COPY);
+    this.appendByte(src_reg);
+    this.appendByte(dst_reg);
     return this;
   }
 
-  public EmitLabel(label: string): this {
-    this.Emit(Opcode.NOP);
+  public emitLabel(label: string): this {
+    this.emit(Opcode.NOP);
     this._labelLocations[label] = this.str.length;
     return this;
   }
 
-  public EmitJump(opcode: Opcode, label: string, reg: number = 0): this {
+  public emitJump(opcode: Opcode, label: string, reg: number = 0): this {
     switch (opcode) {
       case Opcode.JMP:
       case Opcode.JMPIF:
       case Opcode.JMPNOT:
-        this.Emit(opcode);
+        this.emit(opcode);
         break;
 
       default:
@@ -361,31 +366,31 @@ export class ScriptBuilder {
     }
 
     if (opcode != Opcode.JMP) {
-      this.AppendByte(reg);
+      this.appendByte(reg);
     }
 
     const ofs = this.str.length;
-    this.AppendUshort(0);
+    this.appendUShort(0);
     this._jumpLocations[ofs] = label;
     return this;
   }
 
-  public EmitCall(label: string, regCount: byte): this {
+  public emitCall(label: string, regCount: byte): this {
     if (regCount < 1 || regCount > MaxRegisterCount) {
       throw new Error('Invalid number of registers');
     }
 
     let ofs = this.str.length; //(int)stream.Position;
     ofs += 2;
-    this.Emit(Opcode.CALL);
-    this.AppendByte(regCount);
-    this.AppendUshort(0);
+    this.emit(Opcode.CALL);
+    this.appendByte(regCount);
+    this.appendUShort(0);
 
     this._jumpLocations[ofs] = label;
     return this;
   }
 
-  public EmitConditionalJump(opcode: Opcode, src_reg: byte, label: string): this {
+  public emitConditionalJump(opcode: Opcode, src_reg: byte, label: string): this {
     if (opcode != Opcode.JMPIF && opcode != Opcode.JMPNOT) {
       throw new Error('Opcode is not a conditional jump');
     }
@@ -393,134 +398,134 @@ export class ScriptBuilder {
     let ofs = this.str.length;
     ofs += 2;
 
-    this.Emit(opcode);
-    this.AppendByte(src_reg);
-    this.AppendUshort(0);
+    this.emit(opcode);
+    this.appendByte(src_reg);
+    this.appendUShort(0);
     this._jumpLocations[ofs] = label;
     return this;
   }
 
-  public InsertMethodArgs(args: ScriptLoadValue[]) {
+  public insertMethodArgs(args: ScriptLoadValue[]) {
     const temp_reg = 0;
     for (let i = args.length - 1; i >= 0; i--) {
       const arg = args[i];
-      this.EmitLoad(temp_reg, arg);
-      this.EmitPush(temp_reg);
+      this.emitLoad(temp_reg, arg);
+      this.emitPush(temp_reg);
     }
   }
 
-  public CallInterop(method: string, args: ScriptLoadValue[]): this {
-    this.InsertMethodArgs(args);
+  public callInterop(method: string, args: ScriptLoadValue[]): this {
+    this.insertMethodArgs(args);
 
     const dest_reg = 0;
-    this.EmitLoad(dest_reg, method);
+    this.emitLoad(dest_reg, method);
 
-    this.Emit(Opcode.EXTCALL, [dest_reg]);
+    this.emit(Opcode.EXTCALL, [dest_reg]);
     return this;
   }
 
-  public CallContract(contractName: string, method: string, args: ScriptLoadValue[]) {
-    this.InsertMethodArgs(args);
+  public callContract(contractName: string, method: string, args: ScriptLoadValue[]) {
+    this.insertMethodArgs(args);
 
     const temp_reg = 0;
-    this.EmitLoad(temp_reg, method);
-    this.EmitPush(temp_reg);
+    this.emitLoad(temp_reg, method);
+    this.emitPush(temp_reg);
 
     const src_reg = 0;
     const dest_reg = 1;
-    this.EmitLoad(src_reg, contractName);
-    this.Emit(Opcode.CTX, [src_reg, dest_reg]);
+    this.emitLoad(src_reg, contractName);
+    this.emit(Opcode.CTX, [src_reg, dest_reg]);
 
-    this.Emit(Opcode.SWITCH, [dest_reg]);
+    this.emit(Opcode.SWITCH, [dest_reg]);
     return this;
   }
 
   //#region ScriptBuilderExtensions
 
-  public AllowGas(
+  public allowGas(
     from: string | Address,
     to: string | Address,
     gasPrice: number | bigint,
     gasLimit: number | bigint
   ): this {
-    return this.CallContract(Contracts.GasContractName, 'AllowGas', [from, to, gasPrice, gasLimit]);
+    return this.callContract(Contracts.GasContractName, 'AllowGas', [from, to, gasPrice, gasLimit]);
   }
 
-  public SpendGas(address: string | Address): this {
-    return this.CallContract(Contracts.GasContractName, 'SpendGas', [address]);
+  public spendGas(address: string | Address): this {
+    return this.callContract(Contracts.GasContractName, 'SpendGas', [address]);
   }
 
-  public MintTokens(
+  public mintTokens(
     symbol: string,
     from: string | Address,
     to: string | Address,
     amount: number | bigint
   ): this {
-    return this.CallInterop('Runtime.MintTokens', [from, to, symbol, amount]);
+    return this.callInterop('Runtime.MintTokens', [from, to, symbol, amount]);
   }
 
-  public TransferTokens(
+  public transferTokens(
     symbol: string,
     from: string | Address,
     to: string | Address,
     amount: number | bigint
   ): this {
-    return this.CallInterop('Runtime.TransferTokens', [from, to, symbol, amount]);
+    return this.callInterop('Runtime.TransferTokens', [from, to, symbol, amount]);
   }
 
-  public TransferBalance(symbol: string, from: string | Address, to: string | Address): this {
-    return this.CallInterop('Runtime.TransferBalance', [from, to, symbol]);
+  public transferBalance(symbol: string, from: string | Address, to: string | Address): this {
+    return this.callInterop('Runtime.TransferBalance', [from, to, symbol]);
   }
 
-  public TransferNFT(
+  public transferNft(
     symbol: string,
     from: string | Address,
     to: string | Address,
     tokenId: number | bigint
   ): this {
-    return this.CallInterop('Runtime.TransferToken', [from, to, symbol, tokenId]);
+    return this.callInterop('Runtime.TransferToken', [from, to, symbol, tokenId]);
   }
 
-  public CrossTransferToken(
+  public crossTransferToken(
     destinationChain: string | Address,
     symbol: string,
     from: string | Address,
     to: string | Address,
     amount: number | bigint
   ): this {
-    return this.CallInterop('Runtime.SendTokens', [destinationChain, from, to, symbol, amount]);
+    return this.callInterop('Runtime.SendTokens', [destinationChain, from, to, symbol, amount]);
   }
 
-  public CrossTransferNFT(
+  public crossTransferNft(
     destinationChain: string | Address,
     symbol: string,
     from: string | Address,
     to: string | Address,
     tokenId: number | bigint
   ): this {
-    return this.CallInterop('Runtime.SendToken', [destinationChain, from, to, symbol, tokenId]);
+    return this.callInterop('Runtime.SendToken', [destinationChain, from, to, symbol, tokenId]);
   }
 
-  public Stake(address: string | Address, amount: number | bigint): this {
-    return this.CallContract('stake', 'Stake', [address, amount]);
+  public stake(address: string | Address, amount: number | bigint): this {
+    return this.callContract('stake', 'Stake', [address, amount]);
   }
 
-  public Unstake(address: string | Address, amount: number | bigint): this {
-    return this.CallContract('stake', 'Unstake', [address, amount]);
+  public unstake(address: string | Address, amount: number | bigint): this {
+    return this.callContract('stake', 'Unstake', [address, amount]);
   }
 
-  public CallNFT(
+  public callNft(
     symbol: string,
     seriesId: number | bigint,
     method: string,
     args: ScriptLoadValue[] = []
   ): this {
-    return this.CallContract(`${symbol}#${seriesId.toString()}`, method, args);
+    return this.callContract(`${symbol}#${seriesId.toString()}`, method, args);
   }
 
   //#endregion
 
-  public EmitTimestamp(obj: Date): this {
+  public emitTimestamp(obj: Date): this {
     const num = (obj.getTime() / 1000) | 0;
 
     const a = (num & 0xff000000) >> 24;
@@ -529,46 +534,46 @@ export class ScriptBuilder {
     const d = num & 0x000000ff;
 
     const bytes = [d, c, b, a];
-    this.AppendBytes(bytes);
+    this.appendBytes(bytes);
     return this;
   }
 
-  public EmitByteArray(bytes: number[]) {
-    this.EmitVarInt(bytes.length);
-    this.EmitBytes(bytes);
+  public emitByteArray(bytes: number[]) {
+    this.emitVarInt(bytes.length);
+    this.emitBytes(bytes);
     return this;
   }
 
-  public EmitVarString(text: string): this {
-    const bytes = this.RawString(text);
-    this.EmitVarInt(bytes.length);
-    this.EmitBytes(bytes);
+  public emitVarString(text: string): this {
+    const bytes = this.rawString(text);
+    this.emitVarInt(bytes.length);
+    this.emitBytes(bytes);
     return this;
   }
 
-  public EmitVarInt(value: number): this {
+  public emitVarInt(value: number): this {
     if (value < 0) throw 'negative value invalid';
 
     if (value < 0xfd) {
-      this.AppendByte(value);
+      this.appendByte(value);
     } else if (value <= 0xffff) {
       const B = (value & 0x0000ff00) >> 8;
       const A = value & 0x000000ff;
 
       // VM variable integers append the least significant byte first.
-      this.AppendByte(0xfd);
-      this.AppendByte(A);
-      this.AppendByte(B);
+      this.appendByte(0xfd);
+      this.appendByte(A);
+      this.appendByte(B);
     } else if (value <= 0xffffffff) {
       const C = (value & 0x00ff0000) >> 16;
       const B = (value & 0x0000ff00) >> 8;
       const A = value & 0x000000ff;
 
       // VM variable integers append the least significant byte first.
-      this.AppendByte(0xfe);
-      this.AppendByte(A);
-      this.AppendByte(B);
-      this.AppendByte(C);
+      this.appendByte(0xfe);
+      this.appendByte(A);
+      this.appendByte(B);
+      this.appendByte(C);
     } else {
       const D = (value & 0xff000000) >> 24;
       const C = (value & 0x00ff0000) >> 16;
@@ -576,16 +581,16 @@ export class ScriptBuilder {
       const A = value & 0x000000ff;
 
       // VM variable integers append the least significant byte first.
-      this.AppendByte(0xff);
-      this.AppendByte(A);
-      this.AppendByte(B);
-      this.AppendByte(C);
-      this.AppendByte(D);
+      this.appendByte(0xff);
+      this.appendByte(A);
+      this.appendByte(B);
+      this.appendByte(C);
+      this.appendByte(D);
     }
     return this;
   }
 
-  public EmitUInt32(value: number): this {
+  public emitUInt32(value: number): this {
     if (value < 0) throw 'negative value invalid';
 
     const D = (value & 0xff000000) >> 24;
@@ -594,48 +599,340 @@ export class ScriptBuilder {
     const A = value & 0x000000ff;
 
     // VM integers append the least significant byte first.
-    this.AppendByte(0xff);
-    this.AppendByte(A);
-    this.AppendByte(B);
-    this.AppendByte(C);
-    this.AppendByte(D);
+    this.appendByte(0xff);
+    this.appendByte(A);
+    this.appendByte(B);
+    this.appendByte(C);
+    this.appendByte(D);
 
     return this;
   }
 
-  EmitBytes(bytes: byte[]): this {
-    for (let i = 0; i < bytes.length; i++) this.AppendByte(bytes[i]);
+  emitBytes(bytes: byte[]): this {
+    for (let i = 0; i < bytes.length; i++) this.appendByte(bytes[i]);
 
     // writer.Write(bytes);
     return this;
   }
 
   //Custom Modified
-  ByteToHex(byte: number) {
+  byteToHex(byte: number) {
     const result = ('0' + (byte & 0xff).toString(16)).slice(-2);
     return result;
   }
 
-  AppendByte(byte: number) {
-    this.str += this.ByteToHex(byte);
+  appendByte(byte: number) {
+    this.str += this.byteToHex(byte);
     this.writer.writeByte(byte);
   }
 
   //Custom Modified
-  AppendBytes(bytes: byte[]) {
+  appendBytes(bytes: byte[]) {
     for (let i = 0; i < bytes.length; i++) {
-      this.AppendByte(bytes[i]);
+      this.appendByte(bytes[i]);
     }
   }
 
-  AppendUshort(ushort: number) {
-    this.str += this.ByteToHex(ushort & 0xff) + this.ByteToHex((ushort >> 8) & 0xff);
+  appendUShort(ushort: number) {
+    this.str += this.byteToHex(ushort & 0xff) + this.byteToHex((ushort >> 8) & 0xff);
     this.writer.writeUnsignedShort(ushort);
   }
 
-  AppendHexEncoded(bytes: string): this {
+  appendHexEncoded(bytes: string): this {
     this.str += bytes;
     this.writer.writeBytes(Array.from(stringToUint8Array(bytes)));
     return this;
+  }
+
+  /** @deprecated Use `beginScript` instead. This alias will be removed in v1.0. */
+  public BeginScript(): this {
+    return this.beginScript();
+  }
+
+  /** @deprecated Use `getScript` instead. This alias will be removed in v1.0. */
+  public GetScript(): string {
+    return this.getScript();
+  }
+
+  /** @deprecated Use `endScript` instead. This alias will be removed in v1.0. */
+  public EndScript(): string {
+    return this.endScript();
+  }
+
+  /** @deprecated Use `emit` instead. This alias will be removed in v1.0. */
+  public Emit(opcode: Opcode, bytes?: number[]): this {
+    return this.emit(opcode, bytes);
+  }
+
+  /** @deprecated Use `emitThrow` instead. This typoed alias will be removed in v1.0. */
+  public EmitThorw(reg: byte): this {
+    return this.emitThrow(reg);
+  }
+
+  /** @deprecated Use `emitPush` instead. This alias will be removed in v1.0. */
+  public EmitPush(reg: byte): this {
+    return this.emitPush(reg);
+  }
+
+  /** @deprecated Use `emitPop` instead. This alias will be removed in v1.0. */
+  public EmitPop(reg: byte): this {
+    return this.emitPop(reg);
+  }
+
+  /** @deprecated Use `emitExtCall` instead. This alias will be removed in v1.0. */
+  public EmitExtCall(method: string, reg: byte = 0): this {
+    return this.emitExtCall(method, reg);
+  }
+
+  /** @deprecated Use `emitBigInteger` instead. This alias will be removed in v1.0. */
+  public EmitBigInteger(value: string) {
+    return this.emitBigInteger(value);
+  }
+
+  /** @deprecated Use `emitAddress` instead. This alias will be removed in v1.0. */
+  public EmitAddress(textAddress: string) {
+    return this.emitAddress(textAddress);
+  }
+
+  /** @deprecated Use `rawString` instead. This alias will be removed in v1.0. */
+  public RawString(value: string) {
+    return this.rawString(value);
+  }
+
+  /** @deprecated Use `emitLoad` instead. This alias will be removed in v1.0. */
+  public EmitLoad(reg: number, obj: ScriptLoadValue): this {
+    return this.emitLoad(reg, obj);
+  }
+
+  /** @deprecated Use `emitLoadBytes` instead. This alias will be removed in v1.0. */
+  public EmitLoadBytes(reg: number, bytes: byte[], type: VMType = VMType.Bytes): this {
+    return this.emitLoadBytes(reg, bytes, type);
+  }
+
+  /** @deprecated Use `emitLoadArray` instead. This alias will be removed in v1.0. */
+  public EmitLoadArray(reg: number, obj: unknown[]): this {
+    return this.emitLoadArray(reg, obj);
+  }
+
+  /** @deprecated Use `emitLoadSerializable` instead. This alias will be removed in v1.0. */
+  public EmitLoadISerializable(reg: number, obj: ISerializable): this {
+    return this.emitLoadSerializable(reg, obj);
+  }
+
+  /** @deprecated Use `emitLoadVmObject` instead. This alias will be removed in v1.0. */
+  public EmitLoadVMObject(reg: number, obj: VMObject): this {
+    return this.emitLoadVmObject(reg, obj);
+  }
+
+  /** @deprecated Use `emitLoadEnum` instead. This alias will be removed in v1.0. */
+  public EmitLoadEnum(reg: number, enumVal: number): this {
+    return this.emitLoadEnum(reg, enumVal);
+  }
+
+  /** @deprecated Use `emitLoadAddress` instead. This alias will be removed in v1.0. */
+  public EmitLoadAddress(reg: number, obj: Address): this {
+    return this.emitLoadAddress(reg, obj);
+  }
+
+  /** @deprecated Use `emitLoadTimestamp` instead. This alias will be removed in v1.0. */
+  public EmitLoadTimestamp(reg: number, obj: Date | Timestamp): this {
+    return this.emitLoadTimestamp(reg, obj);
+  }
+
+  /** @deprecated Use `emitLoadVarInt` instead. This alias will be removed in v1.0. */
+  public EmitLoadVarInt(reg: number, val: number): this {
+    return this.emitLoadVarInt(reg, val);
+  }
+
+  /** @deprecated Use `emitMove` instead. This alias will be removed in v1.0. */
+  public EmitMove(src_reg: number, dst_reg: number): this {
+    return this.emitMove(src_reg, dst_reg);
+  }
+
+  /** @deprecated Use `emitCopy` instead. This alias will be removed in v1.0. */
+  public EmitCopy(src_reg: number, dst_reg: number): this {
+    return this.emitCopy(src_reg, dst_reg);
+  }
+
+  /** @deprecated Use `emitLabel` instead. This alias will be removed in v1.0. */
+  public EmitLabel(label: string): this {
+    return this.emitLabel(label);
+  }
+
+  /** @deprecated Use `emitJump` instead. This alias will be removed in v1.0. */
+  public EmitJump(opcode: Opcode, label: string, reg: number = 0): this {
+    return this.emitJump(opcode, label, reg);
+  }
+
+  /** @deprecated Use `emitCall` instead. This alias will be removed in v1.0. */
+  public EmitCall(label: string, regCount: byte): this {
+    return this.emitCall(label, regCount);
+  }
+
+  /** @deprecated Use `emitConditionalJump` instead. This alias will be removed in v1.0. */
+  public EmitConditionalJump(opcode: Opcode, src_reg: byte, label: string): this {
+    return this.emitConditionalJump(opcode, src_reg, label);
+  }
+
+  /** @deprecated Use `insertMethodArgs` instead. This alias will be removed in v1.0. */
+  public InsertMethodArgs(args: ScriptLoadValue[]) {
+    return this.insertMethodArgs(args);
+  }
+
+  /** @deprecated Use `callInterop` instead. This alias will be removed in v1.0. */
+  public CallInterop(method: string, args: ScriptLoadValue[]): this {
+    return this.callInterop(method, args);
+  }
+
+  /** @deprecated Use `callContract` instead. This alias will be removed in v1.0. */
+  public CallContract(contractName: string, method: string, args: ScriptLoadValue[]) {
+    return this.callContract(contractName, method, args);
+  }
+
+  /** @deprecated Use `allowGas` instead. This alias will be removed in v1.0. */
+  public AllowGas(
+    from: string | Address,
+    to: string | Address,
+    gasPrice: number | bigint,
+    gasLimit: number | bigint
+  ): this {
+    return this.allowGas(from, to, gasPrice, gasLimit);
+  }
+
+  /** @deprecated Use `spendGas` instead. This alias will be removed in v1.0. */
+  public SpendGas(address: string | Address): this {
+    return this.spendGas(address);
+  }
+
+  /** @deprecated Use `mintTokens` instead. This alias will be removed in v1.0. */
+  public MintTokens(
+    symbol: string,
+    from: string | Address,
+    to: string | Address,
+    amount: number | bigint
+  ): this {
+    return this.mintTokens(symbol, from, to, amount);
+  }
+
+  /** @deprecated Use `transferTokens` instead. This alias will be removed in v1.0. */
+  public TransferTokens(
+    symbol: string,
+    from: string | Address,
+    to: string | Address,
+    amount: number | bigint
+  ): this {
+    return this.transferTokens(symbol, from, to, amount);
+  }
+
+  /** @deprecated Use `transferBalance` instead. This alias will be removed in v1.0. */
+  public TransferBalance(symbol: string, from: string | Address, to: string | Address): this {
+    return this.transferBalance(symbol, from, to);
+  }
+
+  /** @deprecated Use `transferNft` instead. This alias will be removed in v1.0. */
+  public TransferNFT(
+    symbol: string,
+    from: string | Address,
+    to: string | Address,
+    tokenId: number | bigint
+  ): this {
+    return this.transferNft(symbol, from, to, tokenId);
+  }
+
+  /** @deprecated Use `crossTransferToken` instead. This alias will be removed in v1.0. */
+  public CrossTransferToken(
+    destinationChain: string | Address,
+    symbol: string,
+    from: string | Address,
+    to: string | Address,
+    amount: number | bigint
+  ): this {
+    return this.crossTransferToken(destinationChain, symbol, from, to, amount);
+  }
+
+  /** @deprecated Use `crossTransferNft` instead. This alias will be removed in v1.0. */
+  public CrossTransferNFT(
+    destinationChain: string | Address,
+    symbol: string,
+    from: string | Address,
+    to: string | Address,
+    tokenId: number | bigint
+  ): this {
+    return this.crossTransferNft(destinationChain, symbol, from, to, tokenId);
+  }
+
+  /** @deprecated Use `stake` instead. This alias will be removed in v1.0. */
+  public Stake(address: string | Address, amount: number | bigint): this {
+    return this.stake(address, amount);
+  }
+
+  /** @deprecated Use `unstake` instead. This alias will be removed in v1.0. */
+  public Unstake(address: string | Address, amount: number | bigint): this {
+    return this.unstake(address, amount);
+  }
+
+  /** @deprecated Use `callNft` instead. This alias will be removed in v1.0. */
+  public CallNFT(
+    symbol: string,
+    seriesId: number | bigint,
+    method: string,
+    args: ScriptLoadValue[] = []
+  ): this {
+    return this.callNft(symbol, seriesId, method, args);
+  }
+
+  /** @deprecated Use `emitTimestamp` instead. This alias will be removed in v1.0. */
+  public EmitTimestamp(obj: Date): this {
+    return this.emitTimestamp(obj);
+  }
+
+  /** @deprecated Use `emitByteArray` instead. This alias will be removed in v1.0. */
+  public EmitByteArray(bytes: number[]) {
+    return this.emitByteArray(bytes);
+  }
+
+  /** @deprecated Use `emitVarString` instead. This alias will be removed in v1.0. */
+  public EmitVarString(text: string): this {
+    return this.emitVarString(text);
+  }
+
+  /** @deprecated Use `emitVarInt` instead. This alias will be removed in v1.0. */
+  public EmitVarInt(value: number): this {
+    return this.emitVarInt(value);
+  }
+
+  /** @deprecated Use `emitUInt32` instead. This alias will be removed in v1.0. */
+  public EmitUInt32(value: number): this {
+    return this.emitUInt32(value);
+  }
+
+  /** @deprecated Use `emitBytes` instead. This alias will be removed in v1.0. */
+  public EmitBytes(bytes: byte[]): this {
+    return this.emitBytes(bytes);
+  }
+
+  /** @deprecated Use `byteToHex` instead. This alias will be removed in v1.0. */
+  public ByteToHex(byte: number) {
+    return this.byteToHex(byte);
+  }
+
+  /** @deprecated Use `appendByte` instead. This alias will be removed in v1.0. */
+  public AppendByte(byte: number) {
+    return this.appendByte(byte);
+  }
+
+  /** @deprecated Use `appendBytes` instead. This alias will be removed in v1.0. */
+  public AppendBytes(bytes: byte[]) {
+    return this.appendBytes(bytes);
+  }
+
+  /** @deprecated Use `appendUShort` instead. This alias will be removed in v1.0. */
+  public AppendUshort(ushort: number) {
+    return this.appendUShort(ushort);
+  }
+
+  /** @deprecated Use `appendHexEncoded` instead. This alias will be removed in v1.0. */
+  public AppendHexEncoded(bytes: string): this {
+    return this.appendHexEncoded(bytes);
   }
 }

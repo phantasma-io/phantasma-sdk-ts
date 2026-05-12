@@ -18,13 +18,33 @@ export enum TokenSeriesMode {
   Duplicated,
 }
 
+export interface TokenDescriptor {
+  readonly name: string;
+  readonly symbol: string;
+  readonly owner: Address;
+  readonly flags: TokenFlags;
+  readonly maxSupply: BigInteger;
+  readonly decimals: number;
+  readonly script: Uint8Array;
+  readonly abi: ContractInterface;
+}
+
+/** @deprecated Use `TokenDescriptor` instead. This compatibility interface will be removed in v1.0. */
 export interface IToken {
+  /** @deprecated Use `name` instead. */
   readonly Name: string;
+  /** @deprecated Use `symbol` instead. */
   readonly Symbol: string;
+  /** @deprecated Use `owner` instead. */
   readonly Owner: Address;
+  /** @deprecated Use `flags` instead. */
   readonly Flags: TokenFlags;
+  /** @deprecated Use `maxSupply` instead. */
   readonly MaxSupply: BigInteger;
+  /** @deprecated Use `decimals` instead. */
   readonly Decimals: number;
+  /** @deprecated Use `script` instead. */
   readonly Script: Uint8Array;
+  /** @deprecated Use `abi` instead. */
   readonly ABI: ContractInterface;
 }

@@ -11,7 +11,7 @@ import { bytesToHex } from '../../src/core/utils/Hex';
 import { ScriptBuilder } from '../../src/core/vm';
 import { ProofOfWork } from '../../src/core/link/interfaces/ProofOfWork';
 import { EasyConnect } from '../../src/core/link/easyConnect';
-import { IAccount } from '../../src/core/link/interfaces/IAccount';
+import { LinkAccount } from '../../src/core/link/interfaces/IAccount';
 import { Transaction } from '../../src/core/tx/Transaction';
 import { PhantasmaKeys } from '../../src/core/types/PhantasmaKeys';
 import { Ed25519Signature } from '../../src/core/types/Ed25519Signature';
@@ -75,7 +75,7 @@ const buildTestSocket = (overrides: Partial<TestSocket> = {}): TestSocket => ({
   ...overrides,
 });
 
-const buildAccount = (address: string): IAccount => ({
+const buildAccount = (address: string): LinkAccount => ({
   alias: '',
   name: '',
   address,
@@ -146,9 +146,9 @@ describe('PhantasmaLink.signTx', () => {
     link.signTx(script, payload, jest.fn(), jest.fn());
 
     const sb = new ScriptBuilder();
-    const bytes = sb.RawString(payload);
-    sb.AppendBytes(bytes);
-    const expectedPayload = sb.EndScript();
+    const bytes = sb.rawString(payload);
+    sb.appendBytes(bytes);
+    const expectedPayload = sb.endScript();
 
     expect(sendLinkSpy).toHaveBeenCalledWith(
       `signTx/${link.chain}/${script}/${expectedPayload}/Ed25519/${link.platform}/${ProofOfWork.None}`,
@@ -207,7 +207,7 @@ describe('PhantasmaLink.signPrebuiltTransaction', () => {
     const link = new PhantasmaLink('test', false);
     asTestLink(link).socket = buildTestSocket();
     const keys = PhantasmaKeys.generate();
-    link.account = buildAccount(keys.Address.Text);
+    link.account = buildAccount(keys.address.text);
 
     const tx = new Transaction(
       'testnet',
@@ -217,11 +217,11 @@ describe('PhantasmaLink.signPrebuiltTransaction', () => {
       '706F77'
     );
 
-    const signatureBytes = Ed25519Signature.Generate(keys, tx.GetUnsignedBytes()).Bytes;
+    const signatureBytes = Ed25519Signature.generate(keys, tx.getUnsignedBytes()).Bytes;
     const walletSignatureHex = bytesToHex(
       new Uint8Array([signatureBytes.length, ...signatureBytes])
     );
-    const expectedSignedTx = Transaction.FromBytes(tx.ToStringEncoded(false).toUpperCase());
+    const expectedSignedTx = Transaction.fromHex(tx.toStringEncoded(false).toUpperCase());
     expectedSignedTx.signatures = [new Ed25519Signature(signatureBytes)];
 
     jest
@@ -239,7 +239,7 @@ describe('PhantasmaLink.signPrebuiltTransaction', () => {
     expect(onSuccess).toHaveBeenCalledWith({
       success: true,
       signature: walletSignatureHex,
-      signedTx: expectedSignedTx.ToStringEncoded(true).toUpperCase(),
+      signedTx: expectedSignedTx.toStringEncoded(true).toUpperCase(),
     });
   });
 

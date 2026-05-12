@@ -1,4 +1,4 @@
-import { ICarbonBlob } from '../../../interfaces/Carbon/ICarbonBlob.js';
+import { CarbonBlobLike } from '../../../interfaces/Carbon/ICarbonBlob.js';
 import { CarbonBinaryReader, CarbonBinaryWriter } from '../../CarbonSerialization.js';
 import { Bytes32 } from '../Bytes32.js';
 import { SmallString } from '../SmallString.js';
@@ -40,7 +40,7 @@ type TxMsgPayload =
   | TxMsgPhantasma
   | TxMsgPhantasmaRaw;
 
-export class TxMsg implements ICarbonBlob {
+export class TxMsg implements CarbonBlobLike {
   constructor(
     public type: TxTypes = TxTypes.Call,
     public expiry: bigint = 0n, // int64

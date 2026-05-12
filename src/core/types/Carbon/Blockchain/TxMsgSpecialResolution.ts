@@ -1,8 +1,8 @@
-import { ICarbonBlob } from '../../../interfaces/Carbon/ICarbonBlob.js';
+import { CarbonBlobLike } from '../../../interfaces/Carbon/ICarbonBlob.js';
 import { CarbonBinaryReader, CarbonBinaryWriter } from '../../CarbonSerialization.js';
 import { TxMsgCall } from './TxMsgCall.js';
 
-export class TxMsgSpecialResolution implements ICarbonBlob {
+export class TxMsgSpecialResolution implements CarbonBlobLike {
   constructor(
     public resolutionId: bigint = 0n,
     public calls: TxMsgCall[] = []

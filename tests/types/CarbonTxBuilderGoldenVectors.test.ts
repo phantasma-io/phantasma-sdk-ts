@@ -67,8 +67,8 @@ function carbonTxBuilderVector(caseId: string): string {
   // Carbon transaction golden vectors.
   const sender = PhantasmaKeys.fromWIF('KwPpBSByydVKqStGHAnZzQofCqhDmD2bfRgc9BmZqM3ZmsdWJw4d');
   const receiver = PhantasmaKeys.fromWIF('KwVG94yjfVg1YKFyRxAGtug93wdRbmLnqqrFV6Yd2CiA9KZDAp4H');
-  const senderBytes = new Bytes32(sender.PublicKey);
-  const receiverBytes = new Bytes32(receiver.PublicKey);
+  const senderBytes = new Bytes32(sender.publicKey);
+  const receiverBytes = new Bytes32(receiver.publicKey);
 
   switch (caseId) {
     case 'signed_transfer_fungible': {

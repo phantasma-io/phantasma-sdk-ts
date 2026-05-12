@@ -49,7 +49,7 @@ export class CreateTokenTxHelper {
     maxData?: bigint,
     expiry?: bigint
   ): Uint8Array {
-    const tx = this.buildTx(tokenInfo, new Bytes32(signer.PublicKey), feeOptions, maxData, expiry);
+    const tx = this.buildTx(tokenInfo, new Bytes32(signer.publicKey), feeOptions, maxData, expiry);
     return TxMsgSigner.signAndSerialize(tx, signer);
   }
 

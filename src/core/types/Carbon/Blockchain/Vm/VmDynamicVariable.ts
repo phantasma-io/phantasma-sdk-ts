@@ -1,4 +1,4 @@
-import { ICarbonBlob } from '../../../../interfaces/Carbon/ICarbonBlob.js';
+import { CarbonBlobLike } from '../../../../interfaces/Carbon/ICarbonBlob.js';
 import { CarbonBinaryReader, CarbonBinaryWriter } from '../../../CarbonSerialization.js';
 import { VmType } from './VmType.js';
 import { VmStructSchema } from './VmStructSchema.js';
@@ -30,7 +30,7 @@ export type VmDynamicVariableData =
   | Bytes64[]
   | string[];
 
-export class VmDynamicVariable implements ICarbonBlob {
+export class VmDynamicVariable implements CarbonBlobLike {
   type: VmType = VmType.Dynamic;
   data: VmDynamicVariableData = null;
 

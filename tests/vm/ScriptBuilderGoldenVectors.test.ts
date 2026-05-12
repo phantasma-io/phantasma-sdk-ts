@@ -34,62 +34,62 @@ function scriptBuilderVector(caseId: string): string {
   // Gen2 C# golden scripts.
   const mainKeys = PhantasmaKeys.fromWIF('L5UEVHBjujaR1721aZM5Zm5ayjDyamMZS9W35RE9Y9giRkdf3dVx');
   const helperKeys = PhantasmaKeys.fromWIF('KxMn2TgXukYaNXx7tEdjh7qB2YaMgeuKy47j4rvKigHhBuZWeP3r');
-  const address = helperKeys.Address;
-  const nullAddress = Address.Null;
+  const address = helperKeys.address;
+  const nullAddress = Address.nullAddress;
 
   switch (caseId) {
     case 'consensus_single_vote':
       return new ScriptBuilder()
-        .BeginScript()
-        .AllowGas(mainKeys.Address, nullAddress, 10000n, 210000n)
-        .CallContract('consensus', 'SingleVote', [
-          mainKeys.Address.Text,
+        .beginScript()
+        .allowGas(mainKeys.address, nullAddress, 10000n, 210000n)
+        .callContract('consensus', 'SingleVote', [
+          mainKeys.address.text,
           'system.nexus.protocol.version',
           0n,
         ])
-        .SpendGas(mainKeys.Address)
-        .EndScript();
+        .spendGas(mainKeys.address)
+        .endScript();
     case 'gas_transfer_spend':
       return new ScriptBuilder()
-        .BeginScript()
-        .AllowGas(address, nullAddress, 100000n, 21000n)
-        .TransferTokens('SOUL', address, nullAddress, 100000000n)
-        .SpendGas(address)
-        .EndScript();
+        .beginScript()
+        .allowGas(address, nullAddress, 100000n, 21000n)
+        .transferTokens('SOUL', address, nullAddress, 100000000n)
+        .spendGas(address)
+        .endScript();
     case 'mint_tokens':
       return new ScriptBuilder()
-        .BeginScript()
-        .MintTokens('SOUL', address, nullAddress, 1n)
-        .EndScript();
+        .beginScript()
+        .mintTokens('SOUL', address, nullAddress, 1n)
+        .endScript();
     case 'transfer_balance':
       return new ScriptBuilder()
-        .BeginScript()
-        .TransferBalance('KCAL', address, nullAddress)
-        .EndScript();
+        .beginScript()
+        .transferBalance('KCAL', address, nullAddress)
+        .endScript();
     case 'transfer_nft':
       return new ScriptBuilder()
-        .BeginScript()
-        .TransferNFT('ART', address, nullAddress, 42n)
-        .EndScript();
+        .beginScript()
+        .transferNft('ART', address, nullAddress, 42n)
+        .endScript();
     case 'cross_transfer_token':
       return new ScriptBuilder()
-        .BeginScript()
-        .CrossTransferToken(nullAddress, 'SOUL', address, nullAddress, 1n)
-        .EndScript();
+        .beginScript()
+        .crossTransferToken(nullAddress, 'SOUL', address, nullAddress, 1n)
+        .endScript();
     case 'cross_transfer_nft':
       return new ScriptBuilder()
-        .BeginScript()
-        .CrossTransferNFT(nullAddress, 'ART', address, nullAddress, 7n)
-        .EndScript();
+        .beginScript()
+        .crossTransferNft(nullAddress, 'ART', address, nullAddress, 7n)
+        .endScript();
     case 'stake_unstake':
-      return new ScriptBuilder().BeginScript().Stake(address, 7n).Unstake(address, 8n).EndScript();
+      return new ScriptBuilder().beginScript().stake(address, 7n).unstake(address, 8n).endScript();
     case 'call_nft':
-      return new ScriptBuilder().BeginScript().CallNFT('ART', 7n, 'mint', [address]).EndScript();
+      return new ScriptBuilder().beginScript().callNft('ART', 7n, 'mint', [address]).endScript();
     case 'runtime_array_timestamp':
       return new ScriptBuilder()
-        .BeginScript()
-        .CallInterop('Runtime.Test', [['alpha', 7n], new Timestamp(1778330400)])
-        .EndScript();
+        .beginScript()
+        .callInterop('Runtime.Test', [['alpha', 7n], new Timestamp(1778330400)])
+        .endScript();
     default:
       throw new Error(`unhandled script vector: ${caseId}`);
   }

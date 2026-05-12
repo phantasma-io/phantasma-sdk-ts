@@ -176,7 +176,7 @@ export class MintPhantasmaNonFungibleTxHelper {
     arg7?: bigint,
     arg8?: bigint
   ): Uint8Array {
-    const senderPub = new Bytes32(signer.PublicKey);
+    const senderPub = new Bytes32(signer.publicKey);
 
     if (typeof arg1 === 'bigint') {
       const tx = this.buildTx(

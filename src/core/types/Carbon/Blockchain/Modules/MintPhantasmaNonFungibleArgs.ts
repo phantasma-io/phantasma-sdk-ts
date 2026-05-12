@@ -1,9 +1,9 @@
-import { ICarbonBlob } from '../../../../interfaces/Carbon/ICarbonBlob.js';
+import { CarbonBlobLike } from '../../../../interfaces/Carbon/ICarbonBlob.js';
 import type { CarbonBinaryReader, CarbonBinaryWriter } from '../../../CarbonSerialization.js';
 import { Bytes32 } from '../../Bytes32.js';
 import { PhantasmaNftMintInfo } from './PhantasmaNftMintInfo.js';
 
-export class MintPhantasmaNonFungibleArgs implements ICarbonBlob {
+export class MintPhantasmaNonFungibleArgs implements CarbonBlobLike {
   tokenId: bigint;
   address: Bytes32;
   tokens: PhantasmaNftMintInfo[];

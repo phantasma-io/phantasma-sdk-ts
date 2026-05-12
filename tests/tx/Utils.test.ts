@@ -15,7 +15,7 @@ describe('tx utils', () => {
     const keys = PhantasmaKeys.fromWIF(testWif);
     const privateKeyHex = getPrivateKeyFromWif(testWif);
 
-    expect(privateKeyHex).toBe(bytesToHex(keys.PrivateKey));
+    expect(privateKeyHex).toBe(bytesToHex(keys.privateKey));
   });
 
   test('getAddressFromWif matches PhantasmaKeys address', () => {
@@ -23,7 +23,7 @@ describe('tx utils', () => {
     const keys = PhantasmaKeys.fromWIF(testWif);
     const address = getAddressFromWif(testWif);
 
-    expect(address).toBe(keys.Address.Text);
+    expect(address).toBe(keys.address.text);
   });
 
   test('getWifFromPrivateKey returns original WIF', () => {
@@ -40,6 +40,6 @@ describe('tx utils', () => {
     const privateKeyHex = getPrivateKeyFromWif(testWif);
     const publicKeyHex = getPublicKeyFromPrivateKey(privateKeyHex);
 
-    expect(publicKeyHex).toBe(bytesToHex(keys.PublicKey));
+    expect(publicKeyHex).toBe(bytesToHex(keys.publicKey));
   });
 });

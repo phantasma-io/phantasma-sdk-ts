@@ -9,10 +9,10 @@ describe('Consensus Tests', () => {
     const readerVM = new PBinaryReader(arrayBytes);
     const vm = new VMObject();
     vm.UnserializeData(readerVM);
-    for (let map of vm.GetChildren()![1]) {
+    for (let map of vm.getChildren()![1]) {
       console.log(map[0], " - ", map[1]);
       let lBytes = Base16.decodeUint8Array(
-        uint8ArrayToStringDefault(map[1].AsByteArray())
+        uint8ArrayToStringDefault(map[1].asByteArray())
       );
     }*/
 
@@ -29,8 +29,8 @@ describe('Consensus Tests', () => {
     const vm = new VMObject();
     const readerVM = new PBinaryReader(arrayBytes);
     vm.UnserializeData(readerVM);
-    const con = vm.ToStruct<ConsensusPoll>(ConsensusPoll);
-    // Entries are already decoded by VMObject.ToStruct; old tests treated them
+    const con = vm.toStruct<ConsensusPoll>(ConsensusPoll);
+    // Entries are already decoded by VMObject.toStruct; old tests treated them
     // as hex strings, which masked the exact bigint return type.
     expect(con.entries).toHaveLength(2);
     expect(con.subject).toBe('system.nexus.protocol.version');

@@ -1,7 +1,7 @@
 import { Transaction } from '../tx/Transaction.js';
 import { ScriptBuilder } from '../vm/index.js';
 import { ProofOfWork } from './interfaces/ProofOfWork.js';
-import { IAccount } from './interfaces/IAccount.js';
+import { LinkAccount } from './interfaces/IAccount.js';
 import { TxMsg } from '../types/Carbon/Blockchain/index.js';
 import { CarbonBlob } from '../types/Carbon/CarbonBlob.js';
 import { bytesToHex, hexToBytes } from '../utils/Hex.js';
@@ -74,7 +74,7 @@ export class PhantasmaLink {
   socketOpen: boolean = false;
   token: unknown;
   requestID: number = 0;
-  account: IAccount | null;
+  account: LinkAccount | null;
   wallet: unknown;
   messageLogging: boolean;
   version: number;
@@ -224,9 +224,9 @@ export class PhantasmaLink {
     } else if (typeof payload === 'string') {
       //Turn String Payload -> Bytes -> Hex
       const sb = new ScriptBuilder();
-      const bytes = sb.RawString(payload);
-      sb.AppendBytes(bytes);
-      payload = sb.EndScript();
+      const bytes = sb.rawString(payload);
+      sb.appendBytes(bytes);
+      payload = sb.endScript();
     } else {
       this.onMessage('Error: Invalid Payload');
       if (onErrorCallback) {
@@ -409,7 +409,7 @@ export class PhantasmaLink {
 
     let unsignedTxHex: string;
     try {
-      unsignedTxHex = tx.ToStringEncoded(false).toUpperCase();
+      unsignedTxHex = tx.toStringEncoded(false).toUpperCase();
     } catch (err: unknown) {
       const message = 'Error: Unable to encode unsigned transaction';
       this.onMessage(message + ` (${errorMessage(err, 'unknown error')})`);
@@ -435,12 +435,12 @@ export class PhantasmaLink {
         }
 
         try {
-          const signedTx = Transaction.FromBytes(unsignedTxHex);
+          const signedTx = Transaction.fromHex(unsignedTxHex);
           signedTx.signatures = [
             new Ed25519Signature(this.decodeWalletSignatureBytes(result.signature, signature)),
           ];
 
-          if (this.account?.address && !signedTx.VerifySignature(this.account.address)) {
+          if (this.account?.address && !signedTx.verifySignature(this.account.address)) {
             throw new Error(
               'Wallet returned a signature that does not match the connected account'
             );
@@ -449,7 +449,7 @@ export class PhantasmaLink {
           callback({
             success: true,
             signature: result.signature,
-            signedTx: signedTx.ToStringEncoded(true).toUpperCase(),
+            signedTx: signedTx.toStringEncoded(true).toUpperCase(),
           });
         } catch (err: unknown) {
           const message = errorMessage(err, 'Unable to assemble signed transaction');
@@ -529,7 +529,7 @@ export class PhantasmaLink {
     const getAccountRequest = 'getAccount/' + this.platform;
     this.sendLinkRequest(getAccountRequest, (result) => {
       if (result.success) {
-        this.account = result as unknown as IAccount;
+        this.account = result as unknown as LinkAccount;
         callback?.(result);
       } else {
         onErrorCallback?.(
@@ -671,7 +671,7 @@ export class PhantasmaLink {
             this.onMessage('Authorized, obtaining account info...');
             this.sendLinkRequest(getAccountRequest, (result) => {
               if (result.success) {
-                this.account = result as unknown as IAccount;
+                this.account = result as unknown as LinkAccount;
               } else {
                 this.onError?.(
                   'Could not obtain account info... Make sure you have an account currently open in ' +

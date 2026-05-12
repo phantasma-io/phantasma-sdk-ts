@@ -58,7 +58,7 @@ export class MintNonFungibleTxHelper {
     maxData?: bigint,
     expiry?: bigint
   ): Uint8Array {
-    const senderPub = new Bytes32(signer.PublicKey);
+    const senderPub = new Bytes32(signer.publicKey);
     const tx = this.buildTx(
       tokenId,
       seriesId,

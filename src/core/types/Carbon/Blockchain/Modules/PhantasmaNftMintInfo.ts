@@ -1,8 +1,8 @@
-import { ICarbonBlob } from '../../../../interfaces/Carbon/ICarbonBlob.js';
+import { CarbonBlobLike } from '../../../../interfaces/Carbon/ICarbonBlob.js';
 import type { CarbonBinaryReader, CarbonBinaryWriter } from '../../../CarbonSerialization.js';
 import { IntX } from '../../IntX.js';
 
-export class PhantasmaNftMintInfo implements ICarbonBlob {
+export class PhantasmaNftMintInfo implements CarbonBlobLike {
   phantasmaSeriesId: IntX;
   rom: Uint8Array;
   ram: Uint8Array;

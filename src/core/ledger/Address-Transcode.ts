@@ -1,4 +1,3 @@
-import bs58 from 'bs58';
 import { Address, Base16, PhantasmaKeys } from '../types/index.js';
 
 /**
@@ -6,39 +5,37 @@ import { Address, Base16, PhantasmaKeys } from '../types/index.js';
  * @param privateKey The private key as a string.
  * @returns The address as a string.
  */
-export const GetAddressFromPrivateKey = (privateKey: string): string => {
+export const getAddressFromPrivateKey = (privateKey: string): string => {
   const keys = PhantasmaKeys.fromWIF(privateKey);
-  const publicKey = keys.Address.Text;
+  const publicKey = keys.address.text;
   return publicKey;
 };
+
+/** @deprecated Use `getAddressFromPrivateKey` instead. This alias will be removed in v1.0. */
+export const GetAddressFromPrivateKey = getAddressFromPrivateKey;
 
 /**
  * Gets the address from a public key.
  * @param publicKey The public key as a string.
  * @returns The address as a string.
  */
-export const GetAddressFromPublicKey = (publicKey: string): string => {
-  // Assuming Base16.decodeUint8Array is a function that decodes a base16 string to Uint8Array
+export const getAddressFromPublicKey = (publicKey: string): string => {
   const pubKeyBytes = Base16.decodeUint8Array(publicKey);
-  // Create a new array and set the first two elements
-  const addrArray = new Uint8Array(34);
-  addrArray[0] = 1;
-  // Copy 32 bytes from the 2nd position of pubKeyBytes to addrArray, starting from the 3rd position of addrArray
-  addrArray.set(pubKeyBytes.slice(0, 32), 2);
-  return 'P' + bs58.encode(addrArray);
+  return Address.fromPublicKey(pubKeyBytes.slice(0, 32)).text;
 };
+
+/** @deprecated Use `getAddressFromPublicKey` instead. This alias will be removed in v1.0. */
+export const GetAddressFromPublicKey = getAddressFromPublicKey;
 
 /**
  * Gets the address from a public key.
  * @param publicKey Public key as a string.
  * @returns Address
  */
-export const GetAddressPublicKeyFromPublicKey = (publicKey: string): Address => {
+export const getAddressPublicKeyFromPublicKey = (publicKey: string): Address => {
   const pubKeyBytes = Base16.decodeUint8Array(publicKey);
-  // Create a new array and set the first two elements
-  const addrArray = new Uint8Array(34);
-  addrArray[0] = 1;
-  // Copy 32 bytes from the 2nd position of pubKeyBytes to addrArray, starting from the 3rd position of addrArray
-  addrArray.set(pubKeyBytes.slice(0, 32), 2);
-  return Address.FromPublickKey(addrArray);
+  return Address.fromPublicKey(pubKeyBytes.slice(0, 32));
 };
+
+/** @deprecated Use `getAddressPublicKeyFromPublicKey` instead. This alias will be removed in v1.0. */
+export const GetAddressPublicKeyFromPublicKey = getAddressPublicKeyFromPublicKey;

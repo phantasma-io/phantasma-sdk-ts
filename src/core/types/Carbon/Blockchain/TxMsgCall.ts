@@ -1,4 +1,4 @@
-import { ICarbonBlob } from '../../../interfaces/Carbon/ICarbonBlob.js';
+import { CarbonBlobLike } from '../../../interfaces/Carbon/ICarbonBlob.js';
 import { CarbonBinaryReader, CarbonBinaryWriter, Throw } from '../../CarbonSerialization.js';
 
 export type MsgCallArgs = {
@@ -49,7 +49,7 @@ export class MsgCallArgSections {
   }
 }
 
-export class TxMsgCall implements ICarbonBlob {
+export class TxMsgCall implements CarbonBlobLike {
   moduleId: number; // uint32
   methodId: number; // uint32
   args: Uint8Array;

@@ -1,7 +1,7 @@
-import { ICarbonBlob } from '../../../interfaces/Carbon/ICarbonBlob.js';
+import { CarbonBlobLike } from '../../../interfaces/Carbon/ICarbonBlob.js';
 import { CarbonBinaryReader, CarbonBinaryWriter } from '../../CarbonSerialization.js';
 
-export class TxMsgBurnNonFungible implements ICarbonBlob {
+export class TxMsgBurnNonFungible implements CarbonBlobLike {
   tokenId: bigint; // uint64
   instanceId: bigint; // uint64
 

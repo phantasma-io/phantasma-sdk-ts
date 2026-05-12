@@ -123,19 +123,19 @@ describe('Gen2 C# VMObject fixture parity', () => {
     }
   });
 
-  test('AsString matches Gen2 C# fixtures', () => {
+  test('asString matches Gen2 C# fixtures', () => {
     for (const parts of fixtureRows('gen2_csharp_vmobject_asstring.tsv')) {
       const [caseId, sourceKind, , payload, outcome, expected] = parts;
       expect(outcome).toBe('ok');
-      expect(objectFromFixture(sourceKind, payload).AsString()).toBe(expected);
+      expect(objectFromFixture(sourceKind, payload).asString()).toBe(expected);
       expect(caseId).toBeTruthy();
     }
   });
 
-  test('string AsNumber matches Gen2 C# decimal fixtures', () => {
+  test('string asNumber matches Gen2 C# decimal fixtures', () => {
     for (const parts of fixtureRows('gen2_csharp_vm_bigint_decimal.tsv')) {
       const [caseId, inputText, outcome, expected] = parts;
-      const result = callResult(() => typedObject(VMType.String, inputText).AsNumber());
+      const result = callResult(() => typedObject(VMType.String, inputText).asNumber());
       if (outcome === 'ok') {
         expect(result).toBe(BigInt(expected));
       } else {
@@ -145,10 +145,10 @@ describe('Gen2 C# VMObject fixture parity', () => {
     }
   });
 
-  test('AsNumber matches Gen2 C# fixtures', () => {
+  test('asNumber matches Gen2 C# fixtures', () => {
     for (const parts of fixtureRows('gen2_csharp_vmobject_asnumber.tsv')) {
       const [caseId, sourceKind, , payload, outcome, expected] = parts;
-      const result = callResult(() => objectFromFixture(sourceKind, payload).AsNumber());
+      const result = callResult(() => objectFromFixture(sourceKind, payload).asNumber());
       if (outcome === 'ok') {
         expect(result).toBe(BigInt(expected));
       } else {
@@ -158,10 +158,10 @@ describe('Gen2 C# VMObject fixture parity', () => {
     }
   });
 
-  test('AsByteArray matches Gen2 C# fixtures', () => {
+  test('asByteArray matches Gen2 C# fixtures', () => {
     for (const parts of fixtureRows('gen2_csharp_vmobject_asbytes.tsv')) {
       const [caseId, sourceKind, , payload, outcome, expected] = parts;
-      const result = callResult(() => objectFromFixture(sourceKind, payload).AsByteArray());
+      const result = callResult(() => objectFromFixture(sourceKind, payload).asByteArray());
       if (outcome === 'ok') {
         expect(bytesToHex(result as Uint8Array)).toBe(expected);
       } else {
@@ -171,10 +171,10 @@ describe('Gen2 C# VMObject fixture parity', () => {
     }
   });
 
-  test('AsBool matches Gen2 C# fixtures', () => {
+  test('asBool matches Gen2 C# fixtures', () => {
     for (const parts of fixtureRows('gen2_csharp_vmobject_asbool.tsv')) {
       const [caseId, sourceKind, , payload, outcome, expected] = parts;
-      const result = callResult(() => objectFromFixture(sourceKind, payload).AsBool());
+      const result = callResult(() => objectFromFixture(sourceKind, payload).asBool());
       if (outcome === 'ok') {
         expect(String(result).toLowerCase()).toBe(expected);
       } else {
@@ -187,7 +187,7 @@ describe('Gen2 C# VMObject fixture parity', () => {
   test('array type matches Gen2 C# fixtures', () => {
     for (const parts of fixtureRows('gen2_csharp_vmobject_arraytype.tsv')) {
       const [caseId, sourceKind, , payload, expected] = parts;
-      expect(VM_TYPE_NAMES.get(objectFromFixture(sourceKind, payload).GetArrayType())).toBe(
+      expect(VM_TYPE_NAMES.get(objectFromFixture(sourceKind, payload).getArrayType())).toBe(
         expected
       );
       expect(caseId).toBeTruthy();
@@ -201,14 +201,14 @@ describe('Gen2 C# VMObject fixture parity', () => {
 
       expect(serializeObject(obj)).toBe(serializedHex);
 
-      const roundtrip = VMObject.FromBytes(hexToBytes(serializedHex));
+      const roundtrip = VMObject.fromBytes(hexToBytes(serializedHex));
       expect(VM_TYPE_NAMES.get(roundtrip.Type)).toBe(roundtripType);
       expect(objectDescriptor(roundtrip)).toBe(descriptor);
       expect(caseId).toBeTruthy();
     }
   });
 
-  test('CastTo common targets matches Gen2 C# conversion fixtures', () => {
+  test('castTo common targets matches Gen2 C# conversion fixtures', () => {
     for (const [fileName, targetType, expectedType] of [
       ['gen2_csharp_vmobject_asstring.tsv', VMType.String, VMType.String],
       ['gen2_csharp_vmobject_asbytes.tsv', VMType.Bytes, VMType.Bytes],
@@ -218,7 +218,7 @@ describe('Gen2 C# VMObject fixture parity', () => {
       for (const parts of fixtureRows(fileName)) {
         const [caseId, sourceKind, , payload, outcome, expected] = parts;
         const result = callResult(() =>
-          VMObject.CastTo(objectFromFixture(sourceKind, payload), targetType)
+          VMObject.castTo(objectFromFixture(sourceKind, payload), targetType)
         );
         if (outcome === 'ok') {
           const object = result as VMObject;
@@ -236,11 +236,11 @@ describe('Gen2 C# VMObject fixture parity', () => {
     }
   });
 
-  test('CastTo Struct matches Gen2 C# fixtures', () => {
+  test('castTo Struct matches Gen2 C# fixtures', () => {
     for (const parts of fixtureRows('gen2_csharp_vmobject_cast_struct.tsv')) {
       const [caseId, sourceKind, , payload, outcome, expectedType, descriptor] = parts;
       const result = callResult(() =>
-        VMObject.CastTo(objectFromFixture(sourceKind, payload), VMType.Struct)
+        VMObject.castTo(objectFromFixture(sourceKind, payload), VMType.Struct)
       );
       if (outcome === 'ok') {
         const object = result as VMObject;
@@ -259,7 +259,7 @@ describe('Gen2 C# VMObject fixture parity', () => {
       const payload = hexToBytes(serializedHex);
       expect(payload.length).toBeGreaterThan(0);
       expect(
-        callResult(() => VMObject.FromBytes(payload.slice(0, payload.length - 1)))
+        callResult(() => VMObject.fromBytes(payload.slice(0, payload.length - 1)))
       ).toBeInstanceOf(Error);
       expect(caseId).toBeTruthy();
     }
@@ -283,7 +283,7 @@ function fixtureRows(name: string): string[][] {
 }
 
 function objectFromFixture(sourceKind: string, payload: string): VMObject {
-  if (sourceKind === 'serialized_vmobject') return VMObject.FromBytes(hexToBytes(payload));
+  if (sourceKind === 'serialized_vmobject') return VMObject.fromBytes(hexToBytes(payload));
   if (sourceKind === 'empty') return typedObject(VMType.None, null);
   if (sourceKind === 'string') return typedObject(VMType.String, payload);
   if (sourceKind === 'bytes') return typedObject(VMType.Bytes, hexToBytes(payload));
@@ -324,19 +324,19 @@ function objectDescriptor(object: VMObject): string {
     case VMType.Bytes:
       return `Bytes:${bytesToHex(object.Data as Uint8Array)}`;
     case VMType.Number:
-      return `Number:${object.AsNumber()}`;
+      return `Number:${object.asNumber()}`;
     case VMType.String:
-      return `String:${object.AsString()}`;
+      return `String:${object.asString()}`;
     case VMType.Timestamp:
-      return `Timestamp:${object.AsTimestamp().value}`;
+      return `Timestamp:${object.asTimestamp().value}`;
     case VMType.Bool:
-      return `Bool:${String(object.AsBool()).toLowerCase()}`;
+      return `Bool:${String(object.asBool()).toLowerCase()}`;
     case VMType.Enum:
       return `Enum:${object.Data}`;
     case VMType.Object: {
       const bytes =
-        object.Data instanceof Address ? object.Data.ToByteArray() : (object.Data as Uint8Array);
-      if (bytes.length === Address.LengthInBytes) return `Object.Address:${bytesToHex(bytes)}`;
+        object.Data instanceof Address ? object.Data.toByteArray() : (object.Data as Uint8Array);
+      if (bytes.length === Address.lengthInBytes) return `Object.Address:${bytesToHex(bytes)}`;
       if (bytes.length === 32) return `Object.Hash:${bytesToHex(bytes)}`;
       return `Object:${bytesToHex(bytes)}`;
     }

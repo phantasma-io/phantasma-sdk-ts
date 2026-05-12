@@ -1,11 +1,11 @@
-import { ICarbonBlob } from '../../interfaces/Carbon/ICarbonBlob.js';
+import { CarbonBlobLike } from '../../interfaces/Carbon/ICarbonBlob.js';
 import {
   CarbonBinaryReader,
   CarbonBinaryWriter,
   twosComplementLEToBigInt,
 } from '../CarbonSerialization.js';
 
-export class IntX implements ICarbonBlob {
+export class IntX implements CarbonBlobLike {
   private big: bigint = 0n;
   private small: bigint = 0n;
   private isBig = false;

@@ -77,9 +77,9 @@ describe('Ed25519 golden vectors', () => {
 
     expect(getPrivateKeyFromWif(wif)).toBe(vector.seedHex);
     expect(getPublicKeyFromPrivateKey(vector.seedHex)).toBe(vector.publicKeyHex);
-    expect(bytesToHex(keys.PublicKey)).toBe(vector.publicKeyHex);
+    expect(bytesToHex(keys.publicKey)).toBe(vector.publicKeyHex);
     expect(getAddressFromWif(wif)).toBe(address);
-    expect(keys.Address.Text).toBe(address);
+    expect(keys.address.text).toBe(address);
     expect(signData(vector.messageHex, vector.seedHex)).toBe(sdkSignature);
     expect(verifyData(vector.messageHex, sdkSignature, address)).toBe(true);
     expect(verifyData(bytesToHex(Buffer.from('hello worlds', 'utf8')), sdkSignature, address)).toBe(

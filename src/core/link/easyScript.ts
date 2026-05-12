@@ -25,10 +25,10 @@ export class EasyScript {
         const inputArgumentsInteract = _options[2] as unknown[];
 
         return this.sb
-          .CallContract('gas', 'AllowGas', [])
-          .CallContract(contractNameInteract, methodNameInteract, inputArgumentsInteract) //The Meat of the Script
-          .CallContract('gas', 'SpendGas', [])
-          .EndScript();
+          .callContract('gas', 'AllowGas', [])
+          .callContract(contractNameInteract, methodNameInteract, inputArgumentsInteract) //The Meat of the Script
+          .callContract('gas', 'SpendGas', [])
+          .endScript();
 
       case 'invoke':
         const contractNameInvoke = _options[0] as string;
@@ -36,18 +36,18 @@ export class EasyScript {
         const inputArgumentsInvoke = _options[2] as unknown[];
 
         return this.sb
-          .CallContract(contractNameInvoke, methodNameInvoke, inputArgumentsInvoke) //The Meat of the Script
-          .EndScript();
+          .callContract(contractNameInvoke, methodNameInvoke, inputArgumentsInvoke) //The Meat of the Script
+          .endScript();
 
       case 'interop':
         const interopNameInterop = _options[0] as string;
         const inputArgumentsInterop = _options[1] as unknown[];
 
         return this.sb
-          .CallContract('gas', 'AllowGas', [])
-          .CallInterop(interopNameInterop, inputArgumentsInterop)
-          .CallContract('gas', 'SpendGas', [])
-          .EndScript();
+          .callContract('gas', 'AllowGas', [])
+          .callInterop(interopNameInterop, inputArgumentsInterop)
+          .callContract('gas', 'SpendGas', [])
+          .endScript();
 
       default:
         throw new Error(`Unsupported EasyScript type: ${_type}`);

@@ -56,13 +56,13 @@ export class ContractTxHelper {
   static buildDeployTransactionAndEncode(params: ContractTransactionSignParams): string {
     const tx = this.buildDeployTransaction(params);
     this.signTransaction(tx, params.signer, params.proofOfWork);
-    return tx.ToStringEncoded(true).toUpperCase();
+    return tx.toStringEncoded(true).toUpperCase();
   }
 
   static buildUpgradeTransactionAndEncode(params: ContractTransactionSignParams): string {
     const tx = this.buildUpgradeTransaction(params);
     this.signTransaction(tx, params.signer, params.proofOfWork);
-    return tx.ToStringEncoded(true).toUpperCase();
+    return tx.toStringEncoded(true).toUpperCase();
   }
 
   static buildDeployScriptFromBundle(
@@ -121,11 +121,11 @@ export class ContractTxHelper {
     const nullAddress = new ScriptBuilder().NullAddress;
 
     return new ScriptBuilder()
-      .BeginScript()
-      .AllowGas(fromAddress, nullAddress, gasPrice, gasLimit)
-      .CallInterop(interopName, [fromAddress, contractName, scriptBytes, abiBytes])
-      .SpendGas(fromAddress)
-      .EndScript();
+      .beginScript()
+      .allowGas(fromAddress, nullAddress, gasPrice, gasLimit)
+      .callInterop(interopName, [fromAddress, contractName, scriptBytes, abiBytes])
+      .spendGas(fromAddress)
+      .endScript();
   }
 
   private static buildContractLifecycleTransaction(

@@ -1,7 +1,7 @@
-import { ICarbonBlob } from '../../interfaces/Carbon/ICarbonBlob.js';
+import { CarbonBlobLike } from '../../interfaces/Carbon/ICarbonBlob.js';
 import { CarbonBinaryReader, CarbonBinaryWriter } from '../CarbonSerialization.js';
 
-export class SmallString implements ICarbonBlob {
+export class SmallString implements CarbonBlobLike {
   constructor(public data: string = '') {
     const len = new TextEncoder().encode(data).length;
     if (len > 255) throw new Error('SmallString too long');

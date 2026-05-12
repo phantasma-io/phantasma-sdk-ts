@@ -1,8 +1,8 @@
-import { ICarbonBlob } from '../../../interfaces/Carbon/ICarbonBlob.js';
+import { CarbonBlobLike } from '../../../interfaces/Carbon/ICarbonBlob.js';
 import { CarbonBinaryReader, CarbonBinaryWriter } from '../../CarbonSerialization.js';
 import { TxMsgCall } from './TxMsgCall.js';
 
-export class TxMsgCallMulti implements ICarbonBlob {
+export class TxMsgCallMulti implements CarbonBlobLike {
   constructor(public calls: TxMsgCall[] = []) {}
 
   write(w: CarbonBinaryWriter): void {

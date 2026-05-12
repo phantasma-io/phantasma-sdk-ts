@@ -58,7 +58,7 @@ export class CreateTokenSeriesTxHelper {
     const tx = this.buildTx(
       tokenId,
       seriesInfo,
-      new Bytes32(signer.PublicKey),
+      new Bytes32(signer.publicKey),
       feeOptions,
       maxData,
       expiry

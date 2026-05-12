@@ -63,9 +63,9 @@ describe('ScriptBuilder numeric arguments', () => {
 
   test('small LP ids passed as JS number stay decimal strings for compatibility', () => {
     const script = new ScriptBuilder()
-      .BeginScript()
-      .CallContract('SATRN', 'removeLiquidity', [from, 4294967423])
-      .EndScript();
+      .beginScript()
+      .callContract('SATRN', 'removeLiquidity', [from, 4294967423])
+      .endScript();
 
     const firstLoad = parseFirstLoadInstruction(script);
     expect(firstLoad.reg).toBe(0);
@@ -80,24 +80,24 @@ describe('ScriptBuilder numeric arguments', () => {
     expect(rounded.toString()).toBe('9007199254740992');
 
     const script = new ScriptBuilder()
-      .BeginScript()
-      .CallContract('SATRN', 'removeLiquidity', [from, rounded])
-      .EndScript();
+      .beginScript()
+      .callContract('SATRN', 'removeLiquidity', [from, rounded])
+      .endScript();
 
     const firstLoad = parseFirstLoadInstruction(script);
     expect(firstLoad.type).toBe(VMType.String);
     expect(payloadAsAscii(firstLoad.payload)).toBe('9007199254740992');
   });
 
-  test('bigint arguments serialize as exact VM numbers in generic CallContract path', () => {
+  test('bigint arguments serialize as exact VM numbers in generic callContract path', () => {
     const exactLpId = BigInt(
       '100152248859758165081358319173701784838411236087473055789578298559873130784096'
     );
 
     const script = new ScriptBuilder()
-      .BeginScript()
-      .CallContract('SATRN', 'removeLiquidity', [from, exactLpId])
-      .EndScript();
+      .beginScript()
+      .callContract('SATRN', 'removeLiquidity', [from, exactLpId])
+      .endScript();
 
     const firstLoad = parseFirstLoadInstruction(script);
     expect(firstLoad.type).toBe(VMType.Number);

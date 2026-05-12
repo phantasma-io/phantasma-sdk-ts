@@ -1,4 +1,4 @@
-import { ICarbonBlob } from '../../../../interfaces/Carbon/ICarbonBlob.js';
+import { CarbonBlobLike } from '../../../../interfaces/Carbon/ICarbonBlob.js';
 import { CarbonBinaryReader, CarbonBinaryWriter } from '../../../CarbonSerialization.js';
 import { Bytes32 } from '../../Bytes32.js';
 import { IntX } from '../../IntX.js';
@@ -7,7 +7,7 @@ export enum ListingType {
   FixedPrice = 0,
 }
 
-export class TokenListing implements ICarbonBlob {
+export class TokenListing implements CarbonBlobLike {
   constructor(
     public type: ListingType = ListingType.FixedPrice,
     public seller: Bytes32 = new Bytes32(),

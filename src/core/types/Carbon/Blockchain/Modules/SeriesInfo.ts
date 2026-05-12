@@ -1,9 +1,9 @@
-import { ICarbonBlob } from '../../../../interfaces/Carbon/ICarbonBlob.js';
+import { CarbonBlobLike } from '../../../../interfaces/Carbon/ICarbonBlob.js';
 import type { CarbonBinaryReader, CarbonBinaryWriter } from '../../../CarbonSerialization.js';
 import { Bytes32 } from '../../Bytes32.js';
 import { VmStructSchema } from '../Vm/VmStructSchema.js';
 
-export class SeriesInfo implements ICarbonBlob {
+export class SeriesInfo implements CarbonBlobLike {
   maxMint: number; // uint32
   maxSupply: number; // uint32
   owner: Bytes32;

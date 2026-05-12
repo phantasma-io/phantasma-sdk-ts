@@ -1,9 +1,9 @@
-import { ICarbonBlob } from '../../interfaces/Carbon/ICarbonBlob.js';
+import { CarbonBlobLike } from '../../interfaces/Carbon/ICarbonBlob.js';
 import { CarbonBinaryReader, CarbonBinaryWriter } from '../CarbonSerialization.js';
 import { Bytes32 } from './Bytes32.js';
 import { Bytes64 } from './Bytes64.js';
 
-export class Witness implements ICarbonBlob {
+export class Witness implements CarbonBlobLike {
   constructor(
     public address: Bytes32 = Bytes32.Empty,
     public signature: Bytes64 = Bytes64.Empty

@@ -1,8 +1,8 @@
-import { ICarbonBlob } from '../../interfaces/Carbon/ICarbonBlob.js';
+import { CarbonBlobLike } from '../../interfaces/Carbon/ICarbonBlob.js';
 import { bytesToHex } from '../../utils/Hex.js';
 import { CarbonBinaryReader, CarbonBinaryWriter } from '../CarbonSerialization.js';
 
-export class Bytes16 implements ICarbonBlob {
+export class Bytes16 implements CarbonBlobLike {
   static readonly Empty = new Bytes16(new Uint8Array(16));
   constructor(public bytes: Uint8Array = new Uint8Array(16)) {
     if (bytes.length !== 16) throw new Error('Bytes16 length must be 16');
@@ -27,13 +27,18 @@ export class Bytes16 implements ICarbonBlob {
     return true;
   }
 
-  ToHex(): string {
+  toHex(): string {
     return bytesToHex(this.bytes);
+  }
+
+  /** @deprecated Use `toHex` instead. This alias will be removed in v1.0. */
+  ToHex(): string {
+    return this.toHex();
   }
 
   // Used by console.log / util.inspect
   [Symbol.for('nodejs.util.inspect.custom')]() {
     // Return a pretty, concise representation
-    return `Bytes16(${this.ToHex()})`;
+    return `Bytes16(${this.toHex()})`;
   }
 }

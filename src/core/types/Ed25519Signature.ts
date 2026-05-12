@@ -1,4 +1,4 @@
-import { IKeyPair } from '../interfaces/IKeyPair.js';
+import { IKeyPair, KeyPair } from '../interfaces/IKeyPair.js';
 import { Signature, SignatureKind } from '../interfaces/Signature.js';
 import { Address } from './Address.js';
 
@@ -14,21 +14,31 @@ export class Ed25519Signature implements Signature {
     this.Bytes = bytes;
   }
 
-  Verify(message: Uint8Array, address: Address): boolean {
-    return this.VerifyMultiple(message, [address]);
+  verify(message: Uint8Array, address: Address): boolean {
+    return this.verifyMultiple(message, [address]);
   }
 
-  public VerifyMultiple(message: Uint8Array, addresses: Address[]): boolean {
+  /** @deprecated Use `verify` instead. This alias will be removed in v1.0. */
+  Verify(message: Uint8Array, address: Address): boolean {
+    return this.verify(message, address);
+  }
+
+  public verifyMultiple(message: Uint8Array, addresses: Address[]): boolean {
     for (const address of addresses) {
-      if (!address.IsUser) {
+      if (!address.isUser) {
         continue;
       }
-      const pubKey = address.ToByteArray().slice(2);
+      const pubKey = address.toByteArray().slice(2);
       if (verifyEd25519(message, this.Bytes, pubKey)) {
         return true;
       }
     }
     return false;
+  }
+
+  /** @deprecated Use `verifyMultiple` instead. This alias will be removed in v1.0. */
+  public VerifyMultiple(message: Uint8Array, addresses: Address[]): boolean {
+    return this.verifyMultiple(message, addresses);
   }
 
   public SerializeData(writer: PBinaryWriter) {
@@ -40,14 +50,27 @@ export class Ed25519Signature implements Signature {
     this.Bytes = stringToUint8Array(reader.readString());
   }
 
-  ToByteArray(): Uint8Array {
+  toByteArray(): Uint8Array {
     const stream = new Uint8Array(64);
     const writer = new PBinaryWriter(stream);
     this.SerializeData(writer);
     return new Uint8Array(stream);
   }
 
+  /** @deprecated Use `toByteArray` instead. This alias will be removed in v1.0. */
+  ToByteArray(): Uint8Array {
+    return this.toByteArray();
+  }
+
+  public static generate(keypair: KeyPair, message: Uint8Array): Ed25519Signature;
+  public static generate(keypair: IKeyPair, message: Uint8Array): Ed25519Signature;
+  public static generate(keypair: KeyPair | IKeyPair, message: Uint8Array): Ed25519Signature {
+    const privateKey = 'privateKey' in keypair ? keypair.privateKey : keypair.PrivateKey;
+    return new Ed25519Signature(signEd25519(message, privateKey));
+  }
+
+  /** @deprecated Use `generate` instead. This alias will be removed in v1.0. */
   public static Generate(keypair: IKeyPair, message: Uint8Array): Ed25519Signature {
-    return new Ed25519Signature(signEd25519(message, keypair.PrivateKey));
+    return Ed25519Signature.generate(keypair, message);
   }
 }

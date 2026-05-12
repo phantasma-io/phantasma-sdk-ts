@@ -251,10 +251,15 @@ export class PBinaryWriter {
     return this;
   }
 
-  public AppendHexEncoded(bytesHex: string): this {
+  public appendHexEncoded(bytesHex: string): this {
     const bytes = hexToBytes(bytesHex);
     this.writeVarInt(bytes.length);
     this.appendBytes(bytes);
     return this;
+  }
+
+  /** @deprecated Use `appendHexEncoded` instead. This alias will be removed in v1.0. */
+  public AppendHexEncoded(bytesHex: string): this {
+    return this.appendHexEncoded(bytesHex);
   }
 }

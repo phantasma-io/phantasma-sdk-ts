@@ -255,16 +255,16 @@ const baseVectorTx = (type: TxTypes, gasFrom: Bytes32): TxMsg =>
 const signedTransferVectorBytes = (): Uint8Array => {
   const sender = txSender();
   const receiver = txReceiver();
-  const msg = baseVectorTx(TxTypes.TransferFungible, new Bytes32(sender.PublicKey));
-  msg.msg = new TxMsgTransferFungible(new Bytes32(receiver.PublicKey), 1n, 100000000n);
+  const msg = baseVectorTx(TxTypes.TransferFungible, new Bytes32(sender.publicKey));
+  msg.msg = new TxMsgTransferFungible(new Bytes32(receiver.publicKey), 1n, 100000000n);
   return TxMsgSigner.signAndSerialize(msg, sender);
 };
 
 const carbonVectorTx = (kind: Kind): TxMsg => {
   const sender = txSender();
   const receiver = txReceiver();
-  const senderPub = new Bytes32(sender.PublicKey);
-  const receiverPub = new Bytes32(receiver.PublicKey);
+  const senderPub = new Bytes32(sender.publicKey);
+  const receiverPub = new Bytes32(receiver.publicKey);
 
   switch (kind) {
     case 'TX1': {
@@ -771,8 +771,8 @@ describe('CarbonSerialization.ts ↔ C# fixtures (decode)', () => {
         const txReceiver = PhantasmaKeys.fromWIF(
           'KwVG94yjfVg1YKFyRxAGtug93wdRbmLnqqrFV6Yd2CiA9KZDAp4H'
         );
-        const senderPub = new Bytes32(txSender.PublicKey);
-        const receiverPub = new Bytes32(txReceiver.PublicKey);
+        const senderPub = new Bytes32(txSender.publicKey);
+        const receiverPub = new Bytes32(txReceiver.publicKey);
 
         const decoded = v as SignedTxMsg;
         expect(decoded.msg).toBeDefined();
@@ -804,8 +804,8 @@ describe('CarbonSerialization.ts ↔ C# fixtures (decode)', () => {
         const txReceiver = PhantasmaKeys.fromWIF(
           'KwVG94yjfVg1YKFyRxAGtug93wdRbmLnqqrFV6Yd2CiA9KZDAp4H'
         );
-        const senderPub = new Bytes32(txSender.PublicKey);
-        const receiverPub = new Bytes32(txReceiver.PublicKey);
+        const senderPub = new Bytes32(txSender.publicKey);
+        const receiverPub = new Bytes32(txReceiver.publicKey);
 
         const decoded = v as TxMsg;
         expect(decoded.type).toBe(TxTypes.TransferFungible_GasPayer);
@@ -829,7 +829,7 @@ describe('CarbonSerialization.ts ↔ C# fixtures (decode)', () => {
         const txSender = PhantasmaKeys.fromWIF(
           'KwPpBSByydVKqStGHAnZzQofCqhDmD2bfRgc9BmZqM3ZmsdWJw4d'
         );
-        const senderPub = new Bytes32(txSender.PublicKey);
+        const senderPub = new Bytes32(txSender.publicKey);
 
         const decoded = v as TxMsg;
         expect(decoded.type).toBe(TxTypes.BurnFungible_GasPayer);
@@ -855,8 +855,8 @@ describe('CarbonSerialization.ts ↔ C# fixtures (decode)', () => {
         const txReceiver = PhantasmaKeys.fromWIF(
           'KwVG94yjfVg1YKFyRxAGtug93wdRbmLnqqrFV6Yd2CiA9KZDAp4H'
         );
-        const senderPub = new Bytes32(txSender.PublicKey);
-        const receiverPub = new Bytes32(txReceiver.PublicKey);
+        const senderPub = new Bytes32(txSender.publicKey);
+        const receiverPub = new Bytes32(txReceiver.publicKey);
 
         const decoded = v as TxMsg;
         expect(decoded.type).toBe(TxTypes.MintFungible);
@@ -889,7 +889,7 @@ describe('CarbonSerialization.ts ↔ C# fixtures (decode)', () => {
 
         // Sender keys (your project should already have this)
         const txSender = PhantasmaKeys.fromWIF(wif);
-        const senderPubKey = new Bytes32(txSender.PublicKey);
+        const senderPubKey = new Bytes32(txSender.publicKey);
 
         const feeOptions = new CreateTokenFeeOptions(
           gasFeeBase,
@@ -947,7 +947,7 @@ describe('CarbonSerialization.ts ↔ C# fixtures (decode)', () => {
 
         // Sender keys
         const txSender = PhantasmaKeys.fromWIF(wif);
-        const senderPubKey = new Bytes32(txSender.PublicKey);
+        const senderPubKey = new Bytes32(txSender.publicKey);
 
         const newPhantasmaSeriesId = (1n << 256n) - 1n;
 
@@ -1003,7 +1003,7 @@ describe('CarbonSerialization.ts ↔ C# fixtures (decode)', () => {
         const feeMultiplier = 1000n;
 
         const txSender = PhantasmaKeys.fromWIF(wif);
-        const senderPubKey = new Bytes32(txSender.PublicKey);
+        const senderPubKey = new Bytes32(txSender.publicKey);
 
         const phantasmaNftId = (1n << 256n) - 1n;
         const phantasmaRomData = new Uint8Array([0x01, 0x42]);

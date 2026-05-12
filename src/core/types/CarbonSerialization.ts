@@ -7,7 +7,7 @@
  *   payload: the low-order bytes of the validator/runtime 256-bit word after trailing fill trimming
  */
 
-import { ICarbonBlob } from '../interfaces/Carbon/ICarbonBlob.js';
+import { CarbonBlobLike } from '../interfaces/Carbon/ICarbonBlob.js';
 import { Bytes16 } from './Carbon/Bytes16.js';
 import { Bytes32 } from './Carbon/Bytes32.js';
 import { Bytes64 } from './Carbon/Bytes64.js';
@@ -102,11 +102,11 @@ export class CarbonBinaryWriter {
     this.writeExactly(bytes, 64);
   }
 
-  // Blobs (ICarbonBlob)
-  writeBlob<T extends ICarbonBlob>(data: T): void {
+  // Blobs (CarbonBlobLike)
+  writeBlob<T extends CarbonBlobLike>(data: T): void {
     data.write(this);
   }
-  writeArrayBlob<T extends ICarbonBlob>(arr: T[]): void {
+  writeArrayBlob<T extends CarbonBlobLike>(arr: T[]): void {
     this.write4(arr.length);
     for (const t of arr) {
       t.write(this);
@@ -284,13 +284,13 @@ export class CarbonBinaryReader {
     out.bytes = this.read64();
   }
 
-  // Blobs (ICarbonBlob)
-  readBlob<T extends ICarbonBlob>(ctor: new () => T): T {
+  // Blobs (CarbonBlobLike)
+  readBlob<T extends CarbonBlobLike>(ctor: new () => T): T {
     const t = new ctor();
     t.read(this);
     return t;
   }
-  readArrayBlob<T extends ICarbonBlob>(ctor: new () => T): T[] {
+  readArrayBlob<T extends CarbonBlobLike>(ctor: new () => T): T[] {
     const len = this.read4();
     const arr: T[] = new Array(len);
     for (let i = 0; i < len; i++) {
@@ -490,10 +490,10 @@ export function twosComplementLEToBigInt(bytes: Uint8Array): bigint {
 }
 
 // Convenience helpers to mirror C# generic methods
-export function writeBlob<T extends ICarbonBlob>(w: CarbonBinaryWriter, data: T): void {
+export function writeBlob<T extends CarbonBlobLike>(w: CarbonBinaryWriter, data: T): void {
   data.write(w);
 }
-export function readBlob<T extends ICarbonBlob>(r: CarbonBinaryReader, ctor: new () => T): T {
+export function readBlob<T extends CarbonBlobLike>(r: CarbonBinaryReader, ctor: new () => T): T {
   const t = new ctor();
   t.read(r);
   return t;

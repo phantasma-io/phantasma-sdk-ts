@@ -10,9 +10,9 @@ import { TxMsg } from '../TxMsg.js';
 
 export class TxMsgSigner {
   static sign(msg: TxMsg, key: PhantasmaKeys): SignedTxMsg {
-    const sig = new Bytes64(Ed25519Signature.Generate(key, CarbonBlob.Serialize(msg)).Bytes);
+    const sig = new Bytes64(Ed25519Signature.generate(key, CarbonBlob.Serialize(msg)).Bytes);
 
-    return new SignedTxMsg(msg, [new Witness(new Bytes32(key.PublicKey), sig)]);
+    return new SignedTxMsg(msg, [new Witness(new Bytes32(key.publicKey), sig)]);
   }
 
   static signAndSerialize(msg: TxMsg, key: PhantasmaKeys): Uint8Array {

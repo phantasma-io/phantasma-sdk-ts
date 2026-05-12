@@ -1,4 +1,4 @@
-import { IKeyPair } from '../interfaces/IKeyPair.js';
+import { IKeyPair, KeyPair } from '../interfaces/IKeyPair.js';
 import { Address } from './Address.js';
 import base58 from 'bs58';
 import { encode as encodeWif } from 'wif';
@@ -8,16 +8,36 @@ import { Ed25519Signature } from './Ed25519Signature.js';
 import { Entropy } from './Entropy.js';
 import { getEd25519PublicKey } from './Ed25519.js';
 
-export class PhantasmaKeys implements IKeyPair {
+export class PhantasmaKeys implements KeyPair, IKeyPair {
   private _privateKey: Uint8Array;
-  public get PrivateKey() {
+  public get privateKey() {
     return this._privateKey;
   }
+
+  /** @deprecated Use `privateKey` instead. This alias will be removed in v1.0. */
+  public get PrivateKey() {
+    return this.privateKey;
+  }
+
   private _publicKey: Uint8Array;
-  public get PublicKey() {
+  public get publicKey() {
     return this._publicKey;
   }
-  public readonly Address: Address;
+
+  /** @deprecated Use `publicKey` instead. This alias will be removed in v1.0. */
+  public get PublicKey() {
+    return this.publicKey;
+  }
+
+  private readonly _address: Address;
+  public get address(): Address {
+    return this._address;
+  }
+
+  /** @deprecated Use `address` instead. This alias will be removed in v1.0. */
+  public get Address(): Address {
+    return this.address;
+  }
 
   public static readonly PrivateKeyLength = 32;
 
@@ -36,15 +56,15 @@ export class PhantasmaKeys implements IKeyPair {
     this._privateKey.set(privateKey);
     this._publicKey = getEd25519PublicKey(this._privateKey);
 
-    this.Address = Address.FromKey(this);
+    this._address = Address.fromKey(this);
   }
 
   public toString() {
-    return this.Address.Text;
+    return this.address.text;
   }
 
   public static generate(): PhantasmaKeys {
-    const privateKey = Entropy.GetRandomBytes(PhantasmaKeys.PrivateKeyLength);
+    const privateKey = Entropy.getRandomBytes(PhantasmaKeys.PrivateKeyLength);
 
     const pair = new PhantasmaKeys(privateKey);
     return pair;
@@ -90,6 +110,11 @@ export class PhantasmaKeys implements IKeyPair {
     return result;
   }
 
+  public sign(msg: Uint8Array): Signature {
+    return Ed25519Signature.generate(this, msg);
+  }
+
+  /** @deprecated Use `sign` instead. This alias will be removed in v1.0. */
   public Sign(
     msg: Uint8Array,
     customSignFunction?: (
@@ -99,6 +124,6 @@ export class PhantasmaKeys implements IKeyPair {
     ) => Uint8Array
   ): Signature {
     void customSignFunction;
-    return Ed25519Signature.Generate(this, msg);
+    return this.sign(msg);
   }
 }

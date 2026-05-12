@@ -1,7 +1,7 @@
-import { ICarbonBlob } from '../../../interfaces/Carbon/ICarbonBlob.js';
+import { CarbonBlobLike } from '../../../interfaces/Carbon/ICarbonBlob.js';
 import { CarbonBinaryReader, CarbonBinaryWriter } from '../../CarbonSerialization.js';
 
-export class TxMsgPhantasmaRaw implements ICarbonBlob {
+export class TxMsgPhantasmaRaw implements CarbonBlobLike {
   transaction: Uint8Array;
 
   constructor(transaction: Uint8Array = new Uint8Array()) {

@@ -45,7 +45,7 @@
     "test:esm": "node --experimental-vm-modules ./node_modules/jest/bin/jest.js --config jest.config.esm.cjs --runInBand",
     "test:esm-runtime": "npm run build:esm && node --input-type=module -e \"import('./dist/esm/index.js').then((m)=>{ if (!('PhantasmaAPI' in m)) { console.error('Missing PhantasmaAPI export'); process.exit(1); } }).catch((err)=>{ console.error(err); process.exit(1); })\"",
     "coverage": "jest --coverage",
-    "lint": "prettier --check . && eslint .",
+    "lint": "node scripts/check-deprecated-api-usage.mjs && prettier --check . && eslint .",
     "format": "prettier --write .",
     "prettier-watch": "onchange 'src/**/*.ts' -- prettier --write {{changed}}"
   },

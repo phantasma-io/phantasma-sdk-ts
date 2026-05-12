@@ -1,7 +1,15 @@
 import { ContractInterface } from '../types/index.js';
 
+export interface ContractDescriptor {
+  name: string;
+  abi: ContractInterface;
+}
+
+/** @deprecated Use `ContractDescriptor` instead. This compatibility interface will be removed in v1.0. */
 export interface IContract {
+  /** @deprecated Use `name` instead. */
   Name: string;
+  /** @deprecated Use `abi` instead. */
   ABI: ContractInterface;
 }
 

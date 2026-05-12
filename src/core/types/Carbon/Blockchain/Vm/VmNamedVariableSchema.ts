@@ -1,10 +1,10 @@
-import { ICarbonBlob } from '../../../../interfaces/Carbon/ICarbonBlob.js';
+import { CarbonBlobLike } from '../../../../interfaces/Carbon/ICarbonBlob.js';
 import { CarbonBinaryReader, CarbonBinaryWriter } from '../../../CarbonSerialization.js';
 import { SmallString } from '../../SmallString.js';
 import { VmType } from './VmType.js';
 import { VmVariableSchema } from './VmVariableSchema.js';
 
-export class VmNamedVariableSchema implements ICarbonBlob {
+export class VmNamedVariableSchema implements CarbonBlobLike {
   name!: SmallString;
   schema!: VmVariableSchema;
 

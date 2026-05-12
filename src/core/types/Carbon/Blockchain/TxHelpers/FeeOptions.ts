@@ -1,13 +1,16 @@
 // namespace PhantasmaPhoenix.Protocol.Carbon.Blockchain.TxHelpers
 
 /** Common interface for fee option. */
-export interface IFeeOptions {
+export interface FeeOptionsLike {
   feeMultiplier: bigint;
   calculateMaxGas(...args: unknown[]): bigint;
 }
 
+/** @deprecated Use `FeeOptionsLike` instead. This compatibility interface will be removed in v1.0. */
+export type IFeeOptions = FeeOptionsLike;
+
 /** Base fee options with sensible defaults. */
-export class FeeOptions implements IFeeOptions {
+export class FeeOptions implements FeeOptionsLike {
   gasFeeBase: bigint;
   feeMultiplier: bigint;
 
@@ -22,7 +25,7 @@ export class FeeOptions implements IFeeOptions {
 }
 
 /** Fee options for token creation transactions. */
-export class CreateTokenFeeOptions extends FeeOptions implements IFeeOptions {
+export class CreateTokenFeeOptions extends FeeOptions implements FeeOptionsLike {
   gasFeeCreateTokenBase: bigint;
   gasFeeCreateTokenSymbol: bigint;
 
@@ -51,7 +54,7 @@ export class CreateTokenFeeOptions extends FeeOptions implements IFeeOptions {
 }
 
 /** Fee options for creating a new series on an NFT token. */
-export class CreateSeriesFeeOptions extends FeeOptions implements IFeeOptions {
+export class CreateSeriesFeeOptions extends FeeOptions implements FeeOptionsLike {
   gasFeeCreateSeriesBase: bigint;
 
   constructor(
@@ -69,7 +72,7 @@ export class CreateSeriesFeeOptions extends FeeOptions implements IFeeOptions {
 }
 
 /** Fee options for minting non-fungible tokens (NFT instances). */
-export class MintNftFeeOptions extends FeeOptions implements IFeeOptions {
+export class MintNftFeeOptions extends FeeOptions implements FeeOptionsLike {
   constructor(gasFeeBase: bigint = 10_000n, feeMultiplier: bigint = 1_000n) {
     super(gasFeeBase, feeMultiplier);
   }

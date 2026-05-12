@@ -1,8 +1,8 @@
-import { ICarbonBlob } from '../../../interfaces/Carbon/ICarbonBlob.js';
+import { CarbonBlobLike } from '../../../interfaces/Carbon/ICarbonBlob.js';
 import { CarbonBinaryReader, CarbonBinaryWriter } from '../../CarbonSerialization.js';
 import { SmallString } from '../SmallString.js';
 
-export class TxMsgPhantasma implements ICarbonBlob {
+export class TxMsgPhantasma implements CarbonBlobLike {
   nexus: SmallString;
   chain: SmallString;
   script: Uint8Array;
