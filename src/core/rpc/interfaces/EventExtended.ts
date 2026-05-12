@@ -1,1 +1,1 @@
-export * from '../../../rpc/interfaces/EventExtended.js';
+export * from '../../../rpc/interfaces/event-extended.js';

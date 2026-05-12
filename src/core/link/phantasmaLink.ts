@@ -1,1 +1,1 @@
-export * from '../../link/phantasmaLink.js';
+export * from '../../link/phantasma-link.js';

@@ -1,1 +1,1 @@
-export * from '../../interfaces/IKeyPair.js';
+export * from '../../interfaces/key-pair.js';

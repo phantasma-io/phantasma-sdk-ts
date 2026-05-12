@@ -1,1 +1,1 @@
-export * from '../../../types/Extensions/PBinaryWriter.js';
+export * from '../../../types/extensions/p-binary-writer.js';

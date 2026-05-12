@@ -1,1 +1,1 @@
-export * from '../../../rpc/interfaces/CursorPaginatedResult.js';
+export * from '../../../rpc/interfaces/cursor-paginated-result.js';

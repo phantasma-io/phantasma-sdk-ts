@@ -1,1 +1,1 @@
-export * from '../../../../../types/Carbon/Blockchain/Vm/index.js';
+export * from '../../../../../types/carbon/blockchain/vm/index.js';

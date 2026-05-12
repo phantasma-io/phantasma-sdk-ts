@@ -1,1 +1,1 @@
-export * from '../../../../../types/Carbon/Blockchain/Vm/VmDynamicVariable.js';
+export * from '../../../../../types/carbon/blockchain/vm/vm-dynamic-variable.js';

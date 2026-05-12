@@ -1,1 +1,1 @@
-export * from '../../../../../../types/Carbon/Blockchain/Modules/Builders/TokenSeriesMetadataBuilder.js';
+export * from '../../../../../../types/carbon/blockchain/modules/builders/token-series-metadata-builder.js';

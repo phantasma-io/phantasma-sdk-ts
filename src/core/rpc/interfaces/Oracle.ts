@@ -1,1 +1,1 @@
-export * from '../../../rpc/interfaces/Oracle.js';
+export * from '../../../rpc/interfaces/oracle.js';

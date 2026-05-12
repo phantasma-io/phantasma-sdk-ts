@@ -1,1 +1,1 @@
-export * from '../../types/Serialization.js';
+export * from '../../types/serialization.js';

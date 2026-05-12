@@ -1,1 +1,1 @@
-export * from '../../vm/ScriptBuilder.js';
+export * from '../../vm/script-builder.js';

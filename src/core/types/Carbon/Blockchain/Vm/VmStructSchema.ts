@@ -1,1 +1,1 @@
-export * from '../../../../../types/Carbon/Blockchain/Vm/VmStructSchema.js';
+export * from '../../../../../types/carbon/blockchain/vm/vm-struct-schema.js';

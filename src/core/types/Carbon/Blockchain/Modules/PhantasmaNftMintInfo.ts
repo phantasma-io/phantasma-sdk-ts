@@ -1,1 +1,1 @@
-export * from '../../../../../types/Carbon/Blockchain/Modules/PhantasmaNftMintInfo.js';
+export * from '../../../../../types/carbon/blockchain/modules/phantasma-nft-mint-info.js';

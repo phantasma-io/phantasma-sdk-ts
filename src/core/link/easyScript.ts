@@ -1,1 +1,1 @@
-export * from '../../link/easyScript.js';
+export * from '../../link/easy-script.js';

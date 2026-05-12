@@ -1,1 +1,1 @@
-export * from '../../interfaces/IStack.js';
+export * from '../../interfaces/stack.js';

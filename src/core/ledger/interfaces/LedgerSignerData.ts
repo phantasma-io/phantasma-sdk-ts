@@ -1,1 +1,1 @@
-export * from '../../../ledger/interfaces/LedgerSignerData.js';
+export * from '../../../ledger/interfaces/ledger-signer-data.js';

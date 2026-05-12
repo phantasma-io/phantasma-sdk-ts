@@ -1,1 +1,1 @@
-export * from '../../../rpc/interfaces/Organization.js';
+export * from '../../../rpc/interfaces/organization.js';

@@ -1,1 +1,1 @@
-export * from '../../interfaces/Signature.js';
+export * from '../../interfaces/signature.js';

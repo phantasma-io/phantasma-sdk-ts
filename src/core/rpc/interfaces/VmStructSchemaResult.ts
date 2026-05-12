@@ -1,1 +1,1 @@
-export * from '../../../rpc/interfaces/VmStructSchemaResult.js';
+export * from '../../../rpc/interfaces/vm-struct-schema-result.js';

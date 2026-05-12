@@ -1,1 +1,1 @@
-export * from '../../../../types/Carbon/Blockchain/TxMsgSpecialResolution.js';
+export * from '../../../../types/carbon/blockchain/tx-msg-special-resolution.js';

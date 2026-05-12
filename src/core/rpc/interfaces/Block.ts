@@ -1,1 +1,1 @@
-export * from '../../../rpc/interfaces/Block.js';
+export * from '../../../rpc/interfaces/block.js';

@@ -1,1 +1,1 @@
-export * from '../../../rpc/interfaces/Swap.js';
+export * from '../../../rpc/interfaces/swap.js';

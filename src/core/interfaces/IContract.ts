@@ -1,1 +1,1 @@
-export * from '../../interfaces/IContract.js';
+export * from '../../interfaces/contract.js';

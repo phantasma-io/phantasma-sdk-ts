@@ -1,1 +1,1 @@
-export * from '../../../ledger/interfaces/Device.js';
+export * from '../../../ledger/interfaces/device.js';

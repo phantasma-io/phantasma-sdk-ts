@@ -1,1 +1,1 @@
-export * from '../../../rpc/interfaces/Balance.js';
+export * from '../../../rpc/interfaces/balance.js';

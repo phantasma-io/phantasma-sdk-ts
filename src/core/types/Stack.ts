@@ -1,1 +1,1 @@
-export * from '../../types/Stack.js';
+export * from '../../types/stack.js';

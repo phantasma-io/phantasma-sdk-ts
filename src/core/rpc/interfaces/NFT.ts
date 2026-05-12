@@ -1,1 +1,1 @@
-export * from '../../../rpc/interfaces/NFT.js';
+export * from '../../../rpc/interfaces/nft.js';

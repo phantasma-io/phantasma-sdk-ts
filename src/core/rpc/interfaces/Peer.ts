@@ -1,1 +1,1 @@
-export * from '../../../rpc/interfaces/Peer.js';
+export * from '../../../rpc/interfaces/peer.js';

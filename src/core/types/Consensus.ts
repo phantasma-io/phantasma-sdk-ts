@@ -1,1 +1,1 @@
-export * from '../../types/Consensus.js';
+export * from '../../types/consensus.js';

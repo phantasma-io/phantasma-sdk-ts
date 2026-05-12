@@ -1,1 +1,1 @@
-export * from '../../vm/Disassembler.js';
+export * from '../../vm/disassembler.js';

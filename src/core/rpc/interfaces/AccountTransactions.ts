@@ -1,1 +1,1 @@
-export * from '../../../rpc/interfaces/AccountTransactions.js';
+export * from '../../../rpc/interfaces/account-transactions.js';

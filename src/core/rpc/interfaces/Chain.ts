@@ -1,1 +1,1 @@
-export * from '../../../rpc/interfaces/Chain.js';
+export * from '../../../rpc/interfaces/chain.js';

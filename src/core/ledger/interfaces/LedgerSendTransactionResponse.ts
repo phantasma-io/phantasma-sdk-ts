@@ -1,1 +1,1 @@
-export * from '../../../ledger/interfaces/LedgerSendTransactionResponse.js';
+export * from '../../../ledger/interfaces/ledger-send-transaction-response.js';

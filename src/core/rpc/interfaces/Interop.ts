@@ -1,1 +1,1 @@
-export * from '../../../rpc/interfaces/Interop.js';
+export * from '../../../rpc/interfaces/interop.js';

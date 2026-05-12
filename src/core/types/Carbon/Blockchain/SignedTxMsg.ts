@@ -1,1 +1,1 @@
-export * from '../../../../types/Carbon/Blockchain/SignedTxMsg.js';
+export * from '../../../../types/carbon/blockchain/signed-tx-msg.js';

@@ -1,1 +1,1 @@
-export * from '../../vm/Contracts.js';
+export * from '../../vm/contracts.js';

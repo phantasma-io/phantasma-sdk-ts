@@ -1,1 +1,1 @@
-export * from '../../../types/Carbon/Witness.js';
+export * from '../../../types/carbon/witness.js';

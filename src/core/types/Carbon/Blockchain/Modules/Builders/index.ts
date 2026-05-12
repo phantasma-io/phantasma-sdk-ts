@@ -1,1 +1,1 @@
-export * from '../../../../../../types/Carbon/Blockchain/Modules/Builders/index.js';
+export * from '../../../../../../types/carbon/blockchain/modules/builders/index.js';

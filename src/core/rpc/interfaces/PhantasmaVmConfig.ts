@@ -1,1 +1,1 @@
-export * from '../../../rpc/interfaces/PhantasmaVmConfig.js';
+export * from '../../../rpc/interfaces/phantasma-vm-config.js';

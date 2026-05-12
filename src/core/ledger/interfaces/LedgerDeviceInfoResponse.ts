@@ -1,1 +1,1 @@
-export * from '../../../ledger/interfaces/LedgerDeviceInfoResponse.js';
+export * from '../../../ledger/interfaces/ledger-device-info-response.js';

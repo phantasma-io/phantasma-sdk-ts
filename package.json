@@ -190,7 +190,7 @@
     "test:esm-runtime": "npm run test:package-exports",
     "test:package-exports": "npm run build && node scripts/check-package-exports.mjs && node scripts/check-public-types.mjs",
     "coverage": "jest --coverage",
-    "lint": "node scripts/check-deprecated-api-usage.mjs && node scripts/check-compat-shims.mjs && prettier --check . && eslint .",
+    "lint": "node scripts/check-deprecated-api-usage.mjs && node scripts/check-compat-shims.mjs && node scripts/check-source-filenames.mjs && prettier --check . && eslint .",
     "format": "prettier --write .",
     "prettier-watch": "onchange 'src/**/*.ts' -- prettier --write {{changed}}"
   },

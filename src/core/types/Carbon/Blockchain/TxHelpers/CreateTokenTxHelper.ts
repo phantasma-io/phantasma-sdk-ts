@@ -1,1 +1,1 @@
-export * from '../../../../../types/Carbon/Blockchain/TxHelpers/CreateTokenTxHelper.js';
+export * from '../../../../../types/carbon/blockchain/tx-helpers/create-token-tx-helper.js';

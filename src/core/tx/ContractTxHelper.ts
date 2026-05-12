@@ -1,1 +1,1 @@
-export * from '../../tx/ContractTxHelper.js';
+export * from '../../tx/contract-tx-helper.js';

@@ -1,1 +1,1 @@
-export * from '../../../rpc/interfaces/ABIMethod.js';
+export * from '../../../rpc/interfaces/abi-method.js';

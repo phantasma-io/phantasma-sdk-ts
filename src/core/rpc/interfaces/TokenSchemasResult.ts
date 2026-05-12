@@ -1,1 +1,1 @@
-export * from '../../../rpc/interfaces/TokenSchemasResult.js';
+export * from '../../../rpc/interfaces/token-schemas-result.js';

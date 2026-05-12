@@ -1,7 +1,7 @@
-import { hexToBytes } from './Hex.js';
+import { hexToBytes } from './hex.js';
 
-export * from './Hex.js';
-export * from './ValidationUtils.js';
+export * from './hex.js';
+export * from './validation-utils.js';
 export * from './logger.js';
 
 export function reverseHex(hex: string): string {

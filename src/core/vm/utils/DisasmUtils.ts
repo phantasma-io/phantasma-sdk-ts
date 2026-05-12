@@ -1,1 +1,1 @@
-export * from '../../../vm/utils/DisasmUtils.js';
+export * from '../../../vm/utils/disasm-utils.js';

@@ -2,7 +2,7 @@ import { decode as decodeWif, encode as encodeWif } from 'wif';
 import base58 from 'bs58';
 import * as bip39 from 'bip39';
 import crypto from 'crypto';
-import { getEd25519PublicKeyHex, signEd25519, verifyEd25519 } from '../types/Ed25519.js';
+import { getEd25519PublicKeyHex, signEd25519, verifyEd25519 } from '../types/ed25519.js';
 import { bytesToHex, hexToBytes } from '../utils/index.js';
 
 function ab2hexstring(arr: ArrayBuffer | ArrayLike<number>): string {

@@ -1,1 +1,1 @@
-export * from '../../../rpc/helpers/vmSchemaHelpers.js';
+export * from '../../../rpc/helpers/vm-schema-helpers.js';

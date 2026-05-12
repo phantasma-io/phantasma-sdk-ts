@@ -1,1 +1,1 @@
-export * from '../../vm/VMObject.js';
+export * from '../../vm/vm-object.js';

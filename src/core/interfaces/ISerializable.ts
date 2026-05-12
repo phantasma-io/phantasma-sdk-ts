@@ -1,1 +1,1 @@
-export * from '../../interfaces/ISerializable.js';
+export * from '../../interfaces/serializable.js';

@@ -1,1 +1,1 @@
-export * from '../../../rpc/interfaces/Validator.js';
+export * from '../../../rpc/interfaces/validator.js';

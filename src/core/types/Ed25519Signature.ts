@@ -1,1 +1,1 @@
-export * from '../../types/Ed25519Signature.js';
+export * from '../../types/ed25519-signature.js';

@@ -1,1 +1,1 @@
-export * from '../../../rpc/interfaces/Receipt.js';
+export * from '../../../rpc/interfaces/receipt.js';

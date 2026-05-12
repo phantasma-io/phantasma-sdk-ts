@@ -1,1 +1,1 @@
-export * from '../../../../../types/Carbon/Blockchain/TxHelpers/MintNonFungibleTxHelper.js';
+export * from '../../../../../types/carbon/blockchain/tx-helpers/mint-non-fungible-tx-helper.js';

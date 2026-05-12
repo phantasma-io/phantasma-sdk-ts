@@ -1,1 +1,1 @@
-export * from '../../../types/Carbon/TxTypes.js';
+export * from '../../../types/carbon/tx-types.js';

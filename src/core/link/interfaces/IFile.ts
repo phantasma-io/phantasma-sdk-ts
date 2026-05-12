@@ -1,1 +1,1 @@
-export * from '../../../link/interfaces/IFile.js';
+export * from '../../../link/interfaces/file.js';

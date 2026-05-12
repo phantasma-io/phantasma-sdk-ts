@@ -1,1 +1,1 @@
-export * from '../../../rpc/interfaces/KeyValue.js';
+export * from '../../../rpc/interfaces/key-value.js';

@@ -1,1 +1,1 @@
-export * from '../../../rpc/interfaces/TransactionData.js';
+export * from '../../../rpc/interfaces/transaction-data.js';

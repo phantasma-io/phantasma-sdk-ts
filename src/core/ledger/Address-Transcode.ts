@@ -1,1 +1,1 @@
-export * from '../../ledger/Address-Transcode.js';
+export * from '../../ledger/address-transcode.js';

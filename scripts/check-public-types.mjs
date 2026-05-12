@@ -129,9 +129,11 @@ void legacy;
 const deepImportConsumer = writeFile(
   'deep-import-consumer.ts',
   `
-import { Transaction as NewTransaction } from 'phantasma-sdk-ts/tx/Transaction';
+import { Transaction as NewTransaction } from 'phantasma-sdk-ts/tx/transaction';
 import { ScriptBuilder as NewScriptBuilder } from 'phantasma-sdk-ts/vm';
-import { Address as NewAddress } from 'phantasma-sdk-ts/types/Address';
+import { Address as NewAddress } from 'phantasma-sdk-ts/types/address';
+import { Bytes32 as NewBytes32 } from 'phantasma-sdk-ts/types/carbon/bytes32';
+import { PhantasmaLink as NewPhantasmaLink } from 'phantasma-sdk-ts/link/phantasma-link';
 import { Transaction as LegacyTransaction } from 'phantasma-sdk-ts/core/tx/Transaction';
 import { ScriptBuilder as LegacyScriptBuilder } from 'phantasma-sdk-ts/core/vm';
 import { Address as LegacyAddress } from 'phantasma-sdk-ts/core/types/Address';
@@ -144,6 +146,8 @@ const legacyScript = new LegacyScriptBuilder().beginScript().emitVarString('lega
 void legacyTx;
 void legacyScript;
 void NewAddress.nullText;
+void NewBytes32;
+void NewPhantasmaLink;
 void LegacyAddress.NullText;
 `
 );

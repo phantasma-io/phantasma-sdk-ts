@@ -1,1 +1,1 @@
-export * from '../../../rpc/interfaces/Contract.js';
+export * from '../../../rpc/interfaces/contract.js';

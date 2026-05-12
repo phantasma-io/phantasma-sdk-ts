@@ -203,8 +203,8 @@ export {
   pushMetadataField,
   seriesDefaultMetadataFields,
   standardMetadataFields,
-} from './types/Carbon/index.js';
-export type { MetadataValueInput } from './types/Carbon/index.js';
+} from './types/carbon/index.js';
+export type { MetadataValueInput } from './types/carbon/index.js';
 
 export {
   ANONYMOUS_NAME,
@@ -245,26 +245,26 @@ export {
   verifyData,
 } from './tx/utils.js';
 
-export { EasyConnect } from './link/easyConnect.js';
-export { EasyScript, Nexus } from './link/easyScript.js';
-export { PhantasmaLink } from './link/phantasmaLink.js';
-export { ProofOfWork } from './link/interfaces/ProofOfWork.js';
+export { EasyConnect } from './link/easy-connect.js';
+export { EasyScript, Nexus } from './link/easy-script.js';
+export { PhantasmaLink } from './link/phantasma-link.js';
+export { ProofOfWork } from './link/interfaces/proof-of-work.js';
 export type { LinkAccount, LinkFile } from './link/index.js';
-export type { PrebuiltTransactionSignResult } from './link/phantasmaLink.js';
+export type { PrebuiltTransactionSignResult } from './link/phantasma-link.js';
 
-export { Signature, SignatureKind } from './interfaces/Signature.js';
-export { NativeContractKind } from './interfaces/IContract.js';
-export { TokenFlags, TokenSeriesMode } from './interfaces/IToken.js';
+export { Signature, SignatureKind } from './interfaces/signature.js';
+export { NativeContractKind } from './interfaces/contract.js';
+export { TokenFlags, TokenSeriesMode } from './interfaces/token.js';
 export {
   getAddressFromLedger,
   getAddressFromPrivateKey,
   getAddressFromPublicKey,
   getAddressPublicKeyFromPublicKey,
 } from './ledger/index.js';
-export type { CarbonBlobLike } from './interfaces/Carbon/ICarbonBlob.js';
-export type { ContractDescriptor } from './interfaces/IContract.js';
-export type { FeeOptionsLike } from './types/Carbon/Blockchain/TxHelpers/FeeOptions.js';
-export type { KeyPair } from './interfaces/IKeyPair.js';
-export type { Ledger } from './ledger/interfaces/Ledger.js';
-export type { StackLike } from './interfaces/IStack.js';
-export type { TokenDescriptor } from './interfaces/IToken.js';
+export type { CarbonBlobLike } from './interfaces/carbon/carbon-blob-like.js';
+export type { ContractDescriptor } from './interfaces/contract.js';
+export type { FeeOptionsLike } from './types/carbon/blockchain/tx-helpers/fee-options.js';
+export type { KeyPair } from './interfaces/key-pair.js';
+export type { Ledger } from './ledger/interfaces/ledger.js';
+export type { StackLike } from './interfaces/stack.js';
+export type { TokenDescriptor } from './interfaces/token.js';

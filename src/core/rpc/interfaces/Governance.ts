@@ -1,1 +1,1 @@
-export * from '../../../rpc/interfaces/Governance.js';
+export * from '../../../rpc/interfaces/governance.js';

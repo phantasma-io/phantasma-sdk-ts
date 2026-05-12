@@ -1,1 +1,1 @@
-export * from '../../../rpc/interfaces/Archive.js';
+export * from '../../../rpc/interfaces/archive.js';

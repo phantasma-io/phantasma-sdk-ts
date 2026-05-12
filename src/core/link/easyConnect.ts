@@ -1,1 +1,1 @@
-export * from '../../link/easyConnect.js';
+export * from '../../link/easy-connect.js';

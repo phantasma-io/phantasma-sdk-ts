@@ -1,1 +1,1 @@
-export * from '../../../ledger/interfaces/SignResponse.js';
+export * from '../../../ledger/interfaces/sign-response.js';

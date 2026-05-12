@@ -1,1 +1,1 @@
-export * from '../../../ledger/interfaces/VersionResponse.js';
+export * from '../../../ledger/interfaces/version-response.js';

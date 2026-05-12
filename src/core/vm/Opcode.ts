@@ -1,1 +1,1 @@
-export * from '../../vm/Opcode.js';
+export * from '../../vm/opcode.js';

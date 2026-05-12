@@ -1,1 +1,1 @@
-export * from '../../../vm/utils/DisasmMethodCall.js';
+export * from '../../../vm/utils/disasm-method-call.js';

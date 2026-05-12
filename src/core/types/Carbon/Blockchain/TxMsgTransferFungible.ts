@@ -1,1 +1,1 @@
-export * from '../../../../types/Carbon/Blockchain/TxMsgTransferFungible.js';
+export * from '../../../../types/carbon/blockchain/tx-msg-transfer-fungible.js';

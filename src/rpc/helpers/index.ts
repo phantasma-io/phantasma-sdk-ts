@@ -1,1 +1,1 @@
-export * from './vmSchemaHelpers.js';
+export * from './vm-schema-helpers.js';

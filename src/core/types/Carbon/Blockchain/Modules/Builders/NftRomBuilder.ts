@@ -1,1 +1,1 @@
-export * from '../../../../../../types/Carbon/Blockchain/Modules/Builders/NftRomBuilder.js';
+export * from '../../../../../../types/carbon/blockchain/modules/builders/nft-rom-builder.js';

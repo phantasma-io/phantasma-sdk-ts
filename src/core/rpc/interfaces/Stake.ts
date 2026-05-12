@@ -1,1 +1,1 @@
-export * from '../../../rpc/interfaces/Stake.js';
+export * from '../../../rpc/interfaces/stake.js';

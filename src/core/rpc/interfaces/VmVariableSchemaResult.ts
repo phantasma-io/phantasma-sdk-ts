@@ -1,1 +1,1 @@
-export * from '../../../rpc/interfaces/VmVariableSchemaResult.js';
+export * from '../../../rpc/interfaces/vm-variable-schema-result.js';

@@ -1,1 +1,1 @@
-export * from '../../../rpc/interfaces/Storage.js';
+export * from '../../../rpc/interfaces/storage.js';

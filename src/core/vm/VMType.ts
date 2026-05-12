@@ -1,1 +1,1 @@
-export * from '../../vm/VMType.js';
+export * from '../../vm/vm-type.js';

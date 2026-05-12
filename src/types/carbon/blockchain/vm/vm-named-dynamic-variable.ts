@@ -1,0 +1,47 @@
+import { CarbonBlobLike } from '../../../../interfaces/carbon/carbon-blob-like.js';
+import { hexToBytes } from '../../../../utils/index.js';
+import { CarbonBinaryReader, CarbonBinaryWriter } from '../../../carbon-serialization.js';
+import { SmallString } from '../../small-string.js';
+import { VmDynamicVariable, type VmDynamicVariableData } from './vm-dynamic-variable.js';
+import { VmType } from './vm-type.js';
+
+export class VmNamedDynamicVariable implements CarbonBlobLike {
+  name!: SmallString;
+  value!: VmDynamicVariable;
+
+  static from(
+    name: string | SmallString,
+    type: VmType,
+    value: VmDynamicVariableData
+  ): VmNamedDynamicVariable {
+    const nv = new VmNamedDynamicVariable();
+    nv.name = name instanceof SmallString ? name : new SmallString(name);
+
+    const dyn = VmDynamicVariable.fromType(type);
+
+    if (type === VmType.Bytes && typeof value === 'string') {
+      dyn.data = hexToBytes(value);
+    } else {
+      dyn.data = value;
+    }
+
+    nv.value = dyn;
+
+    return nv;
+  }
+
+  write(w: CarbonBinaryWriter): void {
+    this.name.write(w);
+    this.value.write(w);
+  }
+  read(r: CarbonBinaryReader): void {
+    this.name = r.readBlob(SmallString);
+    this.value = r.readBlob(VmDynamicVariable);
+  }
+
+  static read(r: CarbonBinaryReader): VmNamedDynamicVariable {
+    const v = new VmNamedDynamicVariable();
+    v.read(r);
+    return v;
+  }
+}

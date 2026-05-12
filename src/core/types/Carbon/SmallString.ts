@@ -1,1 +1,1 @@
-export * from '../../../types/Carbon/SmallString.js';
+export * from '../../../types/carbon/small-string.js';

@@ -1,22 +1,22 @@
 import { logger } from '../utils/logger.js';
 import fetch from 'cross-fetch';
-import { Balance } from './interfaces/Balance.js';
-import { Organization } from './interfaces/Organization.js';
-import { Nexus } from './interfaces/Nexus.js';
-import { Account } from './interfaces/Account.js';
-import { Leaderboard } from './interfaces/Leaderboard.js';
-import { Chain } from './interfaces/Chain.js';
-import { Contract } from './interfaces/Contract.js';
-import { TransactionData } from './interfaces/TransactionData.js';
-import { AccountTransactions } from './interfaces/AccountTransactions.js';
-import { Paginated } from './interfaces/Paginated.js';
-import { Block } from './interfaces/Block.js';
-import { Token } from './interfaces/Token.js';
-import { TokenData } from './interfaces/TokenData.js';
-import { Auction } from './interfaces/Auction.js';
-import { Script } from './interfaces/Script.js';
-import { Archive } from './interfaces/Archive.js';
-import { NFT } from './interfaces/NFT.js';
+import { Balance } from './interfaces/balance.js';
+import { Organization } from './interfaces/organization.js';
+import { Nexus } from './interfaces/nexus.js';
+import { Account } from './interfaces/account.js';
+import { Leaderboard } from './interfaces/leaderboard.js';
+import { Chain } from './interfaces/chain.js';
+import { Contract } from './interfaces/contract.js';
+import { TransactionData } from './interfaces/transaction-data.js';
+import { AccountTransactions } from './interfaces/account-transactions.js';
+import { Paginated } from './interfaces/paginated.js';
+import { Block } from './interfaces/block.js';
+import { Token } from './interfaces/token.js';
+import { TokenData } from './interfaces/token-data.js';
+import { Auction } from './interfaces/auction.js';
+import { Script } from './interfaces/script.js';
+import { Archive } from './interfaces/archive.js';
+import { NFT } from './interfaces/nft.js';
 import {
   BuildInfoResult,
   CursorPaginatedResult,

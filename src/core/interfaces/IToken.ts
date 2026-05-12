@@ -1,1 +1,1 @@
-export * from '../../interfaces/IToken.js';
+export * from '../../interfaces/token.js';

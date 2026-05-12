@@ -1,1 +1,1 @@
-export * from '../../../rpc/interfaces/SendRawTx.js';
+export * from '../../../rpc/interfaces/send-raw-tx.js';

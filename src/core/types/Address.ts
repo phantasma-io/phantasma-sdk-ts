@@ -1,1 +1,1 @@
-export * from '../../types/Address.js';
+export * from '../../types/address.js';

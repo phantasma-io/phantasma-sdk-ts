@@ -1,3 +1,3 @@
-export * from './IFile.js';
-export * from './IAccount.js';
-export * from './ProofOfWork.js';
+export * from './file.js';
+export * from './account.js';
+export * from './proof-of-work.js';

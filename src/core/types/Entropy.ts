@@ -1,1 +1,1 @@
-export * from '../../types/Entropy.js';
+export * from '../../types/entropy.js';

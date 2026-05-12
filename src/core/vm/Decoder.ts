@@ -1,1 +1,1 @@
-export * from '../../vm/Decoder.js';
+export * from '../../vm/decoder.js';

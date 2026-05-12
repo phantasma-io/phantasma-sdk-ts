@@ -1,1 +1,1 @@
-export * from '../../../rpc/interfaces/Script.js';
+export * from '../../../rpc/interfaces/script.js';

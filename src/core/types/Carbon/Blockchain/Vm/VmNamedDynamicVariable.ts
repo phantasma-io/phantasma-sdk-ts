@@ -1,1 +1,1 @@
-export * from '../../../../../types/Carbon/Blockchain/Vm/VmNamedDynamicVariable.js';
+export * from '../../../../../types/carbon/blockchain/vm/vm-named-dynamic-variable.js';

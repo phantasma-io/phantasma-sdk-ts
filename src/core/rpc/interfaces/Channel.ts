@@ -1,1 +1,1 @@
-export * from '../../../rpc/interfaces/Channel.js';
+export * from '../../../rpc/interfaces/channel.js';

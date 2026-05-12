@@ -1,1 +1,1 @@
-export * from '../../../ledger/interfaces/PublicKeyResponse.js';
+export * from '../../../ledger/interfaces/public-key-response.js';

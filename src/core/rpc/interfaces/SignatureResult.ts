@@ -1,1 +1,1 @@
-export * from '../../../rpc/interfaces/SignatureResult.js';
+export * from '../../../rpc/interfaces/signature-result.js';

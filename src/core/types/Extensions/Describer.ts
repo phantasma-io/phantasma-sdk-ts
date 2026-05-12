@@ -1,1 +1,1 @@
-export * from '../../../types/Extensions/Describer.js';
+export * from '../../../types/extensions/describer.js';

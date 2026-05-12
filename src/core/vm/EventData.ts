@@ -1,1 +1,1 @@
-export * from '../../vm/EventData.js';
+export * from '../../vm/event-data.js';

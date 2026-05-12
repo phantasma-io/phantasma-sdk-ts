@@ -1,1 +1,1 @@
-export * from '../../../rpc/interfaces/Platform.js';
+export * from '../../../rpc/interfaces/platform.js';

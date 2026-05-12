@@ -1,1 +1,1 @@
-export * from '../../utils/Hex.js';
+export * from '../../utils/hex.js';

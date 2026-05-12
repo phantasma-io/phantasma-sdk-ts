@@ -1,1 +1,1 @@
-export * from '../../types/Timestamp.js';
+export * from '../../types/timestamp.js';

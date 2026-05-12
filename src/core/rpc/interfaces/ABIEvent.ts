@@ -1,1 +1,1 @@
-export * from '../../../rpc/interfaces/ABIEvent.js';
+export * from '../../../rpc/interfaces/abi-event.js';

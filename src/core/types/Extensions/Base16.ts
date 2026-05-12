@@ -1,1 +1,1 @@
-export * from '../../../types/Extensions/Base16.js';
+export * from '../../../types/extensions/base16.js';

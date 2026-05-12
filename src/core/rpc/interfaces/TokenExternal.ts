@@ -1,1 +1,1 @@
-export * from '../../../rpc/interfaces/TokenExternal.js';
+export * from '../../../rpc/interfaces/token-external.js';

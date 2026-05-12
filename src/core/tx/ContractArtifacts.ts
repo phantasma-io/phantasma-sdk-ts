@@ -1,1 +1,1 @@
-export * from '../../tx/ContractArtifacts.js';
+export * from '../../tx/contract-artifacts.js';

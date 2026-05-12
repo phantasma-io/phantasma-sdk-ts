@@ -1,1 +1,1 @@
-export * from '../../../../../../types/Carbon/Blockchain/Modules/Builders/PhantasmaNftRomBuilder.js';
+export * from '../../../../../../types/carbon/blockchain/modules/builders/phantasma-nft-rom-builder.js';

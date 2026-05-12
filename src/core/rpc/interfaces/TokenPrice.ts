@@ -1,1 +1,1 @@
-export * from '../../../rpc/interfaces/TokenPrice.js';
+export * from '../../../rpc/interfaces/token-price.js';

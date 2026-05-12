@@ -1,1 +1,1 @@
-export * from '../../../types/Carbon/CarbonBlob.js';
+export * from '../../../types/carbon/carbon-blob.js';

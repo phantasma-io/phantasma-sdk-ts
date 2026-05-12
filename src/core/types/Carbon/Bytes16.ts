@@ -1,1 +1,1 @@
-export * from '../../../types/Carbon/Bytes16.js';
+export * from '../../../types/carbon/bytes16.js';

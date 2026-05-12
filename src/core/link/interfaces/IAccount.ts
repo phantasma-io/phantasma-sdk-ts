@@ -1,1 +1,1 @@
-export * from '../../../link/interfaces/IAccount.js';
+export * from '../../../link/interfaces/account.js';

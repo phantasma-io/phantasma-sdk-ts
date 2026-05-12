@@ -1,1 +1,1 @@
-export * from '../../types/PhantasmaKeys.js';
+export * from '../../types/phantasma-keys.js';

@@ -1,1 +1,1 @@
-export * from '../../../../types/Carbon/Blockchain/TxMsgTrade.js';
+export * from '../../../../types/carbon/blockchain/tx-msg-trade.js';

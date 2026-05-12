@@ -1,1 +1,1 @@
-export * from '../../ledger/Mnemonic.js';
+export * from '../../ledger/mnemonic.js';

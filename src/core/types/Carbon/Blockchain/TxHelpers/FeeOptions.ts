@@ -1,1 +1,1 @@
-export * from '../../../../../types/Carbon/Blockchain/TxHelpers/FeeOptions.js';
+export * from '../../../../../types/carbon/blockchain/tx-helpers/fee-options.js';

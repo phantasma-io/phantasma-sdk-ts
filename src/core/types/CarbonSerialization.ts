@@ -1,1 +1,1 @@
-export * from '../../types/CarbonSerialization.js';
+export * from '../../types/carbon-serialization.js';

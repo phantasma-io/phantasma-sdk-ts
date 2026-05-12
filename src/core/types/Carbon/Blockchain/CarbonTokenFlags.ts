@@ -1,1 +1,1 @@
-export * from '../../../../types/Carbon/Blockchain/CarbonTokenFlags.js';
+export * from '../../../../types/carbon/blockchain/carbon-token-flags.js';

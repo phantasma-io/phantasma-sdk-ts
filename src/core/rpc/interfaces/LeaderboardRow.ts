@@ -1,1 +1,1 @@
-export * from '../../../rpc/interfaces/LeaderboardRow.js';
+export * from '../../../rpc/interfaces/leaderboard-row.js';

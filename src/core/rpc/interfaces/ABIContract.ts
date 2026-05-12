@@ -1,1 +1,1 @@
-export * from '../../../rpc/interfaces/ABIContract.js';
+export * from '../../../rpc/interfaces/abi-contract.js';

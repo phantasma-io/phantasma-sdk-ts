@@ -1,1 +1,1 @@
-export * from '../../../rpc/interfaces/Dapp.js';
+export * from '../../../rpc/interfaces/dapp.js';

@@ -1,1 +1,1 @@
-export * from '../../../rpc/interfaces/BuildInfoResult.js';
+export * from '../../../rpc/interfaces/build-info-result.js';

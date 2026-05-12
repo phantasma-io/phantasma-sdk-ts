@@ -1,1 +1,1 @@
-export * from '../../../../../../types/Carbon/Blockchain/Modules/Builders/SeriesInfoBuilder.js';
+export * from '../../../../../../types/carbon/blockchain/modules/builders/series-info-builder.js';

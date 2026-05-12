@@ -19,9 +19,11 @@ const deepImportChecks = [
   ['phantasma-sdk-ts/core/tx/Transaction', ['Transaction']],
   ['phantasma-sdk-ts/core/vm', ['ScriptBuilder', 'VMObject']],
   ['phantasma-sdk-ts/core/types/Address', ['Address']],
-  ['phantasma-sdk-ts/tx/Transaction', ['Transaction']],
+  ['phantasma-sdk-ts/tx/transaction', ['Transaction']],
   ['phantasma-sdk-ts/vm', ['ScriptBuilder', 'VMObject']],
-  ['phantasma-sdk-ts/types/Address', ['Address']],
+  ['phantasma-sdk-ts/types/address', ['Address']],
+  ['phantasma-sdk-ts/types/carbon/bytes32', ['Bytes32']],
+  ['phantasma-sdk-ts/link/phantasma-link', ['PhantasmaLink']],
 ];
 
 function assertExports(moduleName, moduleApi, requiredExports) {

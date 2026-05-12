@@ -1,1 +1,1 @@
-export * from '../../types/DomainSettings.js';
+export * from '../../types/domain-settings.js';

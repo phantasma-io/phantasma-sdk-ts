@@ -1,1 +1,1 @@
-export * from '../../../rpc/interfaces/Nexus.js';
+export * from '../../../rpc/interfaces/nexus.js';

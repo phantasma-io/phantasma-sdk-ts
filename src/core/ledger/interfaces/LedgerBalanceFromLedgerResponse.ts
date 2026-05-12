@@ -1,1 +1,1 @@
-export * from '../../../ledger/interfaces/LedgerBalanceFromLedgerResponse.js';
+export * from '../../../ledger/interfaces/ledger-balance-from-ledger-response.js';

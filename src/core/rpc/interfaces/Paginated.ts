@@ -1,1 +1,1 @@
-export * from '../../../rpc/interfaces/Paginated.js';
+export * from '../../../rpc/interfaces/paginated.js';

@@ -1,1 +1,1 @@
-export * from '../../../rpc/interfaces/Auction.js';
+export * from '../../../rpc/interfaces/auction.js';

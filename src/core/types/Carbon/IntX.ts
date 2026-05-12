@@ -1,1 +1,1 @@
-export * from '../../../types/Carbon/IntX.js';
+export * from '../../../types/carbon/int-x.js';

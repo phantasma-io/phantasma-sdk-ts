@@ -1,1 +1,1 @@
-export * from '../../../ledger/interfaces/ApplicationNameResponse.js';
+export * from '../../../ledger/interfaces/application-name-response.js';
