@@ -1,0 +1,62 @@
+import { createRequire } from 'node:module';
+
+const require = createRequire(import.meta.url);
+
+const requiredRootExports = ['PhantasmaAPI', 'PhantasmaTS', 'PhantasmaLink', 'EasyConnect'];
+const requiredPublicExports = [
+  'Address',
+  'Base16',
+  'Bytes32',
+  'PhantasmaAPI',
+  'PhantasmaKeys',
+  'ScriptBuilder',
+  'Transaction',
+  'TxMsg',
+  'VMObject',
+];
+const excludedPublicExports = ['PhantasmaTS', 'IKeyPair', 'IContract', 'IToken', 'ISerializable'];
+
+function assertExports(moduleName, moduleApi, requiredExports) {
+  for (const name of requiredExports) {
+    if (!(name in moduleApi)) {
+      throw new Error(`${moduleName} is missing export ${name}`);
+    }
+  }
+}
+
+function assertNoExports(moduleName, moduleApi, excludedExports) {
+  for (const name of excludedExports) {
+    if (name in moduleApi) {
+      throw new Error(`${moduleName} unexpectedly exports ${name}`);
+    }
+  }
+}
+
+function exercisePublicApi(publicApi) {
+  const keys = publicApi.PhantasmaKeys.generate();
+  const address = publicApi.Address.fromPublicKey(keys.publicKey);
+  if (address.text !== keys.address.text) {
+    throw new Error('public entrypoint Address.fromPublicKey did not match generated key address');
+  }
+
+  const script = new publicApi.ScriptBuilder().beginScript().emitVarString('exports').endScript();
+  const tx = new publicApi.Transaction('testnet', 'main', script, new Date('2026-01-01T00:00:00Z'));
+  const decoded = publicApi.Transaction.fromBytes(tx.toByteArray(false));
+  if (decoded.toStringEncoded(false) !== tx.toStringEncoded(false)) {
+    throw new Error('public entrypoint Transaction.fromBytes did not round-trip');
+  }
+}
+
+const cjsRoot = require('phantasma-sdk-ts');
+const cjsPublic = require('phantasma-sdk-ts/public');
+const esmRoot = await import('phantasma-sdk-ts');
+const esmPublic = await import('phantasma-sdk-ts/public');
+
+assertExports('CommonJS root export', cjsRoot, requiredRootExports);
+assertExports('ESM root export', esmRoot, requiredRootExports);
+assertExports('CommonJS public export', cjsPublic, requiredPublicExports);
+assertExports('ESM public export', esmPublic, requiredPublicExports);
+assertNoExports('CommonJS public export', cjsPublic, excludedPublicExports);
+assertNoExports('ESM public export', esmPublic, excludedPublicExports);
+exercisePublicApi(cjsPublic);
+exercisePublicApi(esmPublic);

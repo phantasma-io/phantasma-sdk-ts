@@ -4,13 +4,27 @@ A TypeScript SDK for the Phantasma blockchain.
 
 ## Installation
 
-Use the package manager [npm](https://docs.npmjs.com/downloading-and-installing-node-js-and-npm) to install phatasma-ts.
+Use the package manager [npm](https://docs.npmjs.com/downloading-and-installing-node-js-and-npm) to install phantasma-sdk-ts.
 
 ```bash
 npm install phantasma-sdk-ts
 ```
 
 ## Importing
+
+For new TypeScript and modern JavaScript code, prefer the curated public entrypoint:
+
+```typescript
+import {
+  Address,
+  PhantasmaAPI,
+  PhantasmaKeys,
+  ScriptBuilder,
+  Transaction,
+} from 'phantasma-sdk-ts/public';
+```
+
+The root package entrypoint remains available for compatibility with existing consumers:
 
 ```javascript
 const { PhantasmaTS } = require('phantasma-sdk-ts');

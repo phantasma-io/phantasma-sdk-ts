@@ -12,6 +12,11 @@
       "import": "./dist/esm/index.js",
       "require": "./dist/cjs/index.js"
     },
+    "./public": {
+      "types": "./dist/types/public.d.ts",
+      "import": "./dist/esm/public.js",
+      "require": "./dist/cjs/public.js"
+    },
     "./*": {
       "types": "./dist/types/*.d.ts",
       "import": "./dist/esm/*.js",
@@ -21,6 +26,9 @@
   },
   "typesVersions": {
     "*": {
+      "public": [
+        "dist/types/public.d.ts"
+      ],
       "*": [
         "dist/types/*"
       ]
@@ -39,11 +47,12 @@
     "build:esm": "tsc -p tsconfig.esm.json && node -e \"const fs=require('fs'); const path=require('path'); const out=path.join('dist','esm','package.json'); fs.writeFileSync(out, '{\\\"type\\\":\\\"module\\\"}\\n');\"",
     "build:umd": "npm run build:cjs && browserify dist/cjs/index.js -s phantasma > html/phantasma.js",
     "clean": "node scripts/clean-dist.mjs",
-    "test": "npm run test:cjs && npm run test:esm && npm run test:esm-runtime",
+    "test": "npm run test:cjs && npm run test:esm && npm run test:package-exports",
     "tests": "npm run test",
     "test:cjs": "jest --config jest.config.js --runInBand",
     "test:esm": "node --experimental-vm-modules ./node_modules/jest/bin/jest.js --config jest.config.esm.cjs --runInBand",
-    "test:esm-runtime": "npm run build:esm && node --input-type=module -e \"import('./dist/esm/index.js').then((m)=>{ if (!('PhantasmaAPI' in m)) { console.error('Missing PhantasmaAPI export'); process.exit(1); } }).catch((err)=>{ console.error(err); process.exit(1); })\"",
+    "test:esm-runtime": "npm run test:package-exports",
+    "test:package-exports": "npm run build && node scripts/check-package-exports.mjs && node scripts/check-public-types.mjs",
     "coverage": "jest --coverage",
     "lint": "node scripts/check-deprecated-api-usage.mjs && prettier --check . && eslint .",
     "format": "prettier --write .",
