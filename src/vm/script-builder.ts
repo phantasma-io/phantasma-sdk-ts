@@ -239,12 +239,12 @@ export class ScriptBuilder {
 
     this.emit(Opcode.LOAD);
     this.appendByte(reg);
-    this.appendByte(obj.Type);
+    this.appendByte(obj.type);
 
     if (result == undefined) {
       //console.log("enter");
-      if (obj.Data instanceof Map || (obj.Data instanceof Map && obj.Data instanceof VMObject)) {
-        const resultData = obj.Data as Map<VMObject, VMObject>;
+      if (obj.data instanceof Map || (obj.data instanceof Map && obj.data instanceof VMObject)) {
+        const resultData = obj.data as Map<VMObject, VMObject>;
         this.emitVarInt(resultData.size);
         for (const entry of resultData) {
           //console.log(entry[0]);
@@ -254,9 +254,9 @@ export class ScriptBuilder {
           this.emitLoadVmObject(reg + 2, value);
           this.emit(Opcode.PUT, [reg + 1, reg, reg + 2]);
         }
-      } else if (obj.Data instanceof VMObject) {
+      } else if (obj.data instanceof VMObject) {
         const writerNew: PBinaryWriter = new PBinaryWriter();
-        serializeSerializable(obj.Data, writerNew);
+        serializeSerializable(obj.data, writerNew);
         const bytes = writerNew.toUint8Array();
         this.emitVarInt(bytes.length);
         this.appendBytes(Array.from(bytes));
@@ -291,7 +291,7 @@ export class ScriptBuilder {
 
   public emitLoadAddress(reg: number, obj: Address): this {
     const writer = new PBinaryWriter();
-    obj.SerializeData(writer);
+    obj.serializeData(writer);
     const byteArray = Array.from(writer.toUint8Array());
     this.emitLoadBytes(reg, byteArray, VMType.Bytes);
     return this;

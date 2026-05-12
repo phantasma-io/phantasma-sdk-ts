@@ -386,12 +386,22 @@ export class Address implements ISerializable {
     return this.toByteArray();
   }
 
-  SerializeData(writer: PBinaryWriter) {
+  public serializeData(writer: PBinaryWriter) {
     writer.writeByteArray(this._bytes);
   }
 
-  UnserializeData(reader: PBinaryReader) {
+  /** @deprecated Use `serializeData` instead. This alias will be removed in v1.0. */
+  public SerializeData(writer: PBinaryWriter) {
+    this.serializeData(writer);
+  }
+
+  public unserializeData(reader: PBinaryReader) {
     this._bytes = Base16.decodeUint8Array(reader.readByteArray());
     this._text = null;
+  }
+
+  /** @deprecated Use `unserializeData` instead. This alias will be removed in v1.0. */
+  public UnserializeData(reader: PBinaryReader) {
+    this.unserializeData(reader);
   }
 }

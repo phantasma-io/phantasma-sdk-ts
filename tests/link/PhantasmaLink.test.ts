@@ -217,7 +217,7 @@ describe('PhantasmaLink.signPrebuiltTransaction', () => {
       '706F77'
     );
 
-    const signatureBytes = Ed25519Signature.generate(keys, tx.getUnsignedBytes()).Bytes;
+    const signatureBytes = Ed25519Signature.generate(keys, tx.getUnsignedBytes()).bytes;
     const walletSignatureHex = bytesToHex(
       new Uint8Array([signatureBytes.length, ...signatureBytes])
     );

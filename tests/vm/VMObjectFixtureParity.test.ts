@@ -202,7 +202,7 @@ describe('Gen2 C# VMObject fixture parity', () => {
       expect(serializeObject(obj)).toBe(serializedHex);
 
       const roundtrip = VMObject.fromBytes(hexToBytes(serializedHex));
-      expect(VM_TYPE_NAMES.get(roundtrip.Type)).toBe(roundtripType);
+      expect(VM_TYPE_NAMES.get(roundtrip.type)).toBe(roundtripType);
       expect(objectDescriptor(roundtrip)).toBe(descriptor);
       expect(caseId).toBeTruthy();
     }
@@ -222,12 +222,12 @@ describe('Gen2 C# VMObject fixture parity', () => {
         );
         if (outcome === 'ok') {
           const object = result as VMObject;
-          expect(object.Type).toBe(expectedType);
-          if (targetType === VMType.String) expect(object.Data).toBe(expected);
+          expect(object.type).toBe(expectedType);
+          if (targetType === VMType.String) expect(object.data).toBe(expected);
           if (targetType === VMType.Bytes)
-            expect(bytesToHex(object.Data as Uint8Array)).toBe(expected);
-          if (targetType === VMType.Number) expect(object.Data).toBe(BigInt(expected));
-          if (targetType === VMType.Bool) expect(object.Data).toBe(expected === 'true');
+            expect(bytesToHex(object.data as Uint8Array)).toBe(expected);
+          if (targetType === VMType.Number) expect(object.data).toBe(BigInt(expected));
+          if (targetType === VMType.Bool) expect(object.data).toBe(expected === 'true');
         } else {
           expect(result).toBeInstanceOf(Error);
         }
@@ -244,7 +244,7 @@ describe('Gen2 C# VMObject fixture parity', () => {
       );
       if (outcome === 'ok') {
         const object = result as VMObject;
-        expect(VM_TYPE_NAMES.get(object.Type)).toBe(expectedType);
+        expect(VM_TYPE_NAMES.get(object.type)).toBe(expectedType);
         expect(objectDescriptor(object)).toBe(descriptor);
       } else {
         expect(result).toBeInstanceOf(Error);
@@ -304,25 +304,25 @@ function objectFromFixture(sourceKind: string, payload: string): VMObject {
 
 function typedObject(type: VMType, data: unknown): VMObject {
   const object = new VMObject();
-  object.Type = type;
-  object.Data = data;
+  object.type = type;
+  object.data = data;
   return object;
 }
 
 function serializeObject(object: VMObject): string {
   const writer = new PBinaryWriter();
-  object.SerializeData(writer);
+  object.serializeData(writer);
   return bytesToHex(writer.toUint8Array());
 }
 
 function objectDescriptor(object: VMObject): string {
-  switch (object.Type) {
+  switch (object.type) {
     case VMType.None:
       return 'None';
     case VMType.Struct:
       return `Struct:${serializeObject(object)}`;
     case VMType.Bytes:
-      return `Bytes:${bytesToHex(object.Data as Uint8Array)}`;
+      return `Bytes:${bytesToHex(object.data as Uint8Array)}`;
     case VMType.Number:
       return `Number:${object.asNumber()}`;
     case VMType.String:
@@ -332,16 +332,16 @@ function objectDescriptor(object: VMObject): string {
     case VMType.Bool:
       return `Bool:${String(object.asBool()).toLowerCase()}`;
     case VMType.Enum:
-      return `Enum:${object.Data}`;
+      return `Enum:${object.data}`;
     case VMType.Object: {
       const bytes =
-        object.Data instanceof Address ? object.Data.toByteArray() : (object.Data as Uint8Array);
+        object.data instanceof Address ? object.data.toByteArray() : (object.data as Uint8Array);
       if (bytes.length === Address.lengthInBytes) return `Object.Address:${bytesToHex(bytes)}`;
       if (bytes.length === 32) return `Object.Hash:${bytesToHex(bytes)}`;
       return `Object:${bytesToHex(bytes)}`;
     }
     default:
-      throw new Error(`unsupported object type: ${object.Type}`);
+      throw new Error(`unsupported object type: ${object.type}`);
   }
 }
 

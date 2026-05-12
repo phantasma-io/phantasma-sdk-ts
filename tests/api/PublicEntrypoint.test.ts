@@ -2,13 +2,17 @@ import * as publicApi from '../../src/public';
 import {
   Address,
   Bytes32,
+  Ed25519Signature,
+  PBinaryWriter,
   PhantasmaAPI,
   PhantasmaKeys,
   ScriptBuilder,
+  SignatureKind,
   Transaction,
   TxMsg,
   TxTypes,
   VMObject,
+  VMType,
 } from '../../src/public';
 import type {
   CarbonBlobLike,
@@ -43,9 +47,18 @@ describe('public entrypoint', () => {
     const script = new ScriptBuilder().beginScript().emitVarString('public-api').endScript();
     const tx = new Transaction('testnet', 'main', script, new Date('2026-01-01T00:00:00Z'), '');
     const decoded = Transaction.fromBytes(tx.toByteArray(false));
+    const signature = Ed25519Signature.generate(keys, tx.getUnsignedBytes());
+    const writer = new PBinaryWriter();
+    signature.serializeData(writer);
+    const vmObject = VMObject.fromObject('value');
 
     expect(decoded.toStringEncoded(false)).toBe(tx.toStringEncoded(false));
-    expect(VMObject.fromObject('value')?.asString()).toBe('value');
+    expect(signature.kind).toBe(SignatureKind.Ed25519);
+    expect(signature.bytes).toHaveLength(64);
+    expect(writer.toUint8Array().length).toBeGreaterThan(0);
+    expect(vmObject?.type).toBe(VMType.String);
+    expect(vmObject?.data).toBe('value');
+    expect(vmObject?.asString()).toBe('value');
     expect(new Bytes32(Uint8Array.from({ length: 32 }, (_, i) => i)).toHex()).toHaveLength(64);
     expect(new TxMsg().type).toBe(TxTypes.Call);
     expect(new PhantasmaAPI('http://localhost:5172/rpc', null, 'simnet')).toBeInstanceOf(
@@ -74,6 +87,7 @@ describe('public entrypoint', () => {
       serializeData: () => undefined,
       unserializeData: () => undefined,
     };
+    const addressSerializable: Serializable = Address.nullAddress;
 
     const account: LinkAccount = {
       alias: 'main',
@@ -88,7 +102,7 @@ describe('public entrypoint', () => {
     const blob: CarbonBlobLike = { write: () => undefined, read: () => undefined };
     const contract: ContractDescriptor = {
       name: 'account',
-      abi: publicApi.ContractInterface.Empty,
+      abi: publicApi.ContractInterface.empty,
     };
     const token: Partial<TokenDescriptor> = {
       name: 'Soul',
@@ -98,9 +112,12 @@ describe('public entrypoint', () => {
 
     expect(stack.peek()).toBe(7);
     expect(serializable).toHaveProperty('serializeData');
+    expect(addressSerializable).toHaveProperty('serializeData');
     expect(account.address).toBe(Address.nullText);
     expect(blob).toHaveProperty('write');
     expect(contract.name).toBe('account');
+    expect(contract.abi.methods).toHaveLength(0);
+    expect(contract.abi.methodCount).toBe(0);
     expect(token.symbol).toBe('SOUL');
   });
 });

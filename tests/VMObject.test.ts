@@ -13,14 +13,14 @@ describe('VM index file', () => {
     const vm = new VMObject();
 
     expect(vm).toBeInstanceOf(VMObject);
-    expect(vm.Type).toBe(VMType.None);
+    expect(vm.type).toBe(VMType.None);
   });
 
   test('String VM', () => {
     const myNewVM = VMObject.fromObject('MyString');
 
     expect(myNewVM).toBeInstanceOf(VMObject);
-    expect(myNewVM.Type).toBe(VMType.String);
+    expect(myNewVM.type).toBe(VMType.String);
     const result = myNewVM.asString();
     expect(result).toBe('MyString');
   });
@@ -29,7 +29,7 @@ describe('VM index file', () => {
     const myNewVM = VMObject.fromObject(5);
 
     expect(myNewVM).toBeInstanceOf(VMObject);
-    expect(myNewVM.Type).toBe(VMType.Number);
+    expect(myNewVM.type).toBe(VMType.Number);
     const result = myNewVM.asString();
     expect(result).toBe('5');
     expect(myNewVM.asNumber()).toBe(5n);
@@ -86,7 +86,7 @@ describe('VM index file', () => {
     const myNewVM = VMObject.fromArray(choices);
 
     expect(myNewVM).toBeInstanceOf(VMObject);
-    expect(myNewVM.Type).toBe(VMType.Struct);
+    expect(myNewVM.type).toBe(VMType.Struct);
     //let result = myNewVM.toArray(PollChoice) as PollChoice[];
     //expect(result).toStrictEqual(choices);
   });
@@ -113,7 +113,7 @@ describe('VM index file', () => {
 
     const myVM = VMObject.fromObject(choice1Serialized);
     const writer = new PBinaryWriter();
-    const result = myVM.SerializeData(writer);
+    const result = myVM.serializeData(writer);
 
     expect(choice1Serialized.length).toBeGreaterThan(0);
     expect(result).toBeInstanceOf(Uint8Array);
@@ -128,7 +128,7 @@ describe('VM index file', () => {
     expect(myNewVM).toBeInstanceOf(phantasmaJS.VMObject);
     expect(myNewVM.Type).toBe(phantasmaJS.VMType.Struct);
     let writer = new PBinaryWriter();
-    let result = myNewVM.SerializeData(writer);
+    let result = myNewVM.serializeData(writer);
     expect(writer.toArray()).toStrictEqual(choices);*/
   });
 
@@ -145,7 +145,7 @@ describe('VM index file', () => {
     const bytes = Base16.decodeUint8Array(vmCode);
     const vm = VMObject.fromBytes(bytes);
 
-    expect(vm.Type).toBe(VMType.Bool);
+    expect(vm.type).toBe(VMType.Bool);
     expect(vm.asBool()).toBe(true);
   });
 });

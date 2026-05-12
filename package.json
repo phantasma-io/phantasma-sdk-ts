@@ -255,7 +255,7 @@
     "test:package-exports": "npm run build && node scripts/check-package-exports.mjs && node scripts/check-public-types.mjs && node scripts/check-examples.mjs",
     "coverage": "jest --coverage",
     "typecheck": "tsc -p tsconfig.json --pretty false",
-    "lint": "npm run typecheck && node scripts/check-deprecated-api-usage.mjs && node scripts/check-compat-shims.mjs && node scripts/check-source-filenames.mjs && prettier --check . && eslint .",
+    "lint": "npm run typecheck && node scripts/check-deprecated-api-usage.mjs && node scripts/check-consumer-deprecated-api.mjs && node scripts/check-compat-shims.mjs && node scripts/check-source-filenames.mjs && prettier --check . && eslint .",
     "format": "prettier --write .",
     "prettier-watch": "onchange 'src/**/*.ts' -- prettier --write {{changed}}"
   },

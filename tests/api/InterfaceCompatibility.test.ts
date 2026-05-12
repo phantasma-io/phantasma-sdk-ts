@@ -78,7 +78,7 @@ describe('interface compatibility', () => {
 
     const contract: ContractDescriptor = {
       name: 'account',
-      abi: ContractInterface.Empty,
+      abi: ContractInterface.empty,
     };
     const legacyContract: IContract = {
       Name: contract.name,
@@ -93,7 +93,7 @@ describe('interface compatibility', () => {
       maxSupply: 0n as unknown as BigInteger,
       decimals: 8,
       script: new Uint8Array(),
-      abi: ContractInterface.Empty,
+      abi: ContractInterface.empty,
     };
     const legacyToken: IToken = {
       Name: token.name,

@@ -64,12 +64,17 @@ const publicConsumer = writeFile(
 import {
   Address,
   ContractInterface,
+  Ed25519Signature,
   isRpcErrorResult,
+  PBinaryWriter,
   PhantasmaAPI,
   PhantasmaKeys,
   ScriptBuilder,
+  SignatureKind,
   Transaction,
   unwrapRpcResult,
+  VMObject,
+  VMType,
   type ContractDescriptor,
   type KeyPair,
   type LinkAccount,
@@ -86,6 +91,16 @@ const address = Address.fromPublicKey(keyPair.publicKey);
 const script = new ScriptBuilder().beginScript().emitVarString(address.text).endScript();
 const tx = new Transaction('testnet', 'main', script, new Date('2026-01-01T00:00:00Z'), '');
 const decoded = Transaction.fromBytes(tx.toByteArray(false));
+const signature = Ed25519Signature.generate(keys, tx.getUnsignedBytes());
+const signatureKind: SignatureKind = signature.kind;
+const signatureBytes: Uint8Array = signature.bytes;
+const writer = new PBinaryWriter();
+signature.serializeData(writer);
+const vmObject = VMObject.fromObject(address.text);
+const vmObjectType: VMType | undefined = vmObject?.type;
+const vmObjectData: unknown = vmObject?.data;
+const contractMethods = ContractInterface.empty.methods;
+const contractMethodCount: number = ContractInterface.empty.methodCount;
 
 const values: number[] = [];
 const stack: StackLike<number> = {
@@ -114,7 +129,7 @@ const account: LinkAccount = {
   files: [],
 };
 
-const contract: ContractDescriptor = { name: 'account', abi: ContractInterface.Empty };
+const contract: ContractDescriptor = { name: 'account', abi: ContractInterface.empty };
 const api = new PhantasmaAPI('http://localhost:5172/rpc', null, 'localnet');
 const heightPromise: Promise<number> = api.getBlockHeight('main');
 const blockPromise = api.getLatestBlock('main');
@@ -136,9 +151,19 @@ const serializable: Serializable = {
   serializeData: () => undefined,
   unserializeData: () => undefined,
 };
+const addressSerializable: Serializable = address;
 const unwrappedNumber = unwrapRpcResult<number>(123);
 
 void decoded;
+void signatureKind;
+void signatureBytes;
+void writer;
+void vmObject;
+void vmObjectType;
+void vmObjectData;
+void VMType.String;
+void contractMethods;
+void contractMethodCount;
 void stack;
 void account;
 void contract;
@@ -147,6 +172,7 @@ void rawResultPromise;
 void LegacyRpcSubclass;
 void rpcError;
 void serializable;
+void addressSerializable;
 void unwrappedNumber;
 `
 );
@@ -165,6 +191,7 @@ const deepImportConsumer = writeFile(
   'deep-import-consumer.ts',
   `
 import { Address } from 'phantasma-sdk-ts/public';
+import { Ed25519Signature } from 'phantasma-sdk-ts/types/ed25519-signature';
 import { Transaction as NewTransaction } from 'phantasma-sdk-ts/tx/transaction';
 import { ScriptBuilder as NewScriptBuilder } from 'phantasma-sdk-ts/vm';
 import { Address as NewAddress } from 'phantasma-sdk-ts/types/address';
@@ -181,6 +208,7 @@ import { Bytes32 as LegacyBytes32 } from 'phantasma-sdk-ts/core/types/Carbon/Byt
 
 const script = new NewScriptBuilder().beginScript().emitVarString('deep-imports').endScript();
 const tx = new NewTransaction('testnet', 'main', script, new Date('2026-01-01T00:00:00Z'), '');
+const signature = new Ed25519Signature();
 const legacyTx = LegacyTransaction.fromBytes(tx.toByteArray(false));
 const legacyScript = new LegacyScriptBuilder().beginScript().emitVarString('legacy').endScript();
 const legacySigner: LedgerSigner = {
@@ -195,6 +223,7 @@ const accountSigner: LedgerAccountSigner = {
 };
 
 void legacyTx;
+void signature.bytes;
 void legacyScript;
 void legacySigner;
 void accountSigner;

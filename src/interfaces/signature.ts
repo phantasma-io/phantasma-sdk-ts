@@ -13,11 +13,39 @@ export class ISignature {
 }
 
 export abstract class Signature implements ISerializable {
+  /** @deprecated Use `bytes` instead. This alias will be removed in v1.0. */
   abstract Bytes: Uint8Array;
+  /** @deprecated Use `kind` instead. This alias will be removed in v1.0. */
   abstract Kind: SignatureKind;
+  /** @deprecated Use `serializeData` instead. This alias will be removed in v1.0. */
   abstract SerializeData(writer: PBinaryWriter): void;
+  /** @deprecated Use `unserializeData` instead. This alias will be removed in v1.0. */
   abstract UnserializeData(reader: PBinaryReader): void;
   abstract verifyMultiple(message: Uint8Array, addresses: Address[]): boolean;
+
+  get bytes(): Uint8Array {
+    return this.Bytes;
+  }
+
+  set bytes(value: Uint8Array) {
+    this.Bytes = value;
+  }
+
+  get kind(): SignatureKind {
+    return this.Kind;
+  }
+
+  set kind(value: SignatureKind) {
+    this.Kind = value;
+  }
+
+  serializeData(writer: PBinaryWriter): void {
+    this.SerializeData(writer);
+  }
+
+  unserializeData(reader: PBinaryReader): void {
+    this.UnserializeData(reader);
+  }
 
   verify(message: Uint8Array, address: Address): boolean {
     return this.verifyMultiple(message, [address]);
@@ -36,7 +64,7 @@ export abstract class Signature implements ISerializable {
   toByteArray(): Uint8Array {
     const stream = new Uint8Array(64);
     const writer = new PBinaryWriter(stream);
-    this.SerializeData(writer);
+    this.serializeData(writer);
     return new Uint8Array(stream);
   }
 

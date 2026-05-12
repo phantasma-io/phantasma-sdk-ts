@@ -246,8 +246,8 @@ export class PBinaryWriter {
       this.writeByte(SignatureKind.None);
       return this;
     }
-    this.writeByte(signature.Kind);
-    signature.SerializeData(this);
+    this.writeByte(signature.kind);
+    signature.serializeData(this);
     return this;
   }
 

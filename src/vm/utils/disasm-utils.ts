@@ -57,7 +57,7 @@ export class DisasmUtils {
     public static AddContractToTable(table: { [key: string]: number }, contract: IContract) {
         let abi = contract.ABI;
 
-        for (const method of abi.Methods) {
+        for (const method of abi.methods) {
             let key = `${contract.Name}.${method.name}`;
             table[key] = method.parameters.length;
         }
@@ -66,7 +66,7 @@ export class DisasmUtils {
     public static AddTokenToTable(table: { [key: string]: number }, token: IToken) {
         let abi = token.ABI;
 
-        for (const method of abi.Methods) {
+        for (const method of abi.methods) {
             let key = `${token.Symbol}.${method.name}`;
             table[key] = method.parameters.length;
         }

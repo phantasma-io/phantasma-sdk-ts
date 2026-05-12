@@ -8,7 +8,7 @@ describe('Consensus Tests', () => {
     /*const arrayBytes = Base16.decodeUint8Array(SerializeData);
     const readerVM = new PBinaryReader(arrayBytes);
     const vm = new VMObject();
-    vm.UnserializeData(readerVM);
+    vm.unserializeData(readerVM);
     for (let map of vm.getChildren()![1]) {
       console.log(map[0], " - ", map[1]);
       let lBytes = Base16.decodeUint8Array(
@@ -28,7 +28,7 @@ describe('Consensus Tests', () => {
     const arrayBytes = Base16.decodeUint8Array(SerializeData);
     const vm = new VMObject();
     const readerVM = new PBinaryReader(arrayBytes);
-    vm.UnserializeData(readerVM);
+    vm.unserializeData(readerVM);
     const con = vm.toStruct<ConsensusPoll>(ConsensusPoll);
     // Entries are already decoded by VMObject.toStruct; old tests treated them
     // as hex strings, which masked the exact bigint return type.

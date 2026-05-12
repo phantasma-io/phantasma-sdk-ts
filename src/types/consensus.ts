@@ -25,18 +25,33 @@ export class PollChoice implements ISerializable {
     else this.value = value;
   }
 
-  SerializeData(writer: PBinaryWriter) {
+  serializeData(writer: PBinaryWriter) {
     writer.writeByteArray(stringToUint8Array(this.value));
   }
 
-  UnserializeData(reader: PBinaryReader) {
+  /** @deprecated Use `serializeData` instead. This alias will be removed in v1.0. */
+  SerializeData(writer: PBinaryWriter) {
+    this.serializeData(writer);
+  }
+
+  unserializeData(reader: PBinaryReader) {
     this.value = Base16.decode(reader.readByteArray());
   }
 
-  static Unserialize(reader: PBinaryReader): PollChoice {
+  /** @deprecated Use `unserializeData` instead. This alias will be removed in v1.0. */
+  UnserializeData(reader: PBinaryReader) {
+    this.unserializeData(reader);
+  }
+
+  static deserialize(reader: PBinaryReader): PollChoice {
     const pollChoice = new PollChoice('');
-    pollChoice.UnserializeData(reader);
+    pollChoice.unserializeData(reader);
     return pollChoice;
+  }
+
+  /** @deprecated Use `deserialize` instead. This alias will be removed in v1.0. */
+  static Unserialize(reader: PBinaryReader): PollChoice {
+    return PollChoice.deserialize(reader);
   }
 }
 
@@ -45,22 +60,37 @@ export class PollValue implements ISerializable {
   public ranking = 0n;
   public votes = 0n;
 
-  SerializeData(writer: PBinaryWriter) {
+  serializeData(writer: PBinaryWriter) {
     writer.writeByteArray(stringToUint8Array(this.value));
     writer.writeBigInteger(this.ranking);
     writer.writeBigInteger(this.votes);
   }
 
-  UnserializeData(reader: PBinaryReader) {
+  /** @deprecated Use `serializeData` instead. This alias will be removed in v1.0. */
+  SerializeData(writer: PBinaryWriter) {
+    this.serializeData(writer);
+  }
+
+  unserializeData(reader: PBinaryReader) {
     this.value = Base16.decode(reader.readByteArray());
     this.ranking = reader.readBigInteger();
     this.votes = reader.readBigInteger();
   }
 
-  static Unserialize(reader: PBinaryReader): PollValue {
+  /** @deprecated Use `unserializeData` instead. This alias will be removed in v1.0. */
+  UnserializeData(reader: PBinaryReader) {
+    this.unserializeData(reader);
+  }
+
+  static deserialize(reader: PBinaryReader): PollValue {
     const pollValue = new PollValue();
-    pollValue.UnserializeData(reader);
+    pollValue.unserializeData(reader);
     return pollValue;
+  }
+
+  /** @deprecated Use `deserialize` instead. This alias will be removed in v1.0. */
+  static Unserialize(reader: PBinaryReader): PollValue {
+    return PollValue.deserialize(reader);
   }
 }
 
@@ -68,19 +98,35 @@ export class PollVote implements ISerializable {
   public index = 0n;
   public percentage = 0n;
 
-  SerializeData(writer: PBinaryWriter) {
+  serializeData(writer: PBinaryWriter) {
     writer.writeBigInteger(this.index);
     writer.writeBigInteger(this.percentage);
   }
-  UnserializeData(reader: PBinaryReader) {
+
+  /** @deprecated Use `serializeData` instead. This alias will be removed in v1.0. */
+  SerializeData(writer: PBinaryWriter) {
+    this.serializeData(writer);
+  }
+
+  unserializeData(reader: PBinaryReader) {
     this.index = reader.readBigInteger();
     this.percentage = reader.readBigInteger();
   }
 
-  static Unserialize(reader: PBinaryReader): PollVote {
+  /** @deprecated Use `unserializeData` instead. This alias will be removed in v1.0. */
+  UnserializeData(reader: PBinaryReader) {
+    this.unserializeData(reader);
+  }
+
+  static deserialize(reader: PBinaryReader): PollVote {
     const pollVote = new PollVote();
-    pollVote.UnserializeData(reader);
+    pollVote.unserializeData(reader);
     return pollVote;
+  }
+
+  /** @deprecated Use `deserialize` instead. This alias will be removed in v1.0. */
+  static Unserialize(reader: PBinaryReader): PollVote {
+    return PollVote.deserialize(reader);
   }
 }
 
@@ -109,7 +155,7 @@ export class ConsensusPoll implements ISerializable {
     this.totalVotes = BigInt(0);
   }
 
-  SerializeData(writer: PBinaryWriter) {
+  serializeData(writer: PBinaryWriter) {
     writer.writeString(this.subject);
     writer.writeString(this.organization);
     writer.writeByte(this.mode);
@@ -117,7 +163,7 @@ export class ConsensusPoll implements ISerializable {
     writer.writeByte(this.entries.length);
 
     this.entries.forEach((entry) => {
-      entry.SerializeData(writer);
+      entry.serializeData(writer);
     });
 
     writer.writeBigInteger(this.round);
@@ -126,16 +172,22 @@ export class ConsensusPoll implements ISerializable {
     writer.writeBigInteger(this.choicesPerUser);
     writer.writeBigInteger(this.totalVotes);
   }
-  UnserializeData(reader: PBinaryReader) {
+
+  /** @deprecated Use `serializeData` instead. This alias will be removed in v1.0. */
+  SerializeData(writer: PBinaryWriter) {
+    this.serializeData(writer);
+  }
+
+  unserializeData(reader: PBinaryReader) {
     this.subject = reader.readString();
     this.organization = reader.readString();
     this.mode = reader.readByte() as ConsensusMode;
     this.state = reader.readByte() as PollState;
 
     this.entries = [];
-    const entriesLength = reader.readUnsignedInt();
+    const entriesLength = reader.readByte();
     for (let i = 0; i < entriesLength; i++) {
-      this.entries.push(PollValue.Unserialize(reader));
+      this.entries.push(PollValue.deserialize(reader));
     }
 
     this.round = reader.readBigInteger();
@@ -145,10 +197,20 @@ export class ConsensusPoll implements ISerializable {
     this.totalVotes = reader.readBigInteger();
   }
 
-  static Unserialize(reader: PBinaryReader): ConsensusPoll {
+  static deserialize(reader: PBinaryReader): ConsensusPoll {
     const consensusPoll = new ConsensusPoll();
-    consensusPoll.UnserializeData(reader);
+    consensusPoll.unserializeData(reader);
     return consensusPoll;
+  }
+
+  /** @deprecated Use `deserialize` instead. This alias will be removed in v1.0. */
+  static Unserialize(reader: PBinaryReader): ConsensusPoll {
+    return ConsensusPoll.deserialize(reader);
+  }
+
+  /** @deprecated Use `unserializeData` instead. This alias will be removed in v1.0. */
+  UnserializeData(reader: PBinaryReader) {
+    this.unserializeData(reader);
   }
 }
 
@@ -156,18 +218,34 @@ export class PollPresence implements ISerializable {
   public subject = '';
   public round = 0n;
 
-  SerializeData(writer: PBinaryWriter) {
+  serializeData(writer: PBinaryWriter) {
     writer.writeString(this.subject);
+    writer.writeBigInteger(this.round);
   }
 
-  UnserializeData(reader: PBinaryReader) {
+  /** @deprecated Use `serializeData` instead. This alias will be removed in v1.0. */
+  SerializeData(writer: PBinaryWriter) {
+    this.serializeData(writer);
+  }
+
+  unserializeData(reader: PBinaryReader) {
     this.subject = reader.readString();
     this.round = reader.readBigInteger();
   }
 
-  static Unserialize(reader: PBinaryReader): PollPresence {
+  /** @deprecated Use `unserializeData` instead. This alias will be removed in v1.0. */
+  UnserializeData(reader: PBinaryReader) {
+    this.unserializeData(reader);
+  }
+
+  static deserialize(reader: PBinaryReader): PollPresence {
     const pollPresence = new PollPresence();
-    pollPresence.UnserializeData(reader);
+    pollPresence.unserializeData(reader);
     return pollPresence;
+  }
+
+  /** @deprecated Use `deserialize` instead. This alias will be removed in v1.0. */
+  static Unserialize(reader: PBinaryReader): PollPresence {
+    return PollPresence.deserialize(reader);
   }
 }

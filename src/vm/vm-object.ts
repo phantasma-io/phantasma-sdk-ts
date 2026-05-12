@@ -31,10 +31,29 @@ function objectLength(value: unknown): number {
 }
 
 export class VMObject implements ISerializable {
+  /** @deprecated Use `type` instead. This alias will be removed in v1.0. */
   public Type: VMType;
+  /** @deprecated Use `data` instead. This alias will be removed in v1.0. */
   public Data: unknown;
+
+  public get type(): VMType {
+    return this.Type;
+  }
+
+  public set type(value: VMType) {
+    this.Type = value;
+  }
+
+  public get data(): unknown {
+    return this.Data;
+  }
+
+  public set data(value: unknown) {
+    this.Data = value;
+  }
+
   public get isEmpty(): boolean {
-    return this.Data == null || this.Data == undefined;
+    return this.data == null || this.data == undefined;
   }
   private _localSize = 0;
   private static readonly TimeFormat: string = 'MM/dd/yyyy HH:mm:ss';
@@ -98,7 +117,7 @@ export class VMObject implements ISerializable {
 
   private static serializeToBytes(value: VMObject): Uint8Array {
     const writer = new PBinaryWriter();
-    value.SerializeData(writer);
+    value.serializeData(writer);
     return writer.toUint8Array();
   }
 
@@ -1002,11 +1021,11 @@ export class VMObject implements ISerializable {
   public static fromBytes(bytes: Uint8Array | Buffer): VMObject {
     const result = new VMObject();
     const reader = new PBinaryReader(bytes);
-    result.UnserializeData(reader);
+    result.unserializeData(reader);
     return result;
   }
 
-  SerializeData(writer: PBinaryWriter) {
+  public serializeData(writer: PBinaryWriter) {
     writer.writeByte(this.Type as number);
     if (this.Type == VMType.None) {
       return;
@@ -1017,10 +1036,10 @@ export class VMObject implements ISerializable {
         const children = this.getChildren();
         writer.writeVarInt(children!.size);
         for (const child of children!) {
-          child[0].SerializeData(writer);
+          child[0].serializeData(writer);
           //console.log(Base16.encodeUint8Array(writer.toUint8Array()));
 
-          child[1].SerializeData(writer);
+          child[1].serializeData(writer);
           ///console.log(Base16.encodeUint8Array(writer.toUint8Array()));
         }
 
@@ -1037,7 +1056,7 @@ export class VMObject implements ISerializable {
         // bytes intentionally roundtrip as Bytes when they are not address-shaped.
         const inner = new PBinaryWriter();
         if (this.Data instanceof Address) {
-          this.Data.SerializeData(inner);
+          this.Data.serializeData(inner);
         } else if (this.Data instanceof Uint8Array || Array.isArray(this.Data)) {
           inner.writeByteArray(VMObject.bytesFromAny(this.Data));
         } else if (isSerializableLike(this.Data)) {
@@ -1075,8 +1094,9 @@ export class VMObject implements ISerializable {
     return writer.toUint8Array();
   }
 
-  public serializeData(writer: PBinaryWriter) {
-    return this.SerializeData(writer);
+  /** @deprecated Use `serializeData` instead. This alias will be removed in v1.0. */
+  public SerializeData(writer: PBinaryWriter) {
+    return this.serializeData(writer);
   }
 
   public serializeObjectCall(writer: PBinaryWriter) {
@@ -1089,8 +1109,8 @@ export class VMObject implements ISerializable {
         const children = this.getChildren();
         writer.writeVarInt(children!.size);
         for (const child of children!) {
-          child[0].SerializeData(writer);
-          child[1].SerializeData(writer);
+          child[0].serializeData(writer);
+          child[1].serializeData(writer);
         }
 
         /*children.forEach((key, value) => {
@@ -1103,7 +1123,7 @@ export class VMObject implements ISerializable {
       case VMType.Object: {
         const inner = new PBinaryWriter();
         if (this.Data instanceof Address) {
-          this.Data.SerializeData(inner);
+          this.Data.serializeData(inner);
         } else if (this.Data instanceof Uint8Array || Array.isArray(this.Data)) {
           inner.writeByteArray(VMObject.bytesFromAny(this.Data));
         } else if (isSerializableLike(this.Data)) {
@@ -1342,7 +1362,7 @@ export class VMObject implements ISerializable {
     }
   }*/
 
-  UnserializeData(reader: PBinaryReader) {
+  public unserializeData(reader: PBinaryReader) {
     this.Type = reader.readByte() as VMType;
     switch (this.Type) {
       case VMType.Bool:
@@ -1374,12 +1394,12 @@ export class VMObject implements ISerializable {
         const children = new Map<VMObject, VMObject>();
         while (childCount > 0) {
           const key = new VMObject();
-          key.UnserializeData(reader);
+          key.unserializeData(reader);
 
           VMObject.validateStructKey(key);
 
           const val = new VMObject();
-          val.UnserializeData(reader);
+          val.unserializeData(reader);
 
           children.set(key, val);
           childCount--;
@@ -1418,7 +1438,8 @@ export class VMObject implements ISerializable {
     }
   }
 
-  public unserializeData(reader: PBinaryReader) {
-    this.UnserializeData(reader);
+  /** @deprecated Use `unserializeData` instead. This alias will be removed in v1.0. */
+  public UnserializeData(reader: PBinaryReader) {
+    this.unserializeData(reader);
   }
 }

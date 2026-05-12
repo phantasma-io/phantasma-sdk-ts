@@ -11,8 +11,8 @@ describe('PhantasmaKeys signatures', () => {
     const message = Buffer.from('hello world', 'utf8');
     const signature = keys.sign(message);
 
-    expect(signature.Kind).toBe(SignatureKind.Ed25519);
-    expect(signature.Bytes.length).toBe(64);
+    expect(signature.kind).toBe(SignatureKind.Ed25519);
+    expect(signature.bytes.length).toBe(64);
 
     expect(signature.verify(message, keys.address)).toBe(true);
 

@@ -7,11 +7,51 @@ import { PBinaryWriter, PBinaryReader } from './extensions/index.js';
 import { signEd25519, verifyEd25519 } from './ed25519.js';
 
 export class Ed25519Signature implements Signature {
-  public Bytes: Uint8Array;
-  public Kind: SignatureKind = SignatureKind.Ed25519;
+  public bytes: Uint8Array;
+  public kind: SignatureKind = SignatureKind.Ed25519;
 
   constructor(bytes: Uint8Array = new Uint8Array()) {
-    this.Bytes = bytes;
+    this.bytes = bytes;
+
+    // Preserve the old public-field reflection shape while routing behavior to
+    // the canonical lower-camel storage. Some consumers inspect or spread SDK
+    // objects instead of only reading properties.
+    Object.defineProperties(this, {
+      Bytes: {
+        configurable: true,
+        enumerable: true,
+        get: () => this.bytes,
+        set: (value: Uint8Array) => {
+          this.bytes = value;
+        },
+      },
+      Kind: {
+        configurable: true,
+        enumerable: true,
+        get: () => this.kind,
+        set: (value: SignatureKind) => {
+          this.kind = value;
+        },
+      },
+    });
+  }
+
+  /** @deprecated Use `bytes` instead. This alias will be removed in v1.0. */
+  public get Bytes(): Uint8Array {
+    return this.bytes;
+  }
+
+  public set Bytes(value: Uint8Array) {
+    this.bytes = value;
+  }
+
+  /** @deprecated Use `kind` instead. This alias will be removed in v1.0. */
+  public get Kind(): SignatureKind {
+    return this.kind;
+  }
+
+  public set Kind(value: SignatureKind) {
+    this.kind = value;
   }
 
   verify(message: Uint8Array, address: Address): boolean {
@@ -29,7 +69,7 @@ export class Ed25519Signature implements Signature {
         continue;
       }
       const pubKey = address.toByteArray().slice(2);
-      if (verifyEd25519(message, this.Bytes, pubKey)) {
+      if (verifyEd25519(message, this.bytes, pubKey)) {
         return true;
       }
     }
@@ -41,19 +81,28 @@ export class Ed25519Signature implements Signature {
     return this.verifyMultiple(message, addresses);
   }
 
-  public SerializeData(writer: PBinaryWriter) {
-    //writer.writeString(uint8ArrayToString(this.Bytes));
-    writer.writeByteArray(this.Bytes);
+  public serializeData(writer: PBinaryWriter) {
+    writer.writeByteArray(this.bytes);
   }
 
+  /** @deprecated Use `serializeData` instead. This alias will be removed in v1.0. */
+  public SerializeData(writer: PBinaryWriter) {
+    this.serializeData(writer);
+  }
+
+  public unserializeData(reader: PBinaryReader) {
+    this.bytes = stringToUint8Array(reader.readString());
+  }
+
+  /** @deprecated Use `unserializeData` instead. This alias will be removed in v1.0. */
   public UnserializeData(reader: PBinaryReader) {
-    this.Bytes = stringToUint8Array(reader.readString());
+    this.unserializeData(reader);
   }
 
   toByteArray(): Uint8Array {
     const stream = new Uint8Array(64);
     const writer = new PBinaryWriter(stream);
-    this.SerializeData(writer);
+    this.serializeData(writer);
     return new Uint8Array(stream);
   }
 

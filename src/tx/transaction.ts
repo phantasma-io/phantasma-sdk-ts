@@ -145,8 +145,8 @@ export class Transaction implements ISerializable {
       return [];
     }
     return this.signatures.map((sig) => ({
-      kind: sig.Kind,
-      length: sig.Bytes ? sig.Bytes.length : 0,
+      kind: sig.kind,
+      length: sig.bytes ? sig.bytes.length : 0,
     }));
   }
 
@@ -256,15 +256,15 @@ export class Transaction implements ISerializable {
       sb.emitVarInt(this.signatures.length);
       this.signatures.forEach((sig) => {
         logger.log('adding signature ', sig);
-        if (sig.Kind == 1) {
+        if (sig.kind == 1) {
           sb.appendByte(1); // Signature Type
-          sb.emitVarInt(sig.Bytes.length / 2);
-          sb.appendHexEncoded(bytesToHex(sig.Bytes));
-        } else if (sig.Kind == 2) {
+          sb.emitVarInt(sig.bytes.length / 2);
+          sb.appendHexEncoded(bytesToHex(sig.bytes));
+        } else if (sig.kind == 2) {
           sb.appendByte(2); // ECDSA Signature
           sb.appendByte(1); // Curve type secp256k1
-          sb.emitVarInt(sig.Bytes.length / 2);
-          sb.appendHexEncoded(bytesToHex(sig.Bytes));
+          sb.emitVarInt(sig.bytes.length / 2);
+          sb.appendHexEncoded(bytesToHex(sig.bytes));
         }
       });
     }

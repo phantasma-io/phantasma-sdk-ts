@@ -98,6 +98,11 @@ Serialization.deserialize(bytes, SomeType);
 
 Deprecated aliases are intentionally covered by compatibility tests and deprecated-usage checks so new SDK code does not keep spreading them internally.
 
+For consumer projects that want CI-visible diagnostics for legacy SDK calls,
+enable the type-aware ESLint rule `@typescript-eslint/no-deprecated`. TypeScript
+and editors read the SDK's `@deprecated` declarations, but `tsc` does not fail
+builds on deprecated API use by itself.
+
 ## Development
 
 ```bash

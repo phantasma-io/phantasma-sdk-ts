@@ -16,8 +16,8 @@ import {
 } from '../../src/core';
 
 describe('test phantasma_ts', function () {
-  test('test phantasma-sdk-ts.Transaction.SerializeData', function (done) {
-    // Behavior: signing + SerializeData should not throw for valid hex script/payload.
+  test('test phantasma-sdk-ts.Transaction.serializeData', function (done) {
+    // Behavior: signing + serializeData should not throw for valid hex script/payload.
     const writer = new PBinaryWriter();
     const keys = PhantasmaKeys.generate();
 
@@ -30,7 +30,7 @@ describe('test phantasma_ts', function () {
     writer.writeString(nexusName);
     const tx = new Transaction(nexusName, chainName, script, expiration, payload);
     tx.signWithKeys(keys);
-    tx.SerializeData(writer);
+    tx.serializeData(writer);
     /*expect(writer.toUint8Array()).toBe([
       5, 110, 101, 120, 117, 115, 5, 110, 101, 120, 117, 115, 5, 109, 97, 105,
       110,
@@ -101,7 +101,7 @@ describe('test phantasma_ts', function () {
     expect(fromCsharpTx.payload).toBe(tx.payload);
     expect(fromCsharpTx.expiration).toStrictEqual(tx.expiration);
     expect(fromCsharpTx.signatures.length).toBe(tx.signatures.length);
-    expect(fromCsharpTx.signatures[0].Kind).toBe(tx.signatures[0].Kind);
+    expect(fromCsharpTx.signatures[0].kind).toBe(tx.signatures[0].kind);
     expect(fromCsharpTx.signatures[0].toByteArray()).toStrictEqual(tx.signatures[0].toByteArray());
 
     done();
