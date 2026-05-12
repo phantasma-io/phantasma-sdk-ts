@@ -1,7 +1,12 @@
 // coin used by ledger nano s.
 
 import { bytesToHex, hexToBytes } from '../utils/index.js';
-import { LedgerConfig } from './interfaces/ledger-config.js';
+import {
+  getLedgerBip32Factory,
+  getLedgerBip39,
+  getLedgerCurve,
+  LedgerCompatibleConfig,
+} from './interfaces/ledger-config.js';
 
 // 60   | 0x80000273 | SOUL   | [Phantasma](https://phantasma.info/)
 export const SOUL_COIN: number = 60;
@@ -14,16 +19,19 @@ export const SOUL_COIN: number = 60;
  * @param index the bip44 index
  * @return returns the private key, hex encoded, upper case.
  */
-export const GetPrivateKeyFromMnemonic = (
-  config: LedgerConfig,
+export const getPrivateKeyFromMnemonic = (
+  config: LedgerCompatibleConfig,
   mnemonic: string,
   index: string
 ): string => {
-  const bip39 = config.Bip39;
+  const bip39 = getLedgerBip39(config);
   const seedBytes = bip39.mnemonicToSeedSync(mnemonic);
   const seed = bytesToHex(seedBytes);
-  return GetPrivateKeyFromSeed(config, seed, index);
+  return getPrivateKeyFromSeed(config, seed, index);
 };
+
+/** @deprecated Use `getPrivateKeyFromMnemonic` instead. This alias will be removed in v1.0. */
+export const GetPrivateKeyFromMnemonic = getPrivateKeyFromMnemonic;
 
 /**
  * converts a mnemonic into a seed.
@@ -33,22 +41,25 @@ export const GetPrivateKeyFromMnemonic = (
  * @param index the bip44 index
  * @return returns the seed, hex encoded, upper case.
  */
-export const GetPrivateKeyFromSeed = (
-  config: LedgerConfig,
+export const getPrivateKeyFromSeed = (
+  config: LedgerCompatibleConfig,
   seed: string,
   index: string
 ): string => {
-  const bip32Factory = config.Bip32Factory;
-  const curve = config.Curve;
+  const bip32Factory = getLedgerBip32Factory(config);
+  const curve = getLedgerCurve(config);
   const seedBytes = hexToBytes(seed);
   const bip32 = bip32Factory(curve);
   const bip32node = bip32.fromSeed(seedBytes);
 
-  const bip44path = GetBip44Path(index);
+  const bip44path = getBip44Path(index);
   const bip32child = bip32node.derivePath(bip44path);
 
   return Buffer.from(bip32child.privateKey).toString('hex').toUpperCase();
 };
+
+/** @deprecated Use `getPrivateKeyFromSeed` instead. This alias will be removed in v1.0. */
+export const GetPrivateKeyFromSeed = getPrivateKeyFromSeed;
 
 /**
  * converts a mnemonic into a Poltergeist mnemonic, using the phantasma coin's bip44 path.
@@ -58,22 +69,28 @@ export const GetPrivateKeyFromSeed = (
  * @param index the index
  * @return returns the private key, hex encoded, upper case.
  */
-export const GetPoltergeistMnemonic = (
-  config: LedgerConfig,
+export const getPoltergeistMnemonic = (
+  config: LedgerCompatibleConfig,
   mnemonic: string,
   index: string
 ): string => {
-  const bip39 = config.Bip39;
-  const privateKey = GetPrivateKeyFromMnemonic(config, mnemonic, index);
+  const bip39 = getLedgerBip39(config);
+  const privateKey = getPrivateKeyFromMnemonic(config, mnemonic, index);
   const poltergeistMnemonic = bip39.entropyToMnemonic(privateKey);
   return poltergeistMnemonic;
 };
+
+/** @deprecated Use `getPoltergeistMnemonic` instead. This alias will be removed in v1.0. */
+export const GetPoltergeistMnemonic = getPoltergeistMnemonic;
 
 /**
  * @param index the index
  * @return returns the bip44 path.
  */
-export const GetBip44Path = (index: string): string => {
+export const getBip44Path = (index: string): string => {
   const bip44path = `m/44'/${SOUL_COIN}'/0'/0/${index}`;
   return bip44path;
 };
+
+/** @deprecated Use `getBip44Path` instead. This alias will be removed in v1.0. */
+export const GetBip44Path = getBip44Path;

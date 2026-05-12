@@ -106,9 +106,9 @@ describe('VM index file', () => {
 
     const testClass = new myTestClass();
 
-    const choice1Serialized = Serialization.Serialize(testClass);
+    const choice1Serialized = Serialization.serialize(testClass);
     expect(() =>
-      Serialization.Unserialize<myTestClass>(choice1Serialized, myTestClass)
+      Serialization.deserialize<myTestClass>(choice1Serialized, myTestClass)
     ).not.toThrow();
 
     const myVM = VMObject.fromObject(choice1Serialized);
@@ -120,8 +120,8 @@ describe('VM index file', () => {
     expect(result.length).toBeGreaterThan(0);
 
     /*let choicesSerialized: Uint8Array[] = [
-      Serialization.Serialize(choice),
-      Serialization.Serialize(choice2),
+      Serialization.serialize(choice),
+      Serialization.serialize(choice2),
     ];
     let myNewVM = VMObject.fromArray(choices);
 
@@ -136,7 +136,7 @@ describe('VM index file', () => {
     const choice = new PollChoice('myChoice');
     const choice2 = new PollChoice('myChoice');
     const choices: PollChoice[] = [choice, choice2];
-    const choicesSerialized = Serialization.Serialize(choices);
+    const choicesSerialized = Serialization.serialize(choices);
     expect(choicesSerialized.length).toBeGreaterThan(0);
   });
 

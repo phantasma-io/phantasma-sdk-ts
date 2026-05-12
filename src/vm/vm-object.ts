@@ -8,7 +8,7 @@ import {
   PBinaryWriter,
   Serialization,
 } from '../types/index.js';
-import { ISerializable } from '../interfaces/index.js';
+import { ISerializable, isSerializableLike, serializeSerializable } from '../interfaces/index.js';
 import { uint8ArrayToStringDefault } from '../utils/index.js';
 import { twosComplementLEToBigInt } from '../types/carbon-serialization.js';
 import { bigIntToTwosComplementLE_phantasma } from '../types/phantasma-big-int-serialization.js';
@@ -17,22 +17,6 @@ type VMObjectConstructor<T = Record<string, unknown>> = {
   new (): T;
   name?: string;
 } & Record<string, unknown>;
-
-type SerializableLike = {
-  SerializeData(writer: PBinaryWriter): void;
-  UnserializeData(reader: PBinaryReader): void;
-};
-
-function isSerializableLike(value: unknown): value is SerializableLike {
-  return (
-    typeof value === 'object' &&
-    value !== null &&
-    'SerializeData' in value &&
-    'UnserializeData' in value &&
-    typeof (value as SerializableLike).SerializeData === 'function' &&
-    typeof (value as SerializableLike).UnserializeData === 'function'
-  );
-}
 
 function objectLength(value: unknown): number {
   if (
@@ -408,6 +392,7 @@ export class VMObject implements ISerializable {
   public static isSerializable(type: unknown): boolean {
     return (
       type instanceof ISerializable ||
+      isSerializableLike(type) ||
       VMObject.isPrimitive(type) ||
       VMObject.isStructOrClass(type) ||
       VMObject.isEnum(type)
@@ -443,7 +428,7 @@ export class VMObject implements ISerializable {
     ) {
       const bytes =
         fieldValue instanceof Uint8Array ? fieldValue : Uint8Array.from(fieldValue as number[]);
-      fieldValue = Serialization.Unserialize<unknown>(bytes, typeof fieldType);
+      fieldValue = Serialization.deserialize<unknown>(bytes, typeof fieldType);
     } else if (VMObject.isEnum(fieldType)) {
       const tempValue: typeof fieldType = fieldValue as keyof typeof fieldType;
       fieldValue = tempValue;
@@ -581,7 +566,7 @@ export class VMObject implements ISerializable {
         } else if (localValue) {
           val = localValue.toObject();
         }
-        //val = Serialization.Unserialize(dict.get(dictKey));
+        //val = Serialization.deserialize(dict.get(dictKey));
       } else {
         if (!VMObject.isStructOrClass(structType[field])) {
           //console.log(`field not present in source struct: ${field}`);
@@ -670,6 +655,8 @@ export class VMObject implements ISerializable {
         this.Type = VMType.Timestamp;
       } else if (val instanceof Address) {
         this.Type = VMType.Object;
+      } else if (isSerializableLike(val)) {
+        this.Type = VMType.Object;
       } else if (typeof val === 'bigint' || typeof val === 'number') {
         this.Type = VMType.Number;
         this.Data = BigInt(val);
@@ -718,6 +705,9 @@ export class VMObject implements ISerializable {
           Array.isArray(val) || val instanceof Uint8Array
             ? VMObject.bytesFromAny(val)[0] !== 0
             : Boolean(val);
+        break;
+      case VMType.Object:
+        this.Data = val;
         break;
       default:
         if (val instanceof Uint8Array) {
@@ -1051,7 +1041,7 @@ export class VMObject implements ISerializable {
         } else if (this.Data instanceof Uint8Array || Array.isArray(this.Data)) {
           inner.writeByteArray(VMObject.bytesFromAny(this.Data));
         } else if (isSerializableLike(this.Data)) {
-          this.Data.SerializeData(inner);
+          serializeSerializable(this.Data, inner);
         } else {
           throw new Error(`Objects of type ${typeof this.Data} cannot be serialized`);
         }
@@ -1085,6 +1075,10 @@ export class VMObject implements ISerializable {
     return writer.toUint8Array();
   }
 
+  public serializeData(writer: PBinaryWriter) {
+    return this.SerializeData(writer);
+  }
+
   public serializeObjectCall(writer: PBinaryWriter) {
     if (this.Type == VMType.None) {
       return;
@@ -1113,7 +1107,7 @@ export class VMObject implements ISerializable {
         } else if (this.Data instanceof Uint8Array || Array.isArray(this.Data)) {
           inner.writeByteArray(VMObject.bytesFromAny(this.Data));
         } else if (isSerializableLike(this.Data)) {
-          this.Data.SerializeData(inner);
+          serializeSerializable(this.Data, inner);
         } else {
           throw new Error(`Objects of type ${typeof this.Data} cannot be serialized`);
         }
@@ -1331,7 +1325,7 @@ export class VMObject implements ISerializable {
 
       case VMType.Object: {
         var bytes = reader.readByteArray();
-        var obj = Serialization.Unserialize(bytes);
+        var obj = Serialization.deserialize(bytes);
         this.Data = obj as Object;
         break;
       }
@@ -1343,7 +1337,7 @@ export class VMObject implements ISerializable {
       }
 
       default:
-        this.Data = Serialization.UnserializeObject(reader, null);
+        this.Data = Serialization.deserializeObject(reader, null);
         break;
     }
   }*/
@@ -1365,7 +1359,7 @@ export class VMObject implements ISerializable {
 
       case VMType.Timestamp:
         this.Data = reader.readTimestamp();
-        /*this.Data = Serialization.UnserializeObject<Timestamp>(
+        /*this.Data = Serialization.deserializeObject<Timestamp>(
           reader,
           Timestamp
         );*/
@@ -1422,5 +1416,9 @@ export class VMObject implements ISerializable {
       default:
         throw new Error(`invalid unserialize: type ${this.Type}`);
     }
+  }
+
+  public unserializeData(reader: PBinaryReader) {
+    this.UnserializeData(reader);
   }
 }

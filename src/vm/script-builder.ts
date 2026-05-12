@@ -1,5 +1,10 @@
 import base58 from 'bs58';
-import { ISerializable } from '../interfaces/index.js';
+import {
+  isSerializableLike,
+  serializeSerializable,
+  type ISerializable,
+  type SerializableLike,
+} from '../interfaces/index.js';
 import { bigIntToTwosComplementLE } from '../types/carbon-serialization.js';
 import { Address, PBinaryWriter, Serialization, Timestamp } from '../types/index.js';
 import { numberToByteArray, stringToUint8Array, bytesToHex } from '../utils/index.js';
@@ -13,17 +18,6 @@ type byte = number;
 const MaxRegisterCount = 32;
 
 type ScriptLoadValue = unknown;
-
-function isSerializableLike(obj: unknown): obj is ISerializable {
-  return (
-    typeof obj === 'object' &&
-    obj !== null &&
-    'UnserializeData' in obj &&
-    'SerializeData' in obj &&
-    typeof (obj as ISerializable).UnserializeData === 'function' &&
-    typeof (obj as ISerializable).SerializeData === 'function'
-  );
-}
 
 export class ScriptBuilder {
   _labelLocations: { [id: string]: number } = {};
@@ -232,9 +226,9 @@ export class ScriptBuilder {
     return this;
   }
 
-  public emitLoadSerializable(reg: number, obj: ISerializable): this {
+  public emitLoadSerializable(reg: number, obj: SerializableLike): this {
     const writer: PBinaryWriter = new PBinaryWriter();
-    obj.SerializeData(writer);
+    serializeSerializable(obj, writer);
     this.emitLoadBytes(reg, writer.toArray(), VMType.Bytes);
     return this;
   }
@@ -262,7 +256,7 @@ export class ScriptBuilder {
         }
       } else if (obj.Data instanceof VMObject) {
         const writerNew: PBinaryWriter = new PBinaryWriter();
-        obj.Data.SerializeData(writerNew);
+        serializeSerializable(obj.Data, writerNew);
         const bytes = writerNew.toUint8Array();
         this.emitVarInt(bytes.length);
         this.appendBytes(Array.from(bytes));
@@ -305,7 +299,7 @@ export class ScriptBuilder {
 
   public emitLoadTimestamp(reg: number, obj: Date | Timestamp): this {
     if (obj instanceof Timestamp) {
-      const bytes = Array.from(Serialization.Serialize(obj));
+      const bytes = Array.from(Serialization.serialize(obj));
       this.emitLoadBytes(reg, bytes, VMType.Timestamp);
     } else if (obj instanceof Date) {
       const num = (obj.getTime() / 1000) | 0;

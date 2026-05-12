@@ -102,10 +102,50 @@
       "import": "./dist/esm/core/vm/index.js",
       "require": "./dist/cjs/core/vm/index.js"
     },
-    "./*": {
-      "types": "./dist/types/*.d.ts",
-      "import": "./dist/esm/*.js",
-      "require": "./dist/cjs/*.js"
+    "./interfaces/*": {
+      "types": "./dist/types/interfaces/*.d.ts",
+      "import": "./dist/esm/interfaces/*.js",
+      "require": "./dist/cjs/interfaces/*.js"
+    },
+    "./ledger/*": {
+      "types": "./dist/types/ledger/*.d.ts",
+      "import": "./dist/esm/ledger/*.js",
+      "require": "./dist/cjs/ledger/*.js"
+    },
+    "./link/*": {
+      "types": "./dist/types/link/*.d.ts",
+      "import": "./dist/esm/link/*.js",
+      "require": "./dist/cjs/link/*.js"
+    },
+    "./rpc/*": {
+      "types": "./dist/types/rpc/*.d.ts",
+      "import": "./dist/esm/rpc/*.js",
+      "require": "./dist/cjs/rpc/*.js"
+    },
+    "./tx/*": {
+      "types": "./dist/types/tx/*.d.ts",
+      "import": "./dist/esm/tx/*.js",
+      "require": "./dist/cjs/tx/*.js"
+    },
+    "./types/*": {
+      "types": "./dist/types/types/*.d.ts",
+      "import": "./dist/esm/types/*.js",
+      "require": "./dist/cjs/types/*.js"
+    },
+    "./utils/*": {
+      "types": "./dist/types/utils/*.d.ts",
+      "import": "./dist/esm/utils/*.js",
+      "require": "./dist/cjs/utils/*.js"
+    },
+    "./vm/*": {
+      "types": "./dist/types/vm/*.d.ts",
+      "import": "./dist/esm/vm/*.js",
+      "require": "./dist/cjs/vm/*.js"
+    },
+    "./core/*": {
+      "types": "./dist/types/core/*.d.ts",
+      "import": "./dist/esm/core/*.js",
+      "require": "./dist/cjs/core/*.js"
     },
     "./package.json": "./package.json"
   },
@@ -165,8 +205,32 @@
       "core/vm": [
         "dist/types/core/vm/index.d.ts"
       ],
-      "*": [
-        "dist/types/*"
+      "interfaces/*": [
+        "dist/types/interfaces/*"
+      ],
+      "ledger/*": [
+        "dist/types/ledger/*"
+      ],
+      "link/*": [
+        "dist/types/link/*"
+      ],
+      "rpc/*": [
+        "dist/types/rpc/*"
+      ],
+      "tx/*": [
+        "dist/types/tx/*"
+      ],
+      "types/*": [
+        "dist/types/types/*"
+      ],
+      "utils/*": [
+        "dist/types/utils/*"
+      ],
+      "vm/*": [
+        "dist/types/vm/*"
+      ],
+      "core/*": [
+        "dist/types/core/*"
       ]
     }
   },
@@ -188,7 +252,7 @@
     "test:cjs": "jest --config jest.config.js --runInBand",
     "test:esm": "node --experimental-vm-modules ./node_modules/jest/bin/jest.js --config jest.config.esm.cjs --runInBand",
     "test:esm-runtime": "npm run test:package-exports",
-    "test:package-exports": "npm run build && node scripts/check-package-exports.mjs && node scripts/check-public-types.mjs",
+    "test:package-exports": "npm run build && node scripts/check-package-exports.mjs && node scripts/check-public-types.mjs && node scripts/check-examples.mjs",
     "coverage": "jest --coverage",
     "typecheck": "tsc -p tsconfig.json --pretty false",
     "lint": "npm run typecheck && node scripts/check-deprecated-api-usage.mjs && node scripts/check-compat-shims.mjs && node scripts/check-source-filenames.mjs && prettier --check . && eslint .",
@@ -197,6 +261,7 @@
   },
   "files": [
     "dist/**/*",
+    "examples/**/*",
     "README.md",
     "LICENSE"
   ],

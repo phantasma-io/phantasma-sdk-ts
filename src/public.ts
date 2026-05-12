@@ -156,7 +156,7 @@ export {
   SignedTxMsg,
   SmallString,
   StandardMeta,
-  TokenContract_Methods,
+  TokenContractMethods,
   TokenHelper,
   TokenInfo,
   TokenInfoBuilder,
@@ -266,5 +266,6 @@ export type { ContractDescriptor } from './interfaces/contract.js';
 export type { FeeOptionsLike } from './types/carbon/blockchain/tx-helpers/fee-options.js';
 export type { KeyPair } from './interfaces/key-pair.js';
 export type { Ledger } from './ledger/interfaces/ledger.js';
+export type { Serializable } from './interfaces/serializable.js';
 export type { StackLike } from './interfaces/stack.js';
 export type { TokenDescriptor } from './interfaces/token.js';

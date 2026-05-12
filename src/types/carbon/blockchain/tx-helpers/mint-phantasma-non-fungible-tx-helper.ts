@@ -11,7 +11,7 @@ import {
   MintPhantasmaNonFungibleArgs,
   PhantasmaNftMintInfo,
   PhantasmaNftMintResult,
-  TokenContract_Methods,
+  TokenContractMethods,
 } from '../modules/index.js';
 import { TxMsg } from '../tx-msg.js';
 import { TxMsgCall } from '../tx-msg-call.js';
@@ -134,7 +134,7 @@ export class MintPhantasmaNonFungibleTxHelper {
 
     const call = new TxMsgCall();
     call.moduleId = ModuleId.Token;
-    call.methodId = TokenContract_Methods.MintPhantasmaNonFungible;
+    call.methodId = TokenContractMethods.MintPhantasmaNonFungible;
     const argsWriter = new CarbonBinaryWriter();
     args.write(argsWriter);
     call.args = argsWriter.toUint8Array();

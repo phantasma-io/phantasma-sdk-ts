@@ -6,7 +6,7 @@ import { TxMsgCall } from '../../src/core/types/Carbon/Blockchain/TxMsgCall';
 import {
   MintPhantasmaNonFungibleArgs,
   PhantasmaNftMintResult,
-  TokenContract_Methods,
+  TokenContractMethods,
 } from '../../src/core/types/Carbon/Blockchain/Modules';
 import {
   PhantasmaNftRomBuilder,
@@ -67,7 +67,7 @@ describe('Phantasma deterministic mint helpers', () => {
 
     const call = tx.msg as TxMsgCall;
     expect(call.moduleId).toBe(ModuleId.Token);
-    expect(call.methodId).toBe(TokenContract_Methods.MintPhantasmaNonFungible);
+    expect(call.methodId).toBe(TokenContractMethods.MintPhantasmaNonFungible);
 
     const argsReader = new CarbonBinaryReader(call.args);
     const decoded = MintPhantasmaNonFungibleArgs.read(argsReader);

@@ -95,7 +95,7 @@ describe('PhantasmaLink.signCarbonTxAndBroadcast', () => {
     const link = new PhantasmaLink('test', false);
     link.version = 4;
     const txMsg = buildCarbonTransfer();
-    const expectedHex = bytesToHex(CarbonBlob.Serialize(txMsg));
+    const expectedHex = bytesToHex(CarbonBlob.serialize(txMsg));
 
     const sendLinkSpy = jest
       .spyOn(asTestLink(link), 'sendLinkRequest')

@@ -16,14 +16,14 @@ export interface LedgerPublicKeyOptions {
   debug?: boolean;
 }
 
-export const Bip44Path =
+export const bip44Path =
   '8000002C' + // 44
   '8000003C' + // 60
   '80000000' + // 0
   '00000000' + // 0
   '00000000'; // 0
 
-export const ErrorDescriptions: Record<string, string> = {
+export const ledgerErrorDescriptions: Record<string, string> = {
   '530C': 'Unlock Ledger Device',
   '6D02': 'App Not Open On Ledger Device',
   6511: 'App Not Open On Ledger Device',
@@ -41,6 +41,12 @@ export const ErrorDescriptions: Record<string, string> = {
   B008: 'Failed to sign Transaction on Ledger Device',
   B009: 'Wrong signing parmeters on Ledger Device',
 };
+
+/** @deprecated Use `bip44Path` instead. This alias will be removed in v1.0. */
+export const Bip44Path = bip44Path;
+
+/** @deprecated Use `ledgerErrorDescriptions` instead. This alias will be removed in v1.0. */
+export const ErrorDescriptions = ledgerErrorDescriptions;
 
 const getErrorMessageText = (error: unknown): string => {
   if (error instanceof Error) {
@@ -61,22 +67,25 @@ const requireLedgerDevice = (device: DeviceResponse): LedgerTransportDevice => {
  * @param responseStr
  * @returns
  */
-export const GetErrorMessage = (responseStr: string): string => {
+export const getErrorMessage = (responseStr: string): string => {
   const suffix = responseStr.slice(-4);
-  if (ErrorDescriptions[suffix] !== undefined) {
-    const description = ErrorDescriptions[suffix];
+  if (ledgerErrorDescriptions[suffix] !== undefined) {
+    const description = ledgerErrorDescriptions[suffix];
     return `[${suffix}] ${responseStr} ${description}`;
   } else {
     return `[${suffix}] ${responseStr} Unknown Error`;
   }
 };
 
+/** @deprecated Use `getErrorMessage` instead. This alias will be removed in v1.0. */
+export const GetErrorMessage = getErrorMessage;
+
 /**
  * Get Device
  * @param transport
  * @returns
  */
-export const GetDevice = async (transport: LedgerTransport): Promise<DeviceResponse> => {
+export const getDevice = async (transport: LedgerTransport): Promise<DeviceResponse> => {
   /* istanbul ignore if */
   if (Debug) {
     logger.log('getDevice', 'transport', transport);
@@ -127,15 +136,18 @@ export const GetDevice = async (transport: LedgerTransport): Promise<DeviceRespo
   };
 };
 
+/** @deprecated Use `getDevice` instead. This alias will be removed in v1.0. */
+export const GetDevice = getDevice;
+
 /**
  * Get Application Name
  * @param transport
  * @returns
  */
-export const GetApplicationName = async (
+export const getApplicationName = async (
   transport: LedgerTransport
 ): Promise<ApplicationNameResponse> => {
-  const device = await GetDevice(transport);
+  const device = await getDevice(transport);
   if (!device.enabled) {
     return {
       success: false,
@@ -166,7 +178,7 @@ export const GetApplicationName = async (
       applicationName = responseStr.substring(0, responseStr.length - 4);
       applicationName = hex2ascii(applicationName);
     } else {
-      message = GetErrorMessage(responseStr);
+      message = getErrorMessage(responseStr);
     }
     return {
       success: success,
@@ -194,13 +206,16 @@ export const GetApplicationName = async (
   }
 };
 
+/** @deprecated Use `getApplicationName` instead. This alias will be removed in v1.0. */
+export const GetApplicationName = getApplicationName;
+
 /**
  * Get Version
  * @param transport
  * @returns
  */
-export const GetVersion = async (transport: LedgerTransport): Promise<VersionResponse> => {
-  const device = await GetDevice(transport);
+export const getVersion = async (transport: LedgerTransport): Promise<VersionResponse> => {
+  const device = await getDevice(transport);
   if (!device.enabled) {
     return {
       success: false,
@@ -231,7 +246,7 @@ export const GetVersion = async (transport: LedgerTransport): Promise<VersionRes
       version = responseStr.substring(0, responseStr.length - 4);
       version = hex2ascii(version);
     } else {
-      message = GetErrorMessage(responseStr);
+      message = getErrorMessage(responseStr);
     }
     return {
       success: success,
@@ -259,12 +274,15 @@ export const GetVersion = async (transport: LedgerTransport): Promise<VersionRes
   }
 };
 
+/** @deprecated Use `getVersion` instead. This alias will be removed in v1.0. */
+export const GetVersion = getVersion;
+
 /**
  * Get Pip44 Path Message
  * @param messagePrefix
  * @returns
  */
-export const GetBip44PathMessage = (messagePrefix: Buffer): Buffer => {
+export const getBip44PathMessage = (messagePrefix: Buffer): Buffer => {
   /* istanbul ignore if */
   if (messagePrefix == undefined) {
     throw Error('messagePrefix is a required parameter.');
@@ -273,7 +291,7 @@ export const GetBip44PathMessage = (messagePrefix: Buffer): Buffer => {
     throw Error('messagePrefix must be of length 4.');
   }
 
-  const bip44PathBuffer = Buffer.from(Bip44Path, 'hex');
+  const bip44PathBuffer = Buffer.from(bip44Path, 'hex');
   const bip44PathBufferLen = 5; // bip44PathBuffer.length;
   const bip44PathBufferLenBuffer = Int2Buffer(bip44PathBufferLen);
   const payload = Buffer.concat([bip44PathBufferLenBuffer, bip44PathBuffer]);
@@ -299,13 +317,16 @@ export const GetBip44PathMessage = (messagePrefix: Buffer): Buffer => {
   return message;
 };
 
+/** @deprecated Use `getBip44PathMessage` instead. This alias will be removed in v1.0. */
+export const GetBip44PathMessage = getBip44PathMessage;
+
 /**
  * Get Public Key
  * @param transport
  * @param options
  * @returns
  */
-export const GetPublicKey = async (
+export const getPublicKey = async (
   transport: LedgerTransport,
   options: LedgerPublicKeyOptions
 ): Promise<PublicKeyResponse> => {
@@ -317,7 +338,7 @@ export const GetPublicKey = async (
   if (options == undefined) {
     throw Error('options is a required parameter.');
   }
-  const device = await GetDevice(transport);
+  const device = await getDevice(transport);
   if (!device.enabled) {
     return {
       success: false,
@@ -335,7 +356,7 @@ export const GetPublicKey = async (
       messagePrefix = Buffer.from('E0050000', 'hex');
     }
 
-    const request = GetBip44PathMessage(messagePrefix);
+    const request = getBip44PathMessage(messagePrefix);
     /* istanbul ignore if */
     if (Debug) {
       logger.log('exchange', 'request', request.toString('hex').toUpperCase());
@@ -354,7 +375,7 @@ export const GetPublicKey = async (
       message = responseStr;
       publicKey = responseStr.substring(0, 64);
     } else {
-      message = GetErrorMessage(responseStr);
+      message = getErrorMessage(responseStr);
     }
     return {
       success: success,
@@ -387,20 +408,26 @@ export const GetPublicKey = async (
   };
 };
 
+/** @deprecated Use `getPublicKey` instead. This alias will be removed in v1.0. */
+export const GetPublicKey = getPublicKey;
+
 /**
  * Chunk String
  * @param str
  * @param length
  * @returns
  */
-export const ChunkString = (str: string, length: number): string[] => {
+export const chunkString = (str: string, length: number): string[] => {
   return str.match(new RegExp('.{1,' + length + '}', 'g')) ?? [];
 };
 
-export const SplitMessageIntoChunks = (ledgerMessage: string): Buffer[] => {
+/** @deprecated Use `chunkString` instead. This alias will be removed in v1.0. */
+export const ChunkString = chunkString;
+
+export const splitMessageIntoChunks = (ledgerMessage: string): Buffer[] => {
   const messages: Buffer[] = [];
 
-  messages.push(GetBip44PathMessage(Buffer.from('E006' + '00' + '80', 'hex')));
+  messages.push(getBip44PathMessage(Buffer.from('E006' + '00' + '80', 'hex')));
 
   if (Debug) {
     logger.log('splitMessageIntoChunks', 'ledgerMessage.length', ledgerMessage.length);
@@ -411,7 +438,7 @@ export const SplitMessageIntoChunks = (ledgerMessage: string): Buffer[] => {
 
   // ledgerMessage = ledgerMessage.substring(0,bufferSize);
 
-  const chunks = ChunkString(ledgerMessage, bufferSize);
+  const chunks = chunkString(ledgerMessage, bufferSize);
 
   for (let chunkIx = 0; chunkIx < chunks.length; chunkIx++) {
     const chunk = chunks[chunkIx];
@@ -459,7 +486,10 @@ export const SplitMessageIntoChunks = (ledgerMessage: string): Buffer[] => {
   return messages;
 };
 
-export const DecodeSignature = (response: string): string => {
+/** @deprecated Use `splitMessageIntoChunks` instead. This alias will be removed in v1.0. */
+export const SplitMessageIntoChunks = splitMessageIntoChunks;
+
+export const decodeSignature = (response: string): string => {
   /* istanbul ignore if */
   if (Debug) {
     logger.log('decodeSignature', 'response', response);
@@ -472,7 +502,10 @@ export const DecodeSignature = (response: string): string => {
   return signature;
 };
 
-export const SignLedger = async (
+/** @deprecated Use `decodeSignature` instead. This alias will be removed in v1.0. */
+export const DecodeSignature = decodeSignature;
+
+export const signLedger = async (
   transport: LedgerTransport,
   transactionHex: string
 ): Promise<SignResponse> => {
@@ -491,12 +524,12 @@ export const SignLedger = async (
 
   const ledgerMessage = transactionHex;
 
-  const messages = SplitMessageIntoChunks(ledgerMessage);
+  const messages = splitMessageIntoChunks(ledgerMessage);
   if (Debug) {
     logger.log('sign', 'transport', transport);
   }
 
-  const device = await GetDevice(transport);
+  const device = await getDevice(transport);
 
   if (Debug) {
     logger.log('sign', 'device', device);
@@ -535,7 +568,7 @@ export const SignLedger = async (
       }
       if (responseStr !== undefined) {
         if (!responseStr.endsWith('9000')) {
-          const message = GetErrorMessage(responseStr);
+          const message = getErrorMessage(responseStr);
           return {
             success: false,
             message: message,
@@ -552,10 +585,10 @@ export const SignLedger = async (
     let message = lastResponse ?? 'No response from Ledger device';
     if (lastResponse !== undefined) {
       if (lastResponse.endsWith('9000')) {
-        signature = DecodeSignature(lastResponse);
+        signature = decodeSignature(lastResponse);
         success = true;
       } else {
-        message = GetErrorMessage(lastResponse);
+        message = getErrorMessage(lastResponse);
       }
     }
 
@@ -584,3 +617,6 @@ export const SignLedger = async (
     };
   }
 };
+
+/** @deprecated Use `signLedger` instead. This alias will be removed in v1.0. */
+export const SignLedger = signLedger;

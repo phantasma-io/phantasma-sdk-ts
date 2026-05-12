@@ -6,7 +6,7 @@ import { SmallString } from '../../small-string.js';
 import { TxTypes } from '../../tx-types.js';
 import { TxMsgSigner } from '../extensions/tx-msg-signer.js';
 import { ModuleId } from '../module-id.js';
-import { SeriesInfo, TokenContract_Methods } from '../modules/index.js';
+import { SeriesInfo, TokenContractMethods } from '../modules/index.js';
 import { TxMsg } from '../tx-msg.js';
 import { TxMsgCall } from '../tx-msg-call.js';
 import { CreateSeriesFeeOptions } from './fee-options.js';
@@ -39,7 +39,7 @@ export class CreateTokenSeriesTxHelper {
 
     const call = new TxMsgCall();
     call.moduleId = ModuleId.Token;
-    call.methodId = TokenContract_Methods.CreateTokenSeries;
+    call.methodId = TokenContractMethods.CreateTokenSeries;
     call.args = argsW.toUint8Array();
     msg.msg = call;
 

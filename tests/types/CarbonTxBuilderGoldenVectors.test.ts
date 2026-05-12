@@ -203,7 +203,7 @@ function baseTx(type: TxTypes, gasFrom: Bytes32): TxMsg {
 }
 
 function serializeTx(msg: TxMsg): string {
-  return bytesToHex(CarbonBlob.Serialize(msg)).toUpperCase();
+  return bytesToHex(CarbonBlob.serialize(msg)).toUpperCase();
 }
 
 function nftMetadata(includeRawRom = true): Array<{ name: string; value: unknown }> {

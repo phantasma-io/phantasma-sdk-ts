@@ -117,7 +117,7 @@ describe('test phantasma_ts', function () {
     const choice = new PollChoice('myChoice');
     const choice2 = new PollChoice('myChoice');
     const choices = [choice, choice2];
-    /*const choicesSerialized =*/ Serialization.Serialize(choices);
+    /*const choicesSerialized =*/ Serialization.serialize(choices);
     const time = new Timestamp(1234567890);
     const date = new Date(time.toString());
     // const startTime = time;
@@ -401,7 +401,7 @@ describe('test phantasma_ts', function () {
       '07746573746E6574046D61696E00D2029649057465737465'
     );
 
-    expect(Base16.encodeUint8Array(Serialization.Serialize(transaction))).toBe(
+    expect(Base16.encodeUint8Array(Serialization.serialize(transaction))).toBe(
       '07746573746E6574046D61696E00D202964905746573746500'
     );
 
@@ -410,7 +410,7 @@ describe('test phantasma_ts', function () {
       .callContract('consensus', 'CreateTransaction', [
         keys.address.text,
         subject,
-        Serialization.Serialize(transaction),
+        Serialization.serialize(transaction),
         listUserAddr,
       ])
       .spendGas(keys.address)

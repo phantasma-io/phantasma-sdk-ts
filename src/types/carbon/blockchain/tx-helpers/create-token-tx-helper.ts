@@ -6,7 +6,7 @@ import { SmallString } from '../../small-string.js';
 import { TxTypes } from '../../tx-types.js';
 import { TxMsgSigner } from '../extensions/tx-msg-signer.js';
 import { ModuleId } from '../module-id.js';
-import { TokenContract_Methods, TokenInfo } from '../modules/index.js';
+import { TokenContractMethods, TokenInfo } from '../modules/index.js';
 import { TxMsg } from '../tx-msg.js';
 import { TxMsgCall } from '../tx-msg-call.js';
 import { CreateTokenFeeOptions } from './fee-options.js';
@@ -35,7 +35,7 @@ export class CreateTokenTxHelper {
 
     const call = new TxMsgCall();
     call.moduleId = ModuleId.Token;
-    call.methodId = TokenContract_Methods.CreateToken;
+    call.methodId = TokenContractMethods.CreateToken;
     call.args = argsW.toUint8Array();
     msg.msg = call;
 

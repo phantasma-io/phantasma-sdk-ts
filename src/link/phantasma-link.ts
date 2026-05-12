@@ -850,7 +850,7 @@ export class PhantasmaLink {
   }
 
   private serializeCarbonTx(txMsg: TxMsg): string {
-    const serialized = CarbonBlob.Serialize(txMsg);
+    const serialized = CarbonBlob.serialize(txMsg);
     return bytesToHex(serialized);
   }
 }

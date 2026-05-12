@@ -15,6 +15,7 @@ import type {
   ContractDescriptor,
   KeyPair,
   LinkAccount,
+  Serializable,
   StackLike,
   TokenDescriptor,
 } from '../../src/public';
@@ -69,6 +70,10 @@ describe('public entrypoint', () => {
       },
     };
     stack.push(7);
+    const serializable: Serializable = {
+      serializeData: () => undefined,
+      unserializeData: () => undefined,
+    };
 
     const account: LinkAccount = {
       alias: 'main',
@@ -92,6 +97,7 @@ describe('public entrypoint', () => {
     };
 
     expect(stack.peek()).toBe(7);
+    expect(serializable).toHaveProperty('serializeData');
     expect(account.address).toBe(Address.nullText);
     expect(blob).toHaveProperty('write');
     expect(contract.name).toBe('account');

@@ -4,7 +4,7 @@ import { logger } from '../utils/logger.js';
 const PUBLIC_KEY_PREFIX = '302A300506032B6570032100';
 const DEBUG = false;
 
-export const PrivateToDer = (privateKeyHex: string): Buffer => {
+export const privateToDer = (privateKeyHex: string): Buffer => {
   if (DEBUG) {
     logger.log('privateToDer', 'privateKeyHex', privateKeyHex);
   }
@@ -15,23 +15,32 @@ export const PrivateToDer = (privateKeyHex: string): Buffer => {
   return Buffer.from(derHex, 'hex');
 };
 
-export const PublicToDer = (publicKeyHex: string): Buffer => {
+/** @deprecated Use `privateToDer` instead. This alias will be removed in v1.0. */
+export const PrivateToDer = privateToDer;
+
+export const publicToDer = (publicKeyHex: string): Buffer => {
   const publicKeyDerHex = `${PUBLIC_KEY_PREFIX}${publicKeyHex}`;
   return Buffer.from(publicKeyDerHex, 'hex');
 };
 
-export const PublicToPem = (publicKeyHex: string): string => {
-  const publicKeyDer = PublicToDer(publicKeyHex);
+/** @deprecated Use `publicToDer` instead. This alias will be removed in v1.0. */
+export const PublicToDer = publicToDer;
+
+export const publicToPem = (publicKeyHex: string): string => {
+  const publicKeyDer = publicToDer(publicKeyHex);
   const publicKeyDerBase64 = publicKeyDer.toString('base64');
   return `-----BEGIN PUBLIC KEY-----\n${publicKeyDerBase64}\n-----END PUBLIC KEY-----`;
 };
 
-export const SignBytes = (hash: Buffer, privateKey: Buffer): string => {
+/** @deprecated Use `publicToPem` instead. This alias will be removed in v1.0. */
+export const PublicToPem = publicToPem;
+
+export const signBytes = (hash: Buffer, privateKey: Buffer): string => {
   if (DEBUG) {
     logger.log('signBytes.hash', hash);
     logger.log('signBytes.privateKey', privateKey);
   }
-  const privateKeyDer = PrivateToDer(privateKey.toString('hex'));
+  const privateKeyDer = privateToDer(privateKey.toString('hex'));
   if (DEBUG) {
     logger.log('signBytes.privateKeyDer', privateKeyDer);
   }
@@ -48,11 +57,17 @@ export const SignBytes = (hash: Buffer, privateKey: Buffer): string => {
   return signatureHex;
 };
 
-export const GetHash = (encodedTx: string): Buffer => {
+/** @deprecated Use `signBytes` instead. This alias will be removed in v1.0. */
+export const SignBytes = signBytes;
+
+export const getHash = (encodedTx: string): Buffer => {
   return Buffer.from(encodedTx, 'hex');
 };
 
-export const Sign = (encodedTx: string, privateKeyHex: string): string => {
+/** @deprecated Use `getHash` instead. This alias will be removed in v1.0. */
+export const GetHash = getHash;
+
+export const sign = (encodedTx: string, privateKeyHex: string): string => {
   if (DEBUG) {
     logger.log('sign', 'encodedTx', encodedTx);
   }
@@ -61,24 +76,27 @@ export const Sign = (encodedTx: string, privateKeyHex: string): string => {
     logger.log('sign', 'privateKey', privateKey.toString('hex'));
   }
 
-  const hash = GetHash(encodedTx);
+  const hash = getHash(encodedTx);
   if (DEBUG) {
     logger.log('sign', 'hash', hash.toString('hex'));
   }
-  const signature = SignBytes(hash, privateKey);
+  const signature = signBytes(hash, privateKey);
   if (DEBUG) {
     logger.log('sign', 'signature', signature);
   }
   return signature.toLowerCase();
 };
 
-export const Verify = (encodedTx: string, signatureHex: string, publicKeyHex: string): boolean => {
+/** @deprecated Use `sign` instead. This alias will be removed in v1.0. */
+export const Sign = sign;
+
+export const verify = (encodedTx: string, signatureHex: string, publicKeyHex: string): boolean => {
   if (DEBUG) {
     logger.log('verify', 'encodedTx', encodedTx);
     logger.log('verify', 'signatureHex', signatureHex);
     logger.log('verify', 'publicKeyHex', publicKeyHex);
   }
-  const publicKeyPem = PublicToPem(publicKeyHex);
+  const publicKeyPem = publicToPem(publicKeyHex);
   if (DEBUG) {
     logger.log('verify', 'publicKeyPem', publicKeyPem);
   }
@@ -88,15 +106,18 @@ export const Verify = (encodedTx: string, signatureHex: string, publicKeyHex: st
     type: 'spki',
   });
   const signature = Buffer.from(signatureHex, 'hex');
-  const hash = GetHash(encodedTx);
+  const hash = getHash(encodedTx);
   if (DEBUG) {
     logger.log('verify', 'hash', hash.toString('hex'));
   }
   return crypto.verify(undefined, hash, publicKeyObj, signature);
 };
 
-export const GetPublicFromPrivate = (privateKey: string): string => {
-  const privateKeyDer = PrivateToDer(privateKey);
+/** @deprecated Use `verify` instead. This alias will be removed in v1.0. */
+export const Verify = verify;
+
+export const getPublicFromPrivate = (privateKey: string): string => {
+  const privateKeyDer = privateToDer(privateKey);
   const privateKeyObj = crypto.createPrivateKey({
     key: privateKeyDer,
     format: 'der',
@@ -125,3 +146,6 @@ export const GetPublicFromPrivate = (privateKey: string): string => {
     );
   }
 };
+
+/** @deprecated Use `getPublicFromPrivate` instead. This alias will be removed in v1.0. */
+export const GetPublicFromPrivate = getPublicFromPrivate;

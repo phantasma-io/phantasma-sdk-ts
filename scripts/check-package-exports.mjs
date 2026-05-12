@@ -19,11 +19,21 @@ const deepImportChecks = [
   ['phantasma-sdk-ts/core/tx/Transaction', ['Transaction']],
   ['phantasma-sdk-ts/core/vm', ['ScriptBuilder', 'VMObject']],
   ['phantasma-sdk-ts/core/types/Address', ['Address']],
+  ['phantasma-sdk-ts/core/types/Carbon/Bytes32', ['Bytes32']],
   ['phantasma-sdk-ts/tx/transaction', ['Transaction']],
   ['phantasma-sdk-ts/vm', ['ScriptBuilder', 'VMObject']],
   ['phantasma-sdk-ts/types/address', ['Address']],
   ['phantasma-sdk-ts/types/carbon/bytes32', ['Bytes32']],
+  [
+    'phantasma-sdk-ts/types/carbon/blockchain/modules/token-contract-methods',
+    ['TokenContractMethods'],
+  ],
   ['phantasma-sdk-ts/link/phantasma-link', ['PhantasmaLink']],
+  ['phantasma-sdk-ts/ledger/ledger-utils', ['getPublicKey']],
+];
+const forbiddenDeepImports = [
+  'phantasma-sdk-ts/scripts/check-package-exports',
+  'phantasma-sdk-ts/tsconfig.base',
 ];
 
 function assertExports(moduleName, moduleApi, requiredExports) {
@@ -40,6 +50,39 @@ function assertNoExports(moduleName, moduleApi, excludedExports) {
       throw new Error(`${moduleName} unexpectedly exports ${name}`);
     }
   }
+}
+
+function isPackagePathNotExported(error) {
+  return (
+    error &&
+    typeof error === 'object' &&
+    'code' in error &&
+    error.code === 'ERR_PACKAGE_PATH_NOT_EXPORTED'
+  );
+}
+
+function assertNotExported(moduleName) {
+  try {
+    require(moduleName);
+  } catch (error) {
+    if (!isPackagePathNotExported(error)) {
+      throw error;
+    }
+    return;
+  }
+  throw new Error(`CommonJS ${moduleName} should not be exported`);
+}
+
+async function assertNotExportedEsm(moduleName) {
+  try {
+    await import(moduleName);
+  } catch (error) {
+    if (!isPackagePathNotExported(error)) {
+      throw error;
+    }
+    return;
+  }
+  throw new Error(`ESM ${moduleName} should not be exported`);
 }
 
 function exercisePublicApi(publicApi) {
@@ -80,4 +123,9 @@ exercisePublicApi(esmPublic);
 for (const [moduleName, requiredExports] of deepImportChecks) {
   assertExports(`CommonJS ${moduleName}`, require(moduleName), requiredExports);
   assertExports(`ESM ${moduleName}`, await import(moduleName), requiredExports);
+}
+
+for (const moduleName of forbiddenDeepImports) {
+  assertNotExported(moduleName);
+  await assertNotExportedEsm(moduleName);
 }

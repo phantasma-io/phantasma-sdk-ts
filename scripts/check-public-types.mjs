@@ -70,6 +70,7 @@ import {
   type ContractDescriptor,
   type KeyPair,
   type LinkAccount,
+  type Serializable,
   type StackLike,
 } from 'phantasma-sdk-ts/public';
 
@@ -108,11 +109,16 @@ const account: LinkAccount = {
 };
 
 const contract: ContractDescriptor = { name: 'account', abi: ContractInterface.Empty };
+const serializable: Serializable = {
+  serializeData: () => undefined,
+  unserializeData: () => undefined,
+};
 
 void decoded;
 void stack;
 void account;
 void contract;
+void serializable;
 `
 );
 
@@ -129,26 +135,46 @@ void legacy;
 const deepImportConsumer = writeFile(
   'deep-import-consumer.ts',
   `
+import { Address } from 'phantasma-sdk-ts/public';
 import { Transaction as NewTransaction } from 'phantasma-sdk-ts/tx/transaction';
 import { ScriptBuilder as NewScriptBuilder } from 'phantasma-sdk-ts/vm';
 import { Address as NewAddress } from 'phantasma-sdk-ts/types/address';
 import { Bytes32 as NewBytes32 } from 'phantasma-sdk-ts/types/carbon/bytes32';
+import { TokenContractMethods } from 'phantasma-sdk-ts/types/carbon/blockchain/modules/token-contract-methods';
+import { getPublicKey } from 'phantasma-sdk-ts/ledger/ledger-utils';
+import type { LedgerAccountSigner, LedgerSigner } from 'phantasma-sdk-ts/ledger';
 import { PhantasmaLink as NewPhantasmaLink } from 'phantasma-sdk-ts/link/phantasma-link';
 import { Transaction as LegacyTransaction } from 'phantasma-sdk-ts/core/tx/Transaction';
 import { ScriptBuilder as LegacyScriptBuilder } from 'phantasma-sdk-ts/core/vm';
 import { Address as LegacyAddress } from 'phantasma-sdk-ts/core/types/Address';
+import { Bytes32 as LegacyBytes32 } from 'phantasma-sdk-ts/core/types/Carbon/Bytes32';
 
 const script = new NewScriptBuilder().beginScript().emitVarString('deep-imports').endScript();
 const tx = new NewTransaction('testnet', 'main', script, new Date('2026-01-01T00:00:00Z'), '');
 const legacyTx = LegacyTransaction.fromBytes(tx.toByteArray(false));
 const legacyScript = new LegacyScriptBuilder().beginScript().emitVarString('legacy').endScript();
+const legacySigner: LedgerSigner = {
+  GetPublicKey: () => '00'.repeat(32),
+  GetAccount: () => Address.nullAddress,
+};
+const accountSigner: LedgerAccountSigner = {
+  getPublicKey: () => '00'.repeat(32),
+  getAccount: () => Address.nullAddress,
+  GetPublicKey: () => '00'.repeat(32),
+  GetAccount: () => Address.nullAddress,
+};
 
 void legacyTx;
 void legacyScript;
+void legacySigner;
+void accountSigner;
 void NewAddress.nullText;
 void NewBytes32;
+void TokenContractMethods.TransferFungible;
+void getPublicKey;
 void NewPhantasmaLink;
 void LegacyAddress.NullText;
+void LegacyBytes32;
 `
 );
 

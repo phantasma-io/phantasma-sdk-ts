@@ -3,20 +3,29 @@ import { logger } from '../utils/logger.js';
 import { Transaction } from '../tx/index.js';
 import { Address, Base16, Ed25519Signature } from '../types/index.js';
 import { getAddressFromPublicKey, getAddressPublicKeyFromPublicKey } from './address-transcode.js';
-import { GetPrivateKeyFromMnemonic } from './mnemonic.js';
-import { LedgerConfig } from './interfaces/ledger-config.js';
-import { GetPublicFromPrivate, Verify } from './transaction-sign.js';
-import { GetExpirationDate } from './transaction-transcode.js';
+import { getPrivateKeyFromMnemonic } from './mnemonic.js';
 import {
-  GetVersion,
-  GetApplicationName,
-  GetPublicKey,
+  getLedgerChainName,
+  getLedgerDebug,
+  getLedgerNexusName,
+  getLedgerPayload,
+  getLedgerRpc,
+  getLedgerTransport,
+  getLedgerVerifyResponse,
+  LedgerCompatibleConfig,
+} from './interfaces/ledger-config.js';
+import { getPublicFromPrivate, verify } from './transaction-sign.js';
+import { getExpirationDate } from './transaction-transcode.js';
+import {
+  getVersion,
+  getApplicationName,
+  getPublicKey,
   LedgerPublicKeyOptions,
-  SignLedger,
+  signLedger,
 } from './ledger-utils.js';
 import { LedgerDeviceInfoResponse } from './interfaces/ledger-device-info-response.js';
 import { LedgerBalanceFromLedgerResponse } from './interfaces/ledger-balance-from-ledger-response.js';
-import { LedgerSigner } from './interfaces/ledger-signer.js';
+import { LedgerAccountSigner } from './interfaces/ledger-signer.js';
 import { LedgerSignerData } from './interfaces/ledger-signer-data.js';
 import { LedgerSendTransactionResponse } from './interfaces/ledger-send-transaction-response.js';
 import { PublicKeyResponse } from './interfaces/public-key-response.js';
@@ -27,7 +36,7 @@ import { PublicKeyResponse } from './interfaces/public-key-response.js';
  * @param length
  * @returns
  */
-export const LeftPad = (number: string | number, length: number): string => {
+export const leftPad = (number: string | number, length: number): string => {
   let str = '' + number;
   while (str.length < length) {
     str = '0' + str;
@@ -35,13 +44,16 @@ export const LeftPad = (number: string | number, length: number): string => {
   return str;
 };
 
+/** @deprecated Use `leftPad` instead. This alias will be removed in v1.0. */
+export const LeftPad = leftPad;
+
 /**
  *
  * @param balance
  * @param decimals
  * @returns
  */
-export const ToWholeNumber = (balance: string | number, decimals: number): string => {
+export const toWholeNumber = (balance: string | number, decimals: number): string => {
   if (balance === undefined) {
     throw Error('balance is a required parameter.');
   }
@@ -49,7 +61,7 @@ export const ToWholeNumber = (balance: string | number, decimals: number): strin
     throw Error('decimals is a required parameter.');
   }
   // console.log('toWholeNumber', 'balance', balance);
-  const paddedBalance = LeftPad(balance, decimals + 1);
+  const paddedBalance = leftPad(balance, decimals + 1);
   // console.log('toWholeNumber', 'paddedBalance', paddedBalance);
   const prefixLength = paddedBalance.length - decimals;
   // console.log('toWholeNumber', 'prefixLength', prefixLength);
@@ -60,19 +72,23 @@ export const ToWholeNumber = (balance: string | number, decimals: number): strin
   return `${prefix}.${suffix}`;
 };
 
+/** @deprecated Use `toWholeNumber` instead. This alias will be removed in v1.0. */
+export const ToWholeNumber = toWholeNumber;
+
 /**
  * Get the device info from the ledger.
  * @param config
  * @returns
  */
-export const GetLedgerDeviceInfo = async (
-  config: LedgerConfig
+export const getLedgerDeviceInfo = async (
+  config: LedgerCompatibleConfig
 ): Promise<LedgerDeviceInfoResponse> => {
   if (config == undefined) {
     throw Error('config is a required parameter.');
   }
-  const version = await GetVersion(config.Transport);
-  const applicationName = await GetApplicationName(config.Transport);
+  const transport = getLedgerTransport(config);
+  const version = await getVersion(transport);
+  const applicationName = await getApplicationName(transport);
 
   return {
     version: version,
@@ -80,16 +96,19 @@ export const GetLedgerDeviceInfo = async (
   };
 };
 
+/** @deprecated Use `getLedgerDeviceInfo` instead. This alias will be removed in v1.0. */
+export const GetLedgerDeviceInfo = getLedgerDeviceInfo;
+
 /**
  * Get Ledger Account Signer
  * @param config
  * @param accountIx
  * @returns
  */
-export const GetLedgerAccountSigner = async (
-  config: LedgerConfig,
+export const getLedgerAccountSigner = async (
+  config: LedgerCompatibleConfig,
   accountIx: number
-): Promise<LedgerSigner> => {
+): Promise<LedgerAccountSigner> => {
   /* istanbul ignore if */
   if (config === undefined) {
     throw Error('config is a required parameter.');
@@ -99,7 +118,8 @@ export const GetLedgerAccountSigner = async (
     throw Error('accountIx is a required parameter.');
   }
 
-  const paths = await config.Transport.list();
+  const transport = getLedgerTransport(config);
+  const paths = await transport.list();
   logger.log('paths', paths);
   if (paths.length == 0) {
     if (typeof alert !== 'undefined') {
@@ -107,27 +127,34 @@ export const GetLedgerAccountSigner = async (
     }
     throw Error('No Ledger device connected.');
   }
-  const accountData = await GetLedgerSignerData(config, {
+  const accountData = await getLedgerSignerData(config, {
     verifyOnDevice: false,
     debug: true,
   });
 
-  const signer: LedgerSigner = {
-    GetPublicKey: () => {
-      if (!accountData.publicKey) {
-        throw Error('Ledger did not return a public key.');
-      }
-      return accountData.publicKey;
-    },
-    GetAccount: () => {
-      if (!accountData.address) {
-        throw Error('Ledger did not return an address.');
-      }
-      return accountData.address;
-    },
+  const getSignerPublicKey = () => {
+    if (!accountData.publicKey) {
+      throw Error('Ledger did not return a public key.');
+    }
+    return accountData.publicKey;
+  };
+  const getSignerAccount = () => {
+    if (!accountData.address) {
+      throw Error('Ledger did not return an address.');
+    }
+    return accountData.address;
+  };
+  const signer: LedgerAccountSigner = {
+    getPublicKey: getSignerPublicKey,
+    getAccount: getSignerAccount,
+    GetPublicKey: getSignerPublicKey,
+    GetAccount: getSignerAccount,
   };
   return signer;
 };
+
+/** @deprecated Use `getLedgerAccountSigner` instead. This alias will be removed in v1.0. */
+export const GetLedgerAccountSigner = getLedgerAccountSigner;
 
 /**
  * GetLedgerSignerData
@@ -135,8 +162,8 @@ export const GetLedgerAccountSigner = async (
  * @param options
  * @returns
  */
-export async function GetLedgerSignerData(
-  config: LedgerConfig,
+export async function getLedgerSignerData(
+  config: LedgerCompatibleConfig,
   options: LedgerPublicKeyOptions
 ): Promise<LedgerSignerData> {
   if (config == undefined) {
@@ -147,7 +174,7 @@ export async function GetLedgerSignerData(
     throw Error('options is a required parameter.');
   }
 
-  const msg = await GetPublicKey(config.Transport, options);
+  const msg = await getPublicKey(getLedgerTransport(config), options);
   const response: LedgerSignerData = {
     address: Address.nullAddress,
     publicKey: '',
@@ -174,14 +201,17 @@ export async function GetLedgerSignerData(
   return response;
 }
 
+/** @deprecated Use `getLedgerSignerData` instead. This alias will be removed in v1.0. */
+export const GetLedgerSignerData = getLedgerSignerData;
+
 /**
  * GetBalanceFromLedger
  * @param config
  * @param options
  * @returns
  */
-export const GetBalanceFromLedger = async (
-  config: LedgerConfig,
+export const getBalanceFromLedger = async (
+  config: LedgerCompatibleConfig,
   options: LedgerPublicKeyOptions
 ): Promise<LedgerBalanceFromLedgerResponse> => {
   /* istanbul ignore if */
@@ -192,9 +222,11 @@ export const GetBalanceFromLedger = async (
   if (options == undefined) {
     throw Error('options is a required parameter.');
   }
-  const msg = await GetPublicKey(config.Transport, options);
+  const debug = getLedgerDebug(config);
+  const rpc = getLedgerRpc(config);
+  const msg = await getPublicKey(getLedgerTransport(config), options);
   /* istanbul ignore if */
-  if (config.Debug) {
+  if (debug) {
     logger.log('getBalanceFromLedger', 'msg', msg);
   }
   const response: LedgerBalanceFromLedgerResponse = {
@@ -217,14 +249,13 @@ export const GetBalanceFromLedger = async (
   }
   const address = getAddressPublicKeyFromPublicKey(publicKey);
   /* istanbul ignore if */
-  if (config.Debug) {
+  if (debug) {
     logger.log('address', address);
-    logger.log('rpc', config.RPC);
+    logger.log('rpc', rpc);
   }
 
-  logger.log('rpcAwait', await config.RPC.getAccount(address.text));
-  const rpcResponse = await config.RPC.getAccount(address.text);
-  if (config.Debug) {
+  const rpcResponse = await rpc.getAccount(address.text);
+  if (debug) {
     logger.log('rpcResponse', rpcResponse);
   }
   response.balances = new Map<string, string>();
@@ -232,7 +263,7 @@ export const GetBalanceFromLedger = async (
     rpcResponse.balances.forEach((balanceElt) => {
       response.balances?.set(
         balanceElt.symbol,
-        ToWholeNumber(balanceElt.amount, balanceElt.decimals)
+        toWholeNumber(balanceElt.amount, balanceElt.decimals)
       );
     });
   }
@@ -242,6 +273,9 @@ export const GetBalanceFromLedger = async (
   return response;
 };
 
+/** @deprecated Use `getBalanceFromLedger` instead. This alias will be removed in v1.0. */
+export const GetBalanceFromLedger = getBalanceFromLedger;
+
 /**
  * Get Addres from Ledger
  * @param config
@@ -249,7 +283,7 @@ export const GetBalanceFromLedger = async (
  * @returns
  */
 export const getAddressFromLedger = async (
-  config: LedgerConfig,
+  config: LedgerCompatibleConfig,
   options: LedgerPublicKeyOptions
 ): Promise<string | PublicKeyResponse> => {
   /* istanbul ignore if */
@@ -260,9 +294,9 @@ export const getAddressFromLedger = async (
   if (options == undefined) {
     throw Error('options is a required parameter.');
   }
-  const msg = await GetPublicKey(config.Transport, options);
+  const msg = await getPublicKey(getLedgerTransport(config), options);
   /* istanbul ignore if */
-  if (config.Debug) {
+  if (getLedgerDebug(config)) {
     logger.log('getBalanceFromLedger', 'msg', msg);
   }
   if (msg.success) {
@@ -286,10 +320,10 @@ export const GetAddressFromLedeger = getAddressFromLedger;
  * @param config
  * @returns
  */
-async function SignEncodedTx(encodedTx: string, config: LedgerConfig): Promise<string> {
-  const response = await SignLedger(config.Transport, encodedTx);
+async function signEncodedTx(encodedTx: string, config: LedgerCompatibleConfig): Promise<string> {
+  const response = await signLedger(getLedgerTransport(config), encodedTx);
   /* istanbul ignore if */
-  if (config.Debug) {
+  if (getLedgerDebug(config)) {
     logger.log('sendAmountUsingLedger', 'signCallback', 'response', response);
   }
   if (response.success) {
@@ -302,24 +336,29 @@ async function SignEncodedTx(encodedTx: string, config: LedgerConfig): Promise<s
   }
 }
 
+/** @deprecated Use internal `signEncodedTx` flow instead. This alias will be removed in v1.0. */
+export const SignEncodedTx = signEncodedTx;
+
 /**
  * SendTransactionLedger
  * @param config
  * @param script
  * @returns
  */
-export async function SendTransactionLedger(
-  config: LedgerConfig,
+export async function sendTransactionLedger(
+  config: LedgerCompatibleConfig,
   script: string
 ): Promise<LedgerSendTransactionResponse> {
   if (config == undefined) {
     throw Error('config is a required parameter.');
   }
 
+  const debug = getLedgerDebug(config);
+  const rpc = getLedgerRpc(config);
   const options = { verifyOnDevice: false };
-  const msg_publicKey = await GetPublicKey(config.Transport, options);
+  const msg_publicKey = await getPublicKey(getLedgerTransport(config), options);
   if (!msg_publicKey.success) {
-    if (config.Debug) {
+    if (debug) {
       logger.log('SendTransactionLedger', 'error ', msg_publicKey);
     }
     return msg_publicKey;
@@ -327,13 +366,13 @@ export async function SendTransactionLedger(
 
   const publicKey = msg_publicKey.publicKey!;
 
-  const nexusName = config.NexusName;
-  const chainName = config.ChainName;
+  const nexusName = getLedgerNexusName(config);
+  const chainName = getLedgerChainName(config);
 
-  const expirationDate = GetExpirationDate();
+  const expirationDate = getExpirationDate();
 
   // no payload, could be a message.
-  const payload = config.Payload;
+  const payload = getLedgerPayload(config);
 
   const myTransaction = new Transaction(
     nexusName, // Nexus Name
@@ -346,25 +385,25 @@ export async function SendTransactionLedger(
   const encodedTx = Base16.encodeUint8Array(myTransaction.toByteArray(false));
 
   try {
-    if (config.Debug) {
+    if (debug) {
       logger.log('sendAmountUsingCallback', 'encodedTx', encodedTx);
     }
 
-    const signature = await SignEncodedTx(encodedTx, config);
+    const signature = await signEncodedTx(encodedTx, config);
 
-    if (config.Debug) {
+    if (debug) {
       logger.log('sendAmountUsingCallback', 'signature', signature);
     }
 
-    if (config.VerifyResponse) {
-      const verifyResponse = Verify(encodedTx, signature!, publicKey);
+    if (getLedgerVerifyResponse(config)) {
+      const verifyResponse = verify(encodedTx, signature!, publicKey);
       if (verifyResponse == false) {
         throw Error(
           `invalidSignature encodedTx:'${encodedTx}', publicKey:'${publicKey}' signature:'${signature}'`
         );
       }
 
-      if (config.Debug) {
+      if (debug) {
         logger.log('verifyResponse', verifyResponse);
       }
     }
@@ -375,15 +414,15 @@ export async function SendTransactionLedger(
     myNewSignaturesArray.push(mySignature);
     myTransaction.signatures = myNewSignaturesArray;
 
-    if (config.Debug) {
+    if (debug) {
       logger.log('signedTx', myTransaction);
     }
 
     const encodedSignedTx = Base16.encodeUint8Array(myTransaction.toByteArray(true));
     logger.log('encoded signed tx: ', encodedSignedTx);
 
-    const txHash = await config.RPC.sendRawTransaction(encodedSignedTx);
-    if (config.Debug) {
+    const txHash = await rpc.sendRawTransaction(encodedSignedTx);
+    if (debug) {
       logger.log('sendAmountUsingCallback', 'txHash', txHash);
     }
 
@@ -393,12 +432,12 @@ export async function SendTransactionLedger(
     };
 
     /* istanbul ignore if */
-    if (config.Debug) {
+    if (debug) {
       logger.log('response', response);
     }
     return response;
   } catch (error: unknown) {
-    if (config.Debug) {
+    if (debug) {
       logger.log('error', error);
     }
 
@@ -410,14 +449,17 @@ export async function SendTransactionLedger(
   }
 }
 
+/** @deprecated Use `sendTransactionLedger` instead. This alias will be removed in v1.0. */
+export const SendTransactionLedger = sendTransactionLedger;
+
 /**
  *
  * @param config
  * @param privateKey
  * @returns
  */
-export const GetBalanceFromPrivateKey = async (
-  config: LedgerConfig,
+export const getBalanceFromPrivateKey = async (
+  config: LedgerCompatibleConfig,
   privateKey: string
 ): Promise<LedgerBalanceFromLedgerResponse> => {
   /* istanbul ignore if */
@@ -429,24 +471,26 @@ export const GetBalanceFromPrivateKey = async (
     throw Error('privateKey is a required parameter.');
   }
   /* istanbul ignore if */
-  if (config.Debug) {
+  const debug = getLedgerDebug(config);
+  const rpc = getLedgerRpc(config);
+  if (debug) {
     logger.log('privateKey', privateKey);
   }
   // https://github.com/phantasma-io/phantasma-sdk-ts/blob/7d04aaed839851ae5640f68ab223ca7d92c42016/core/tx/utils.js
-  const publicKey = GetPublicFromPrivate(privateKey);
+  const publicKey = getPublicFromPrivate(privateKey);
   /* istanbul ignore if */
-  if (config.Debug) {
+  if (debug) {
     logger.log('publicKey', publicKey);
   }
   const address = getAddressFromPublicKey(publicKey);
   /* istanbul ignore if */
-  if (config.Debug) {
+  if (debug) {
     logger.log('address', address);
   }
   // const path = `/address/${address}`;
   // const response = await httpRequestUtil.get(config, path);
-  const rpcResponse = await config.RPC.getAccount(address);
-  if (config.Debug) {
+  const rpcResponse = await rpc.getAccount(address);
+  if (debug) {
     logger.log('rpcResponse', rpcResponse);
   }
   const response: LedgerBalanceFromLedgerResponse = {
@@ -460,7 +504,7 @@ export const GetBalanceFromPrivateKey = async (
     rpcResponse.balances.forEach((balanceElt) => {
       response.balances?.set(
         balanceElt.symbol,
-        ToWholeNumber(balanceElt.amount, balanceElt.decimals)
+        toWholeNumber(balanceElt.amount, balanceElt.decimals)
       );
     });
   }
@@ -472,6 +516,9 @@ export const GetBalanceFromPrivateKey = async (
   return response;
 };
 
+/** @deprecated Use `getBalanceFromPrivateKey` instead. This alias will be removed in v1.0. */
+export const GetBalanceFromPrivateKey = getBalanceFromPrivateKey;
+
 /**
  *
  * @param config
@@ -479,8 +526,8 @@ export const GetBalanceFromPrivateKey = async (
  * @param index
  * @returns
  */
-export const GetBalanceFromMnemonic = async (
-  config: LedgerConfig,
+export const getBalanceFromMnemonic = async (
+  config: LedgerCompatibleConfig,
   mnemonic: string,
   index: string
 ) => {
@@ -497,9 +544,12 @@ export const GetBalanceFromMnemonic = async (
     throw Error('index is a required parameter.');
   }
   /* istanbul ignore if */
-  if (config.Debug) {
+  if (getLedgerDebug(config)) {
     logger.log('mnemonic', mnemonic);
   }
-  const privateKey = GetPrivateKeyFromMnemonic(config, mnemonic, index);
-  return await GetBalanceFromPrivateKey(config, privateKey);
+  const privateKey = getPrivateKeyFromMnemonic(config, mnemonic, index);
+  return await getBalanceFromPrivateKey(config, privateKey);
 };
+
+/** @deprecated Use `getBalanceFromMnemonic` instead. This alias will be removed in v1.0. */
+export const GetBalanceFromMnemonic = getBalanceFromMnemonic;

@@ -1,4 +1,4 @@
-export enum TokenContract_Methods {
+export enum TokenContractMethods {
   TransferFungible = 0,
   TransferNonFungible = 1,
   CreateToken = 2,
@@ -28,3 +28,6 @@ export enum TokenContract_Methods {
   UpdateSeriesMetadata = 26,
   MintPhantasmaNonFungible = 27,
 }
+
+/** @deprecated Use `TokenContractMethods` instead. This alias will be removed in v1.0. */
+export { TokenContractMethods as TokenContract_Methods };

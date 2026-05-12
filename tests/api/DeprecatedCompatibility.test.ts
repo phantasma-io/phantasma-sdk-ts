@@ -1,12 +1,27 @@
 import {
   Address,
   Bytes32,
+  CarbonBlob,
   PBinaryWriter,
   PhantasmaKeys,
   ScriptBuilder,
+  Serialization,
+  TokenContract_Methods,
+  TokenContractMethods,
   Transaction,
   VMObject,
 } from '../../src/core';
+import {
+  getBip44Path,
+  getDateAsUTCSeconds,
+  GetBip44Path,
+  GetDateAsUTCSeconds,
+  privateToDer,
+  PrivateToDer,
+  toWholeNumber,
+  ToWholeNumber,
+} from '../../src/ledger';
+import type { LedgerAccountSigner, LedgerSigner } from '../../src/ledger';
 
 const TEST_WIF = 'L5UEVHBjujaR1721aZM5Zm5ayjDyamMZS9W35RE9Y9giRkdf3dVx';
 
@@ -72,5 +87,38 @@ describe('deprecated compatibility aliases', () => {
 
     const b32 = new Bytes32(Uint8Array.from({ length: 32 }, (_, i) => i));
     expect(b32.ToHex()).toBe(b32.toHex());
+  });
+
+  test('serialization, CarbonBlob, token method, and ledger aliases delegate', () => {
+    const b32 = new Bytes32(Uint8Array.from({ length: 32 }, (_, i) => i));
+
+    expect(Serialization.Serialize('compat')).toStrictEqual(Serialization.serialize('compat'));
+    expect(CarbonBlob.Serialize(b32)).toStrictEqual(CarbonBlob.serialize(b32));
+    expect(TokenContract_Methods.CreateToken).toBe(TokenContractMethods.CreateToken);
+    expect(GetBip44Path('3')).toBe(getBip44Path('3'));
+    expect(GetDateAsUTCSeconds(new Date('2026-01-01T00:00:00Z'))).toBe(
+      getDateAsUTCSeconds(new Date('2026-01-01T00:00:00Z'))
+    );
+    expect(ToWholeNumber('12345', 2)).toBe(toWholeNumber('12345', 2));
+    expect(PrivateToDer('00'.repeat(32))).toStrictEqual(privateToDer('00'.repeat(32)));
+
+    // Behavior: legacy LedgerSigner implementations remain source-compatible
+    // with the old PascalCase-only contract.
+    const legacySigner: LedgerSigner = {
+      GetPublicKey: () => b32.toHex(),
+      GetAccount: () => Address.nullAddress,
+    };
+
+    // Behavior: the canonical SDK-returned signer carries both the new
+    // lower-camel methods and the legacy aliases.
+    const accountSigner: LedgerAccountSigner = {
+      getPublicKey: () => b32.toHex(),
+      getAccount: () => Address.nullAddress,
+      GetPublicKey: () => b32.toHex(),
+      GetAccount: () => Address.nullAddress,
+    };
+    expect(legacySigner.GetPublicKey()).toBe(b32.toHex());
+    expect(accountSigner.GetPublicKey()).toBe(accountSigner.getPublicKey());
+    expect(accountSigner.GetAccount().text).toBe(accountSigner.getAccount().text);
   });
 });

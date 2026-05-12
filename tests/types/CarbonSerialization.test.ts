@@ -31,7 +31,7 @@ import {
 import {
   SeriesInfo,
   StandardMeta,
-  TokenContract_Methods,
+  TokenContractMethods,
   TokenInfo,
   TokenSchemas,
 } from '../../src/core/types/Carbon/Blockchain/Modules';
@@ -907,7 +907,7 @@ describe('CarbonSerialization.ts ↔ C# fixtures (decode)', () => {
 
         const call = decoded.msg as TxMsgCall;
         expect(call.moduleId).toBe(ModuleId.Token);
-        expect(call.methodId).toBe(TokenContract_Methods.CreateToken);
+        expect(call.methodId).toBe(TokenContractMethods.CreateToken);
         expect(call.args.length).toBeGreaterThan(0);
 
         const argsReader = new CarbonBinaryReader(call.args);
@@ -966,7 +966,7 @@ describe('CarbonSerialization.ts ↔ C# fixtures (decode)', () => {
 
         const call = decoded.msg as TxMsgCall;
         expect(call.moduleId).toBe(ModuleId.Token);
-        expect(call.methodId).toBe(TokenContract_Methods.CreateTokenSeries);
+        expect(call.methodId).toBe(TokenContractMethods.CreateTokenSeries);
 
         const argsReader = new CarbonBinaryReader(call.args);
         const decodedTokenId = argsReader.read8u();

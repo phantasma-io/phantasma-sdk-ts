@@ -4,3 +4,8 @@ export interface LedgerSigner {
   GetPublicKey: () => string;
   GetAccount: () => Address;
 }
+
+export interface LedgerAccountSigner extends LedgerSigner {
+  getPublicKey: () => string;
+  getAccount: () => Address;
+}

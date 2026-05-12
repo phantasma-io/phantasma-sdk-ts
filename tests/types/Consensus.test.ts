@@ -16,7 +16,7 @@ describe('Consensus Tests', () => {
       );
     }*/
 
-    //const consensus = Serialization.Unserialize(reader, Array<ConsensusPoll>);
+    //const consensus = Serialization.deserialize(reader, Array<ConsensusPoll>);
     //console.log(arrayBytes);
     done();
   });
