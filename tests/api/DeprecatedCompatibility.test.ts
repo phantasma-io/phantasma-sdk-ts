@@ -12,6 +12,7 @@ import {
   ScriptBuilder,
   Serialization,
   SignatureKind,
+  Timestamp,
   TokenContract_Methods,
   TokenContractMethods,
   Transaction,
@@ -189,5 +190,17 @@ describe('deprecated compatibility aliases', () => {
     expect(legacySigner.GetPublicKey()).toBe(b32.toHex());
     expect(accountSigner.GetPublicKey()).toBe(accountSigner.getPublicKey());
     expect(accountSigner.GetAccount().text).toBe(accountSigner.getAccount().text);
+  });
+
+  test('Timestamp static aliases delegate when called with explicit reader and writer', () => {
+    const timestamp = new Timestamp(1234567890);
+    const writer = new PBinaryWriter();
+
+    Timestamp.Serialize(timestamp, writer);
+
+    expect(Timestamp.Unserialize(new PBinaryReader(writer.toUint8Array()))?.value).toBe(
+      timestamp.value
+    );
+    expect(Timestamp.Unserialize()).toBeUndefined();
   });
 });

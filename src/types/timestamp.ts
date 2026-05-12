@@ -1,3 +1,5 @@
+import type { PBinaryReader, PBinaryWriter } from './extensions/index.js';
+
 export class Timestamp {
   public value: number;
 
@@ -9,7 +11,8 @@ export class Timestamp {
     return new Date(this.value * 1000).toUTCString();
   }
 
-  public toStringFormat() {
+  public toStringFormat(_format?: string) {
+    void _format;
     return new Date(this.value * 1000).toUTCString();
   }
 
@@ -87,7 +90,31 @@ export class Timestamp {
     return A.value - B;
   }
 
-  public static Serialize() {}
+  public serializeData(writer: PBinaryWriter): void {
+    writer.writeTimestamp(this);
+  }
 
-  public static Unserialize() {}
+  public unserializeData(reader: PBinaryReader): void {
+    this.value = reader.readTimestamp().value;
+  }
+
+  static serialize(timestamp: Timestamp, writer: PBinaryWriter): void {
+    timestamp.serializeData(writer);
+  }
+
+  static deserialize(reader: PBinaryReader): Timestamp {
+    return reader.readTimestamp();
+  }
+
+  /** @deprecated Use `serializeData` or `Timestamp.serialize` instead. This alias will be removed in v1.0. */
+  public static Serialize(timestamp?: Timestamp, writer?: PBinaryWriter): void {
+    if (timestamp !== undefined && writer !== undefined) {
+      Timestamp.serialize(timestamp, writer);
+    }
+  }
+
+  /** @deprecated Use `Timestamp.deserialize` instead. This alias will be removed in v1.0. */
+  public static Unserialize(reader?: PBinaryReader): Timestamp | undefined {
+    return reader === undefined ? undefined : Timestamp.deserialize(reader);
+  }
 }

@@ -28,6 +28,7 @@ export default [
     },
     rules: {
       'no-var': 'error',
+      'no-throw-literal': 'error',
     },
   },
 

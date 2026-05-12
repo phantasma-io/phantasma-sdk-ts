@@ -7,6 +7,8 @@
  */
 import { Transaction } from '../tx/index.js';
 
+const DEFAULT_EXPIRATION_MINUTES = 5;
+
 export const getDateAsUTCSeconds = (expirationDate: Date): number => {
   const expirationDateUTCms = Date.UTC(
     expirationDate.getUTCFullYear(),
@@ -26,9 +28,7 @@ export const GetDateAsUTCSeconds = getDateAsUTCSeconds;
  * Get Expiration Date
  * @returns
  */
-export const getExpirationDate = (): Date => {
-  // TODO: make expirationDate configurable.
-  const expirationMinutes = 5; // This is in minutes
+export const getExpirationDate = (expirationMinutes = DEFAULT_EXPIRATION_MINUTES): Date => {
   const expirationDate = new Date(Date.now() + expirationMinutes * 60000);
   return expirationDate;
 };

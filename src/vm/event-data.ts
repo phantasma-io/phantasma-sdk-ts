@@ -80,12 +80,18 @@ export enum TypeAuction {
   Dutch = 3,
 }
 
-export function decodeVMObject(str: string) {
+export function decodeVMObject(str: string): unknown {
   const dec = new Decoder(str);
   return dec.readVmObject();
 }
 
-export function getTokenEventData(str: string) {
+export interface TokenEventData {
+  symbol: string;
+  value: string;
+  chainName: string;
+}
+
+export function getTokenEventData(str: string): TokenEventData {
   const dec = new Decoder(str);
 
   return {
@@ -95,25 +101,42 @@ export function getTokenEventData(str: string) {
   };
 }
 
-export function getChainValueEventData(str: string) {
+export interface ChainValueEventData {
+  name: string;
+  value: number;
+}
+
+export function getChainValueEventData(str: string): ChainValueEventData {
   const dec = new Decoder(str);
   return {
-    name: dec.readString,
+    name: dec.readString(),
     value: dec.readBigInt(),
   };
 }
 
-export function getTransactionSettleEventData(str: string) {
+export interface TransactionSettleEventData {
+  hash: string;
+  platform: string;
+  chain: string;
+}
+
+export function getTransactionSettleEventData(str: string): TransactionSettleEventData {
   const dec = new Decoder(str);
   return {
     hash: dec.read(dec.readByte()),
     platform: dec.readString(),
     chain: dec.readString(),
   };
-  // public readonly Hash Hash;
 }
 
-export function getGasEventData(str: string) {
+export interface GasEventData {
+  address: string;
+  price: number;
+  amount: number;
+  endAmount: number;
+}
+
+export function getGasEventData(str: string): GasEventData {
   const dec = new Decoder(str);
   return {
     address: dec.read(dec.readByte()),
@@ -123,18 +146,51 @@ export function getGasEventData(str: string) {
   };
 }
 
-export function getInfusionEventData(str: string) {
+export interface InfusionEventData {
+  baseSymbol: string;
+  tokenId: string;
+  infusedSymbol: string;
+  infusedValue: string;
+  chainName: string;
+  /** @deprecated Use `tokenId` instead. This alias will be removed in v1.0. */
+  TokenID: string;
+  /** @deprecated Use `infusedSymbol` instead. This alias will be removed in v1.0. */
+  InfusedSymbol: string;
+  /** @deprecated Use `infusedValue` instead. This alias will be removed in v1.0. */
+  InfusedValue: string;
+  /** @deprecated Use `chainName` instead. This alias will be removed in v1.0. */
+  ChainName: string;
+}
+
+export function getInfusionEventData(str: string): InfusionEventData {
   const dec = new Decoder(str);
+  const baseSymbol = dec.readString();
+  const tokenId = dec.readBigIntAccurate();
+  const infusedSymbol = dec.readString();
+  const infusedValue = dec.readBigIntAccurate();
+  const chainName = dec.readString();
+
   return {
-    baseSymbol: dec.readString(),
-    TokenID: dec.readBigIntAccurate(),
-    InfusedSymbol: dec.readString(),
-    InfusedValue: dec.readBigIntAccurate(),
-    ChainName: dec.readString(),
+    baseSymbol,
+    tokenId,
+    infusedSymbol,
+    infusedValue,
+    chainName,
+    TokenID: tokenId,
+    InfusedSymbol: infusedSymbol,
+    InfusedValue: infusedValue,
+    ChainName: chainName,
   };
 }
 
-export function getMarketEventData(str: string) {
+export interface MarketEventData {
+  baseSymbol: string;
+  quoteSymbol: string;
+  id: string;
+  amount: number;
+}
+
+export function getMarketEventData(str: string): MarketEventData {
   const dec = new Decoder(str);
   return {
     baseSymbol: dec.readString(),
@@ -144,6 +200,6 @@ export function getMarketEventData(str: string) {
   };
 }
 
-export function getString(str: string) {
+export function getString(str: string): string {
   return new Decoder(str).readString();
 }

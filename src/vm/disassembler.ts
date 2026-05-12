@@ -1,1 +1,4 @@
-export class Dissassembler {}
+export class Disassembler {}
+
+/** @deprecated Use `Disassembler` instead. This typo alias will be removed in v1.0. */
+export class Dissassembler extends Disassembler {}

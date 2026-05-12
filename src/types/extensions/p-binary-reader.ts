@@ -122,7 +122,7 @@ export class PBinaryReader {
         signature.bytes = stringToUint8Array(this.readString());
         break;
       default:
-        throw 'read signature: ' + kind;
+        throw new Error(`read signature: unsupported kind ${kind}`);
     }
 
     return signature;
@@ -145,7 +145,7 @@ export class PBinaryReader {
         signature.bytes = stringToUint8Array(this.readString());
         break;
       default:
-        throw 'read signature: ' + kind;
+        throw new Error(`read signature: unsupported kind ${kind}`);
     }
 
     return signature;
@@ -223,7 +223,7 @@ export class PBinaryReader {
         const numBytes = this.readVarInt();
         return this.read(numBytes);
       default:
-        return 'unsupported type ' + type;
+        throw new Error(`read VM object: unsupported type ${type}`);
     }
   }
 }

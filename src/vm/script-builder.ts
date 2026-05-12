@@ -546,7 +546,7 @@ export class ScriptBuilder {
   }
 
   public emitVarInt(value: number): this {
-    if (value < 0) throw 'negative value invalid';
+    if (value < 0) throw new Error('negative value invalid');
 
     if (value < 0xfd) {
       this.appendByte(value);
@@ -585,7 +585,7 @@ export class ScriptBuilder {
   }
 
   public emitUInt32(value: number): this {
-    if (value < 0) throw 'negative value invalid';
+    if (value < 0) throw new Error('negative value invalid');
 
     const D = (value & 0xff000000) >> 24;
     const C = (value & 0x00ff0000) >> 16;

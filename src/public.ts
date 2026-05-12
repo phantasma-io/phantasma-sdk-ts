@@ -103,6 +103,14 @@ export {
   getTokenEventData,
   getTransactionSettleEventData,
 } from './vm/index.js';
+export type {
+  ChainValueEventData,
+  GasEventData,
+  InfusionEventData,
+  MarketEventData,
+  TokenEventData,
+  TransactionSettleEventData,
+} from './vm/index.js';
 
 export {
   AccountTrigger,

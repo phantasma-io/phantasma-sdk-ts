@@ -139,8 +139,8 @@ export class Serialization {
       writer.writeByteArray(Array.from(obj));
       return;
     } else {
-      // TODO: Add support for other types
-      // Get the keys of the object
+      // Plain-object serialization is intentionally field-value only. The wire
+      // format is not self-describing, so callers must deserialize with a known type.
       const fields = Object.keys(obj as object);
       fields.forEach((field) => {
         const value = (obj as Record<string, unknown>)[field];

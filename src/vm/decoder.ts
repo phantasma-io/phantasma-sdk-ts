@@ -1,7 +1,7 @@
-import bigInt from 'big-integer';
 import { ISignature, SignatureKind } from '../interfaces/index.js';
 import { VMType } from './vm-type.js';
 import { logger } from '../utils/logger.js';
+import { twosComplementLEToBigInt } from '../types/carbon-serialization.js';
 
 export class Decoder {
   str: string;
@@ -68,7 +68,7 @@ export class Decoder {
         signature.signature = this.readString();
         break;
       default:
-        throw 'read signature: ' + kind;
+        throw new Error(`read signature: unsupported kind ${kind}`);
     }
 
     return signature;
@@ -107,24 +107,18 @@ export class Decoder {
   }
 
   readBigInt() {
-    // TO DO: implement negative numbers
+    return Number(this.readBigIntAsBigInt());
+  }
+
+  private readBigIntAsBigInt(): bigint {
     const len = this.readVarInt();
-    let res = 0;
     const stringBytes = this.read(len);
-    [...(stringBytes.match(/.{1,2}/g) ?? [])]
-      .reverse()
-      .forEach((c) => (res = res * 256 + parseInt(c, 16)));
-    return res;
+    const bytes = (stringBytes.match(/.{1,2}/g) ?? []).map((byte) => parseInt(byte, 16));
+    return twosComplementLEToBigInt(Uint8Array.from(bytes));
   }
 
   readBigIntAccurate() {
-    const len = this.readVarInt();
-    let res = bigInt();
-    const stringBytes = this.read(len);
-    [...(stringBytes.match(/.{1,2}/g) ?? [])].reverse().forEach((c) => {
-      res = res.times(256).plus(parseInt(c, 16));
-    });
-    return res.toString();
+    return this.readBigIntAsBigInt().toString();
   }
 
   readVmObject() {
@@ -154,7 +148,7 @@ export class Decoder {
         const numBytes = this.readVarInt();
         return this.read(numBytes);
       default:
-        return 'unsupported type ' + type;
+        throw new Error(`read VM object: unsupported type ${type}`);
     }
   }
 }

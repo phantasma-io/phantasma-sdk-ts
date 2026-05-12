@@ -57,6 +57,7 @@ export class VMObject implements ISerializable {
   }
   private _localSize = 0;
   private static readonly TimeFormat: string = 'MM/dd/yyyy HH:mm:ss';
+  private static readonly MaxArraySize = 1024;
 
   public getChildren(): Map<VMObject, VMObject> | null {
     return this.Type == VMType.Struct ? (this.Data as Map<VMObject, VMObject>) : null;
@@ -339,7 +340,7 @@ export class VMObject implements ISerializable {
       case VMType.Timestamp:
         return this.asTimestamp();
       default:
-        throw 'Unsupported VM cast';
+        throw new Error('Unsupported VM cast');
     }
   }
 
@@ -468,8 +469,7 @@ export class VMObject implements ISerializable {
       }
 
       const temp = Number(child[0].asNumber());
-      // TODO use a constant for VM max array size
-      if (temp >= 1024) {
+      if (temp >= VMObject.MaxArraySize) {
         throw new Error('source contains an element with a very large array index');
       }
 
@@ -935,7 +935,7 @@ export class VMObject implements ISerializable {
           }
           case VMType.Enum: {
             const result = new VMObject();
-            result.setValue(srcObj.asEnum()); // TODO does this work for all types?
+            result.setValue(srcObj.asEnum());
             return result;
           }
           case VMType.Object: {
@@ -944,11 +944,11 @@ export class VMObject implements ISerializable {
             return result;
           }
           default:
-            throw `invalid cast: ${srcObj.Type} to ${type}`;
+            throw new Error(`invalid cast: ${srcObj.Type} to ${type}`);
         }
       }
       default:
-        throw `invalid cast: ${srcObj.Type} to ${type}`;
+        throw new Error(`invalid cast: ${srcObj.Type} to ${type}`);
     }
   }
 
