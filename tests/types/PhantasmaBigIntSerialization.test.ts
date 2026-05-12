@@ -1,5 +1,6 @@
 import fs from 'fs';
 import path from 'path';
+import { PBinaryWriter, VMObject, VMType } from '../../src/core';
 import { bytesToHex } from '../../src/core/utils';
 import {
   bigIntToTwosComplementLE_phantasma,
@@ -12,6 +13,14 @@ type Row = {
   number: string;
   pha: string; // actually decimal bytes space-separated
   csharp: string; // clean c# serialization
+};
+
+type Gen2BinaryRow = {
+  caseId: string;
+  value: string;
+  signedHex: string;
+  ioWriteHex: string;
+  scriptLoadHex: string;
 };
 
 // Parse "15 39 0" → Uint8Array([15, 39, 0])
@@ -40,9 +49,23 @@ function parseFixture(file: string): Row[] {
   });
 }
 
+function parseGen2BinaryFixture(file: string): Gen2BinaryRow[] {
+  const text = fs.readFileSync(file, 'utf8');
+  return text
+    .split(/\r?\n/)
+    .filter((line) => line && !line.startsWith('#') && !line.startsWith('case_id\t'))
+    .map((line) => {
+      const [caseId, value, signedHex, , ioWriteHex, scriptLoadHex] = line.split('\t');
+      return { caseId, value, signedHex, ioWriteHex, scriptLoadHex };
+    });
+}
+
 describe('Phantasma BigInt serialization', () => {
   const file = path.join(process.cwd(), 'tests', 'fixtures', 'phantasma_bigint_vectors.tsv');
   const rows = parseFixture(file);
+  const gen2BinaryRows = parseGen2BinaryFixture(
+    path.join(process.cwd(), 'tests', 'fixtures', 'gen2_csharp_vm_bigint_binary.tsv')
+  );
 
   test.each(rows)('roundtrip for %s', ({ number, pha, csharp }) => {
     const n = BigInt(number);
@@ -62,4 +85,25 @@ describe('Phantasma BigInt serialization', () => {
     const decodedFromCsharp = bigIntFromTwosComplementLE_phantasma(encodedCsharp);
     expect(decodedFromCsharp).toBe(n);
   });
+
+  test.each(gen2BinaryRows)(
+    'PBinaryWriter matches Gen2 IO bytes for %s',
+    ({ value, ioWriteHex }) => {
+      const writer = new PBinaryWriter();
+
+      writer.writeBigInteger(BigInt(value));
+
+      expect(bytesToHex(writer.toUint8Array())).toBe(ioWriteHex);
+    }
+  );
+
+  test.each(gen2BinaryRows)(
+    'VMObject Number serialization matches Gen2 IO bytes for %s',
+    ({ value, ioWriteHex }) => {
+      const writer = new PBinaryWriter();
+      new VMObject().setValue(BigInt(value), VMType.Number).serializeData(writer);
+
+      expect(bytesToHex(writer.toUint8Array())).toBe(`03${ioWriteHex}`);
+    }
+  );
 });

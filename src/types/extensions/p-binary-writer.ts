@@ -1,6 +1,7 @@
 import { BinaryWriter, Encoding } from 'csharp-binary-stream';
 import { hexToBytes } from '../../utils/index.js';
 import { Signature, SignatureKind } from '../../interfaces/index.js';
+import { bigIntToTwosComplementLE_phantasma } from '../phantasma-big-int-serialization.js';
 import { Timestamp } from '../timestamp.js';
 
 type byte = number;
@@ -219,26 +220,7 @@ export class PBinaryWriter {
   }
 
   public writeBigIntegerString(value: string) {
-    let bytes: number[] = [];
-
-    if (value == '0') {
-      bytes = [0];
-    } else if (value.startsWith('-1')) {
-      throw new Error('Unsigned bigint serialization not suppoted');
-    } else {
-      let hex = BigInt(value).toString(16);
-      if (hex.length % 2) hex = '0' + hex;
-      const len = hex.length / 2;
-      let i = 0;
-      let j = 0;
-      while (i < len) {
-        bytes.unshift(parseInt(hex.slice(j, j + 2), 16)); // little endian
-        i += 1;
-        j += 2;
-      }
-      bytes.push(0); // add sign at the end
-    }
-    return this.writeByteArray(bytes);
+    return this.writeByteArray(bigIntToTwosComplementLE_phantasma(BigInt(value)));
   }
 
   public writeSignature(signature: Signature | null): this {
