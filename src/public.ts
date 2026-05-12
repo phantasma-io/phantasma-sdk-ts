@@ -1,4 +1,14 @@
 export { PhantasmaAPI } from './rpc/phantasma.js';
+export { getRpcErrorMessage, isRpcErrorResult, unwrapRpcResult } from './rpc/rpc-result.js';
+export type {
+  JsonRpcErrorObject,
+  JsonRpcErrorResponse,
+  JsonRpcParam,
+  JsonRpcResponse,
+  JsonRpcSuccessResponse,
+  RpcErrorResult,
+  RpcResult,
+} from './rpc/rpc-result.js';
 export type {
   ABIContract,
   ABIEvent,

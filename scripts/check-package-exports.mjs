@@ -2,16 +2,25 @@ import { createRequire } from 'node:module';
 
 const require = createRequire(import.meta.url);
 
-const requiredRootExports = ['PhantasmaAPI', 'PhantasmaTS', 'PhantasmaLink', 'EasyConnect'];
+const requiredRootExports = [
+  'PhantasmaAPI',
+  'PhantasmaTS',
+  'PhantasmaLink',
+  'EasyConnect',
+  'isRpcErrorResult',
+  'unwrapRpcResult',
+];
 const requiredPublicExports = [
   'Address',
   'Base16',
   'Bytes32',
+  'isRpcErrorResult',
   'PhantasmaAPI',
   'PhantasmaKeys',
   'ScriptBuilder',
   'Transaction',
   'TxMsg',
+  'unwrapRpcResult',
   'VMObject',
 ];
 const excludedPublicExports = ['PhantasmaTS', 'IKeyPair', 'IContract', 'IToken', 'ISerializable'];
@@ -30,6 +39,7 @@ const deepImportChecks = [
   ],
   ['phantasma-sdk-ts/link/phantasma-link', ['PhantasmaLink']],
   ['phantasma-sdk-ts/ledger/ledger-utils', ['getPublicKey']],
+  ['phantasma-sdk-ts/rpc/rpc-result', ['isRpcErrorResult', 'unwrapRpcResult']],
 ];
 const forbiddenDeepImports = [
   'phantasma-sdk-ts/scripts/check-package-exports',
@@ -104,6 +114,17 @@ function exercisePublicApi(publicApi) {
   if (decoded.toStringEncoded(false) !== tx.toStringEncoded(false)) {
     throw new Error('public entrypoint Transaction.fromBytes did not round-trip');
   }
+
+  const rpcError = { error: 'public rpc error' };
+  if (!publicApi.isRpcErrorResult(rpcError)) {
+    throw new Error('public entrypoint isRpcErrorResult did not detect an RPC error');
+  }
+  try {
+    publicApi.unwrapRpcResult(rpcError);
+  } catch {
+    return;
+  }
+  throw new Error('public entrypoint unwrapRpcResult did not throw on an RPC error');
 }
 
 const cjsRoot = require('phantasma-sdk-ts');

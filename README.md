@@ -53,6 +53,8 @@ const latestBlock = await api.getLatestBlock('main');
 console.log({ height, latestBlockHash: latestBlock.hash });
 ```
 
+High-level RPC methods keep the historical `Promise<T>` shape for existing consumers. New code that wants explicit result-style handling can call `JSONRPCResult<T>()` and check `isRpcErrorResult(result)` or use `unwrapRpcResult(result)`.
+
 ## Transaction Example
 
 This builds and signs a local transaction object. It does not broadcast anything.

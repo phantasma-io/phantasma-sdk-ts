@@ -23,8 +23,13 @@ import {
   PhantasmaVmConfig,
   TokenSeriesResult,
 } from './interfaces/index.js';
-
-type JsonRpcParam = string | number | boolean | null | undefined;
+import {
+  JsonRpcParam,
+  JsonRpcResponse,
+  normalizeRpcError,
+  RpcErrorResult,
+  RpcResult,
+} from './rpc-result.js';
 
 interface RpcPeer {
   url: string;
@@ -33,9 +38,25 @@ interface RpcPeer {
   msecs?: number;
 }
 
-interface JsonRpcResponse {
+function isObjectRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
+}
+
+function rpcHttpError(status: number, statusText: string): RpcErrorResult {
+  return {
+    error: statusText ? `HTTP ${status}: ${statusText}` : `HTTP ${status}`,
+    status,
+    statusText,
+  };
+}
+
+interface HistoricalJsonRpcResponse {
   result?: unknown;
   error?: { message?: string } | string;
+}
+
+function parseRpcNumber(result: unknown): number {
+  return typeof result === 'string' ? parseInt(result, 10) : (result as number);
 }
 
 export class PhantasmaAPI {
@@ -104,6 +125,51 @@ export class PhantasmaAPI {
     }
   }
 
+  async JSONRPCResult<T = unknown>(method: string, params: JsonRpcParam[]): Promise<RpcResult<T>> {
+    let res;
+    try {
+      res = await fetch(this.host, {
+        method: 'POST',
+        mode: 'cors',
+        body: JSON.stringify({
+          jsonrpc: '2.0',
+          method: method,
+          params: params,
+          id: '1',
+        }),
+        headers: { 'Content-Type': 'application/json' },
+      });
+    } catch (error: unknown) {
+      return normalizeRpcError(error, `RPC request ${method} failed`);
+    }
+
+    if (!res.ok) {
+      return rpcHttpError(res.status, res.statusText);
+    }
+
+    let resJson: unknown;
+    try {
+      resJson = await res.json();
+    } catch (error: unknown) {
+      return normalizeRpcError(error, `RPC request ${method} returned invalid JSON`);
+    }
+
+    logger.log('method', method, resJson);
+    if (!isObjectRecord(resJson)) {
+      return normalizeRpcError(undefined, `RPC request ${method} returned an invalid response`);
+    }
+
+    const response = resJson as Partial<JsonRpcResponse<T>> & { error?: unknown };
+    if (response.error !== undefined && response.error !== null) {
+      return normalizeRpcError(response.error, `RPC request ${method} failed`);
+    }
+    if (!('result' in response)) {
+      return normalizeRpcError(undefined, `RPC request ${method} returned no result`);
+    }
+
+    return response.result as T;
+  }
+
   async JSONRPC(method: string, params: JsonRpcParam[]): Promise<unknown> {
     const res = await fetch(this.host, {
       method: 'POST',
@@ -116,7 +182,7 @@ export class PhantasmaAPI {
       }),
       headers: { 'Content-Type': 'application/json' },
     });
-    const resJson = (await res.json()) as JsonRpcResponse;
+    const resJson = (await res.json()) as HistoricalJsonRpcResponse;
     logger.log('method', method, resJson);
     if (resJson.error) {
       if (typeof resJson.error === 'object' && resJson.error.message)
@@ -180,7 +246,7 @@ export class PhantasmaAPI {
   async getBlockHeight(chainInput: string): Promise<number> {
     const params: JsonRpcParam[] = [chainInput];
     const result = await this.JSONRPC('getBlockHeight', params);
-    return typeof result === 'string' ? parseInt(result, 10) : (result as number);
+    return parseRpcNumber(result);
   }
 
   //Returns the number of transactions of given block hash or error if given hash is invalid or is not found.
@@ -190,7 +256,7 @@ export class PhantasmaAPI {
   ): Promise<number> {
     const params: JsonRpcParam[] = [chainAddressOrName, blockHash];
     const result = await this.JSONRPC('getBlockTransactionCountByHash', params);
-    return typeof result === 'string' ? parseInt(result, 10) : (result as number);
+    return parseRpcNumber(result);
   }
 
   //Returns information about a block by hash.

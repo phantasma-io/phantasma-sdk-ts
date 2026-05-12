@@ -3,6 +3,7 @@ import { logger } from '../utils/logger.js';
 import { Transaction } from '../tx/index.js';
 import { Address, Base16, Ed25519Signature } from '../types/index.js';
 import { getAddressFromPublicKey, getAddressPublicKeyFromPublicKey } from './address-transcode.js';
+import { isRpcErrorResult } from '../rpc/index.js';
 import { getPrivateKeyFromMnemonic } from './mnemonic.js';
 import {
   getLedgerChainName,
@@ -258,6 +259,10 @@ export const getBalanceFromLedger = async (
   if (debug) {
     logger.log('rpcResponse', rpcResponse);
   }
+  if (isRpcErrorResult(rpcResponse)) {
+    response.message = rpcResponse.error;
+    return response;
+  }
   response.balances = new Map<string, string>();
   if (rpcResponse.balances !== undefined) {
     rpcResponse.balances.forEach((balanceElt) => {
@@ -425,6 +430,12 @@ export async function sendTransactionLedger(
     if (debug) {
       logger.log('sendAmountUsingCallback', 'txHash', txHash);
     }
+    if (isRpcErrorResult(txHash)) {
+      return {
+        success: false,
+        message: txHash.error,
+      };
+    }
 
     const response: LedgerSendTransactionResponse = {
       success: true,
@@ -500,6 +511,10 @@ export const getBalanceFromPrivateKey = async (
     success: false,
     message: '',
   };
+  if (isRpcErrorResult(rpcResponse)) {
+    response.message = rpcResponse.error;
+    return response;
+  }
   if (rpcResponse.balances !== undefined) {
     rpcResponse.balances.forEach((balanceElt) => {
       response.balances?.set(

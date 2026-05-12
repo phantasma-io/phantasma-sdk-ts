@@ -64,12 +64,18 @@ const publicConsumer = writeFile(
 import {
   Address,
   ContractInterface,
+  isRpcErrorResult,
+  PhantasmaAPI,
   PhantasmaKeys,
   ScriptBuilder,
   Transaction,
+  unwrapRpcResult,
   type ContractDescriptor,
   type KeyPair,
   type LinkAccount,
+  type JsonRpcParam,
+  type RpcErrorResult,
+  type RpcResult,
   type Serializable,
   type StackLike,
 } from 'phantasma-sdk-ts/public';
@@ -109,16 +115,39 @@ const account: LinkAccount = {
 };
 
 const contract: ContractDescriptor = { name: 'account', abi: ContractInterface.Empty };
+const api = new PhantasmaAPI('http://localhost:5172/rpc', null, 'localnet');
+const heightPromise: Promise<number> = api.getBlockHeight('main');
+const blockPromise = api.getLatestBlock('main');
+blockPromise.then((block) => void block.hash);
+const rawResultPromise: Promise<RpcResult<number>> = api.JSONRPCResult<number>('getBlockHeight', [
+  'main',
+]);
+class LegacyRpcSubclass extends PhantasmaAPI {
+  override async JSONRPC(method: string, params: JsonRpcParam[]): Promise<unknown> {
+    return super.JSONRPC(method, params);
+  }
+}
+const rpcResult: RpcResult<number> = { error: 'failure' };
+const rpcError: RpcErrorResult = { error: 'failure', code: -32601 };
+if (isRpcErrorResult(rpcResult)) {
+  void rpcResult.error;
+}
 const serializable: Serializable = {
   serializeData: () => undefined,
   unserializeData: () => undefined,
 };
+const unwrappedNumber = unwrapRpcResult<number>(123);
 
 void decoded;
 void stack;
 void account;
 void contract;
+void heightPromise;
+void rawResultPromise;
+void LegacyRpcSubclass;
+void rpcError;
 void serializable;
+void unwrappedNumber;
 `
 );
 
@@ -143,6 +172,7 @@ import { Bytes32 as NewBytes32 } from 'phantasma-sdk-ts/types/carbon/bytes32';
 import { TokenContractMethods } from 'phantasma-sdk-ts/types/carbon/blockchain/modules/token-contract-methods';
 import { getPublicKey } from 'phantasma-sdk-ts/ledger/ledger-utils';
 import type { LedgerAccountSigner, LedgerSigner } from 'phantasma-sdk-ts/ledger';
+import { unwrapRpcResult } from 'phantasma-sdk-ts/rpc/rpc-result';
 import { PhantasmaLink as NewPhantasmaLink } from 'phantasma-sdk-ts/link/phantasma-link';
 import { Transaction as LegacyTransaction } from 'phantasma-sdk-ts/core/tx/Transaction';
 import { ScriptBuilder as LegacyScriptBuilder } from 'phantasma-sdk-ts/core/vm';
@@ -172,6 +202,7 @@ void NewAddress.nullText;
 void NewBytes32;
 void TokenContractMethods.TransferFungible;
 void getPublicKey;
+void unwrapRpcResult;
 void NewPhantasmaLink;
 void LegacyAddress.NullText;
 void LegacyBytes32;
