@@ -24,6 +24,8 @@ export class TokenInfoBuilder {
     const tokenInfo = new TokenInfo();
     tokenInfo.maxSupply = maxSupply;
 
+    const isUnlimited = maxSupply.toBigInt() === 0n;
+
     tokenInfo.flags = 0; // Small fungible
     if (isNFT) {
       if (!maxSupply.is8ByteSafe()) {
@@ -31,7 +33,7 @@ export class TokenInfoBuilder {
       }
       tokenInfo.flags = CarbonTokenFlags.NonFungible;
     } else {
-      if (!maxSupply.is8ByteSafe()) {
+      if (isUnlimited || !maxSupply.is8ByteSafe()) {
         tokenInfo.flags = CarbonTokenFlags.BigFungible;
       }
     }

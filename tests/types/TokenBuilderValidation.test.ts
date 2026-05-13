@@ -6,6 +6,7 @@ import {
   TokenMetadataBuilder,
   TokenSchemasBuilder,
 } from '../../src/core/types/Carbon/Blockchain/Modules/Builders';
+import { CarbonTokenFlags } from '../../src/core/types/Carbon/Blockchain/CarbonTokenFlags';
 import {
   FieldType,
   nftDefaultMetadataFields,
@@ -81,6 +82,48 @@ describe('TokenInfoBuilder', () => {
     expect(() =>
       TokenInfoBuilder.build('FUNGIBLE', maxSupply, false, 8, creator, metadata)
     ).not.toThrow();
+  });
+
+  it('marks unlimited fungible tokens as big fungible', () => {
+    const metadata = buildTokenMetadata();
+    const unlimited = TokenInfoBuilder.build(
+      'UNLIMITED',
+      IntX.fromI64(0n),
+      false,
+      8,
+      creator,
+      metadata
+    );
+    const finiteSmall = TokenInfoBuilder.build(
+      'SMALL',
+      IntX.fromI64(1_000_000n),
+      false,
+      8,
+      creator,
+      metadata
+    );
+    const finiteBig = TokenInfoBuilder.build(
+      'BIG',
+      IntX.fromBigInt(9_223_372_036_854_775_808n),
+      false,
+      8,
+      creator,
+      metadata
+    );
+    const nft = TokenInfoBuilder.build(
+      'NFT',
+      IntX.fromI64(0n),
+      true,
+      0,
+      creator,
+      metadata,
+      TokenSchemasBuilder.prepareStandard(false)
+    );
+
+    expect(unlimited.flags).toBe(CarbonTokenFlags.BigFungible);
+    expect(finiteSmall.flags).toBe(CarbonTokenFlags.None);
+    expect(finiteBig.flags).toBe(CarbonTokenFlags.BigFungible);
+    expect(nft.flags).toBe(CarbonTokenFlags.NonFungible);
   });
 });
 
