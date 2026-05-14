@@ -24,7 +24,7 @@ export class MintNonFungibleTxHelper {
     expiry?: bigint
   ): TxMsg {
     const fees = feeOptions ?? new MintNftFeeOptions();
-    const maxGas = fees.calculateMaxGas();
+    const maxGas = fees.calculateMaxGas(1);
 
     const msg = new TxMsg();
     msg.type = TxTypes.MintNonFungible;

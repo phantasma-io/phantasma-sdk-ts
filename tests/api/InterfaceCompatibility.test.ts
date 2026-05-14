@@ -3,7 +3,9 @@ import {
   CarbonBlobLike,
   ContractDescriptor,
   ContractInterface,
+  CreateSeriesFeeOptions,
   Ed25519Signature,
+  FeeOptions,
   FeeOptionsLike,
   IAccount,
   ICarbonBlob,
@@ -18,6 +20,7 @@ import {
   Ledger,
   LinkAccount,
   LinkFile,
+  MintNftFeeOptions,
   PhantasmaKeys,
   Stack,
   StackLike,
@@ -113,5 +116,25 @@ describe('interface compatibility', () => {
     expect(legacyLedger).toBe(ledger);
     expect(legacyContract.ABI).toBe(contract.abi);
     expect(legacyToken.Symbol).toBe(token.symbol);
+  });
+
+  it('scales count-sensitive fee options and rejects invalid count context', () => {
+    const base = new FeeOptions(10n, 1000n);
+    const series = new CreateSeriesFeeOptions(10n, 20n, 30n);
+    const mint = new MintNftFeeOptions(10n, 1000n);
+    const seriesLike: FeeOptionsLike = series;
+
+    expect(base.calculateMaxGas()).toBe(10_000n);
+    expect(base.calculateMaxGas(3)).toBe(30_000n);
+
+    expect(mint.calculateMaxGas()).toBe(10_000n);
+    expect(mint.calculateMaxGas(3)).toBe(30_000n);
+    expect(mint.calculateMaxGas([{}, {}, {}])).toBe(30_000n);
+
+    expect(series.calculateMaxGas()).toBe(900n);
+    expect(seriesLike.calculateMaxGas(1)).toBe(900n);
+    expect(() => seriesLike.calculateMaxGas(2)).toThrow(/not count-sensitive/);
+    expect(() => base.calculateMaxGas(0)).toThrow(/positive/);
+    expect(() => mint.calculateMaxGas([])).toThrow(/positive/);
   });
 });

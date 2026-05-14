@@ -115,7 +115,7 @@ export class MintPhantasmaNonFungibleTxHelper {
     expiry?: bigint
   ): TxMsg {
     const fees = feeOptions ?? new MintNftFeeOptions();
-    const maxGas = fees.calculateMaxGas();
+    const maxGas = fees.calculateMaxGas(tokens);
 
     // This helper only packages the Token.Call ABI surface.
     const args = new MintPhantasmaNonFungibleArgs({

@@ -3,8 +3,10 @@ import { CarbonBinaryReader, CarbonBinaryWriter } from '../../src/core/types/Car
 import { Bytes32 } from '../../src/core/types/Carbon/Bytes32';
 import { TxTypes } from '../../src/core/types/Carbon/TxTypes';
 import { TxMsgCall } from '../../src/core/types/Carbon/Blockchain/TxMsgCall';
+import { IntX } from '../../src/core/types/Carbon/IntX';
 import {
   MintPhantasmaNonFungibleArgs,
+  PhantasmaNftMintInfo,
   PhantasmaNftMintResult,
   TokenContractMethods,
 } from '../../src/core/types/Carbon/Blockchain/Modules';
@@ -77,6 +79,37 @@ describe('Phantasma deterministic mint helpers', () => {
     expect(decoded.tokens[0].phantasmaSeriesId.toBigInt()).toBe(777n);
     expect(bytesToHex(decoded.tokens[0].rom).toUpperCase()).toBe(bytesToHex(rom).toUpperCase());
     expect(decoded.tokens[0].ram).toEqual(new Uint8Array());
+  });
+
+  it('MintPhantasmaNonFungibleTxHelper scales maxGas by token count', () => {
+    const tokenSchemas = TokenSchemasBuilder.prepareStandard(false);
+    const rom = PhantasmaNftRomBuilder.buildAndSerialize(tokenSchemas.rom, buildMetadata());
+    const feeOptions = new MintNftFeeOptions(10n, 1000n);
+    const tokens = [
+      new PhantasmaNftMintInfo({
+        phantasmaSeriesId: IntX.fromBigInt(1n),
+        rom,
+        ram: new Uint8Array(),
+      }),
+      new PhantasmaNftMintInfo({
+        phantasmaSeriesId: IntX.fromBigInt(2n),
+        rom,
+        ram: new Uint8Array(),
+      }),
+    ];
+
+    const tx = MintPhantasmaNonFungibleTxHelper.buildTx(
+      42n,
+      sender,
+      receiver,
+      tokens,
+      feeOptions,
+      123n,
+      999n
+    );
+
+    expect(tx.maxGas).toBe(20_000n);
+    expect(tx.maxGas).toBe(feeOptions.calculateMaxGas(tokens));
   });
 
   it('MintPhantasmaNonFungibleTxHelper.parseResult preserves both ids', () => {

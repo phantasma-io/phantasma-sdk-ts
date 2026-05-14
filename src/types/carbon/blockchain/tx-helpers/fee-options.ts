@@ -9,6 +9,86 @@ export interface FeeOptionsLike {
 /** @deprecated Use `FeeOptionsLike` instead. This compatibility interface will be removed in v1.0. */
 export type IFeeOptions = FeeOptionsLike;
 
+type CountInput = number | bigint;
+type SymbolInput = string | { data: string };
+type MintCountInput = CountInput | readonly unknown[];
+
+function assertArgCount(args: readonly unknown[], max: number, methodName: string): void {
+  if (args.length > max) {
+    throw new TypeError(`${methodName} accepts at most ${max} argument${max === 1 ? '' : 's'}`);
+  }
+}
+
+function parsePositiveCount(value: unknown, methodName: string): bigint {
+  if (typeof value === 'bigint') {
+    if (value <= 0n) {
+      throw new RangeError(`${methodName} count must be a positive integer`);
+    }
+    return value;
+  }
+
+  if (typeof value === 'number') {
+    if (!Number.isSafeInteger(value) || value <= 0) {
+      throw new RangeError(`${methodName} count must be a positive safe integer`);
+    }
+    return BigInt(value);
+  }
+
+  throw new TypeError(`${methodName} count must be a number or bigint`);
+}
+
+function parseOptionalCount(args: readonly unknown[], methodName: string): bigint {
+  assertArgCount(args, 1, methodName);
+  return args.length === 0 ? 1n : parsePositiveCount(args[0], methodName);
+}
+
+function parseOptionalMintCount(args: readonly unknown[], methodName: string): bigint {
+  assertArgCount(args, 1, methodName);
+  if (args.length === 0) {
+    return 1n;
+  }
+
+  const value = args[0];
+  return Array.isArray(value)
+    ? parsePositiveCount(value.length, methodName)
+    : parsePositiveCount(value, methodName);
+}
+
+function assertNoMeaningfulCount(args: readonly unknown[], methodName: string): void {
+  assertArgCount(args, 1, methodName);
+  if (args.length === 0) {
+    return;
+  }
+
+  const count = parsePositiveCount(args[0], methodName);
+  if (count !== 1n) {
+    throw new RangeError(`${methodName} is not count-sensitive; count must be 1 when provided`);
+  }
+}
+
+function parseOptionalSymbol(args: readonly unknown[], methodName: string): string {
+  assertArgCount(args, 1, methodName);
+  if (args.length === 0) {
+    return '';
+  }
+
+  const value = args[0];
+  if (typeof value === 'string') {
+    return value;
+  }
+
+  if (
+    typeof value === 'object' &&
+    value !== null &&
+    'data' in value &&
+    typeof value.data === 'string'
+  ) {
+    return value.data;
+  }
+
+  throw new TypeError(`${methodName} symbol must be a string or SmallString-like object`);
+}
+
 /** Base fee options with sensible defaults. */
 export class FeeOptions implements FeeOptionsLike {
   gasFeeBase: bigint;
@@ -19,8 +99,11 @@ export class FeeOptions implements FeeOptionsLike {
     this.feeMultiplier = feeMultiplier;
   }
 
-  calculateMaxGas(): bigint {
-    return this.gasFeeBase * this.feeMultiplier;
+  calculateMaxGas(): bigint;
+  calculateMaxGas(count: CountInput): bigint;
+  calculateMaxGas(...args: [] | [CountInput]): bigint {
+    const count = parseOptionalCount(args, 'FeeOptions.calculateMaxGas');
+    return this.gasFeeBase * this.feeMultiplier * count;
   }
 }
 
@@ -40,12 +123,10 @@ export class CreateTokenFeeOptions extends FeeOptions implements FeeOptionsLike 
     this.gasFeeCreateTokenSymbol = gasFeeCreateTokenSymbol;
   }
 
-  override calculateMaxGas(...args: unknown[]): bigint {
-    let symbol = '';
-    if (args.length > 0 && typeof args[0] === 'object' && args[0] !== null && 'data' in args[0]) {
-      const s = args[0] as { data: string };
-      symbol = s.data;
-    }
+  override calculateMaxGas(): bigint;
+  override calculateMaxGas(symbol: SymbolInput): bigint;
+  override calculateMaxGas(...args: [] | [SymbolInput]): bigint {
+    const symbol = parseOptionalSymbol(args, 'CreateTokenFeeOptions.calculateMaxGas');
     const symbolLen = symbol.length;
     const shift = symbolLen > 0 ? BigInt(symbolLen - 1) : 0n;
     const symbolCost = this.gasFeeCreateTokenSymbol >> shift;
@@ -66,7 +147,9 @@ export class CreateSeriesFeeOptions extends FeeOptions implements FeeOptionsLike
     this.gasFeeCreateSeriesBase = gasFeeCreateSeriesBase;
   }
 
-  override calculateMaxGas(): bigint {
+  override calculateMaxGas(): bigint;
+  override calculateMaxGas(...args: [] | [CountInput]): bigint {
+    assertNoMeaningfulCount(args, 'CreateSeriesFeeOptions.calculateMaxGas');
     return (this.gasFeeBase + this.gasFeeCreateSeriesBase) * this.feeMultiplier;
   }
 }
@@ -77,7 +160,11 @@ export class MintNftFeeOptions extends FeeOptions implements FeeOptionsLike {
     super(gasFeeBase, feeMultiplier);
   }
 
-  override calculateMaxGas(): bigint {
-    return this.gasFeeBase * this.feeMultiplier;
+  override calculateMaxGas(): bigint;
+  override calculateMaxGas(count: CountInput): bigint;
+  override calculateMaxGas(tokens: readonly unknown[]): bigint;
+  override calculateMaxGas(...args: [] | [MintCountInput]): bigint {
+    const count = parseOptionalMintCount(args, 'MintNftFeeOptions.calculateMaxGas');
+    return this.gasFeeBase * this.feeMultiplier * count;
   }
 }
