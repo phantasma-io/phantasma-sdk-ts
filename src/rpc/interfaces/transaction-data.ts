@@ -15,7 +15,7 @@ export interface TransactionData {
   events: Array<Event>; //List of events that triggered in the transaction
   extendedEvents?: Array<EventExtended>; //Extended events, if available
   result: string; //Result of the transaction, if any. Serialized, in hexadecimal format
-  debugComment: string; //Debug comment of the transaction, if any. Explains rejection reason
+  debugComment?: string; //Debug comment of the transaction, if RPC emits one
   fee: string; //Fee of the transaction, in KCAL, fixed point
   state: string;
   signatures: Array<SignatureResult>;

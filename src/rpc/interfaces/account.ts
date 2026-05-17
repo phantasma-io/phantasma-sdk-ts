@@ -8,9 +8,9 @@ export interface Account {
   stakes: Stake; //Info about staking if available
   stake: string;
   unclaimed: string;
-  relay: string; //Amount of available KCAL for relay channel
+  relay?: string; //Amount of available KCAL for relay channel
   validator: string; //Validator role
   storage: Storage;
   balances: Array<Balance>;
-  txs: Array<string>;
+  txs?: Array<string>;
 }

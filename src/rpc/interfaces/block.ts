@@ -12,6 +12,6 @@ export interface Block {
   txs: Array<TransactionData>; //List of transactions in block
   validatorAddress: string; //Address of validator who minted the block
   reward: string; //Amount of KCAL rewarded by this fees in this block
-  events: Array<Event>; //Block events
-  oracles: Array<Oracle>; //Block oracles
+  events?: Array<Event>; //Block events
+  oracles?: Array<Oracle>; //Block oracles
 }

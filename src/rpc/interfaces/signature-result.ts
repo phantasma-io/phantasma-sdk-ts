@@ -1,4 +1,4 @@
 export interface SignatureResult {
-  Kind: string;
-  Data: string;
+  kind: string;
+  data: string;
 }

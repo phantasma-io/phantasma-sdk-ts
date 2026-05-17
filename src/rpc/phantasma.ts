@@ -576,9 +576,9 @@ export class PhantasmaAPI {
     symbol: string,
     page: number,
     pageSize: number
-  ): Promise<Auction> {
+  ): Promise<Paginated<Auction[]>> {
     const params: JsonRpcParam[] = [chainAddressOrName, symbol, page, pageSize];
-    return (await this.JSONRPC('getAuctions', params)) as Auction;
+    return (await this.JSONRPC('getAuctions', params)) as Paginated<Auction[]>;
   }
 
   //Returns the auction for a specific token.

@@ -1,9 +1,10 @@
 import type { KeyValue } from './key-value.js';
 
 export interface TokenData {
-  ID: string; //ID of token
+  id: string; //ID of token
   series: string;
   carbonTokenId: string;
+  carbonSeriesId: string;
   carbonNftAddress: string; //Carbon NFT address (hex)
   mint: string;
   chainName: string; //Chain where currently is stored

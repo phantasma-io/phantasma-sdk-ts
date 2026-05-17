@@ -1,6 +1,7 @@
 import { TokenExternal } from './token-external.js';
 import { TokenPrice } from './token-price.js';
 import { TokenSeries } from './token-series.js';
+import type { KeyValue } from './key-value.js';
 import type { TokenSchemasResult } from './token-schemas-result.js';
 
 export interface Token {
@@ -13,9 +14,10 @@ export interface Token {
   address: string;
   owner: string;
   flags: string;
-  script: string;
+  script?: string;
   series: Array<TokenSeries>;
   carbonId: string;
+  metadata?: KeyValue[];
   tokenSchemas?: TokenSchemasResult;
   external?: Array<TokenExternal>;
   price?: Array<TokenPrice>;

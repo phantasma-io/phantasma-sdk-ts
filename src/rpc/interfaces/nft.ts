@@ -1,9 +1,10 @@
 import type { KeyValue } from './key-value.js';
 
 export interface NFT {
-  ID: string;
+  id: string;
   series: string;
   carbonTokenId: string;
+  carbonSeriesId: string;
   carbonNftAddress: string;
   mint: string;
   chainName: string;
