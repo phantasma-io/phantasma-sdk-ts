@@ -217,11 +217,27 @@ export class CarbonBinaryReader {
     this.view = new DataView(this.bytes.buffer, this.bytes.byteOffset, this.bytes.byteLength);
   }
 
+  private remaining(): number {
+    return this.bytes.length - this.offset;
+  }
+
   private take(count: number): Uint8Array {
-    Throw.If(this.offset + count > this.bytes.length, 'end of stream reached');
+    Throw.If(!Number.isInteger(count) || count < 0, 'invalid byte count');
+    Throw.If(count > this.remaining(), 'end of stream reached');
     const out = this.bytes.subarray(this.offset, this.offset + count);
     this.offset += count;
     return out;
+  }
+
+  private readLength(elementSize = 1): number {
+    const len = this.read4();
+    Throw.If(len < 0, 'invalid array length');
+    Throw.If(!Number.isInteger(elementSize) || elementSize <= 0, 'invalid array element size');
+    Throw.If(
+      len > Math.floor(this.remaining() / elementSize),
+      `array length ${len} exceeds remaining bytes ${this.remaining()}`
+    );
+    return len;
   }
 
   readRemaining(): Uint8Array {
@@ -230,34 +246,32 @@ export class CarbonBinaryReader {
 
   // Raw reads
   read1(): number {
-    const b = this.bytes[this.offset];
-    this.offset += 1;
-    return b;
+    return this.take(1)[0];
   }
   read2(): number {
-    const v = this.view.getInt16(this.offset, true);
-    this.offset += 2;
-    return v;
+    const offset = this.offset;
+    this.take(2);
+    return this.view.getInt16(offset, true);
   }
   read4(): number {
-    const v = this.view.getInt32(this.offset, true);
-    this.offset += 4;
-    return v;
+    const offset = this.offset;
+    this.take(4);
+    return this.view.getInt32(offset, true);
   }
   read4u(): number {
-    const v = this.view.getUint32(this.offset, true);
-    this.offset += 4;
-    return v;
+    const offset = this.offset;
+    this.take(4);
+    return this.view.getUint32(offset, true);
   }
   read8(): bigint {
-    const v = this.view.getBigInt64(this.offset, true);
-    this.offset += 8;
-    return v;
+    const offset = this.offset;
+    this.take(8);
+    return this.view.getBigInt64(offset, true);
   }
   read8u(): bigint {
-    const v = this.view.getBigUint64(this.offset, true);
-    this.offset += 8;
-    return v;
+    const offset = this.offset;
+    this.take(8);
+    return this.view.getBigUint64(offset, true);
   }
 
   // Fixed-size blobs
@@ -291,7 +305,7 @@ export class CarbonBinaryReader {
     return t;
   }
   readArrayBlob<T extends CarbonBlobLike>(ctor: new () => T): T[] {
-    const len = this.read4();
+    const len = this.readLength();
     const arr: T[] = new Array(len);
     for (let i = 0; i < len; i++) {
       const t = new ctor();
@@ -325,7 +339,7 @@ export class CarbonBinaryReader {
   }
 
   readArrayBigInt(): bigint[] {
-    const len = this.read4();
+    const len = this.readLength();
     const arr: bigint[] = new Array(len);
     for (let i = 0; i < len; i++) arr[i] = this.readBigInt();
     return arr;
@@ -345,7 +359,7 @@ export class CarbonBinaryReader {
   }
 
   readArraySz(): string[] {
-    const len = this.read4();
+    const len = this.readLength();
     const out: string[] = new Array(len);
     for (let i = 0; i < len; i++) out[i] = this.readSz();
     return out;
@@ -353,42 +367,42 @@ export class CarbonBinaryReader {
 
   // Variable-length byte arrays
   readArray(): Uint8Array {
-    const len = this.read4();
+    const len = this.readLength();
     return this.readExactly(len);
   }
   readArrayOfArrays(): Uint8Array[] {
-    const len = this.read4();
+    const len = this.readLength(4);
     const arr: Uint8Array[] = new Array(len);
     for (let i = 0; i < len; i++) arr[i] = this.readArray();
     return arr;
   }
 
   readArray64u(): bigint[] {
-    const len = this.read4();
+    const len = this.readLength(8);
     const out: bigint[] = new Array(len);
     for (let i = 0; i < len; i++) out[i] = this.read8u();
     return out;
   }
   readArray64(): bigint[] {
-    const len = this.read4();
+    const len = this.readLength(8);
     const out: bigint[] = new Array(len);
     for (let i = 0; i < len; i++) out[i] = this.read8();
     return out;
   }
   readArray32(): number[] {
-    const len = this.read4();
+    const len = this.readLength(4);
     const out: number[] = new Array(len);
     for (let i = 0; i < len; i++) out[i] = this.read4();
     return out;
   }
   readArray16(): number[] {
-    const len = this.read4();
+    const len = this.readLength(2);
     const out: number[] = new Array(len);
     for (let i = 0; i < len; i++) out[i] = this.read2();
     return out;
   }
   readArray8(): number[] {
-    const len = this.read4();
+    const len = this.readLength();
     const out: number[] = new Array(len);
     for (let i = 0; i < len; i++) out[i] = this.read1();
     return out;
