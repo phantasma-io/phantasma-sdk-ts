@@ -56,6 +56,12 @@ interface HistoricalJsonRpcResponse {
   error?: { message?: string } | string;
 }
 
+export interface PhantasmaAPIOptions {
+  maxRpcResponseBytes?: number;
+}
+
+export const DEFAULT_MAX_RPC_RESPONSE_BYTES = 16 * 1024 * 1024;
+
 function parseRpcNumber(result: unknown): number {
   return typeof result === 'string' ? parseInt(result, 10) : (result as number);
 }
@@ -70,11 +76,135 @@ function rpcResponseIdMatches(responseId: unknown, requestId: string): boolean {
   return false;
 }
 
+function normalizeMaxRpcResponseBytes(value: number | undefined): number {
+  const maxBytes = value ?? DEFAULT_MAX_RPC_RESPONSE_BYTES;
+  if (maxBytes !== Number.POSITIVE_INFINITY && (!Number.isFinite(maxBytes) || maxBytes <= 0)) {
+    throw new Error('maxRpcResponseBytes must be a positive number');
+  }
+  return maxBytes;
+}
+
+type ResponseChunk = Uint8Array | string;
+
+interface AsyncIterableResponseBody extends AsyncIterable<ResponseChunk> {
+  destroy?: () => void;
+}
+
+function isObject(value: unknown): value is object {
+  return typeof value === 'object' && value !== null;
+}
+
+function isWebReadableStream(value: unknown): value is ReadableStream<Uint8Array> {
+  return (
+    isObject(value) &&
+    'getReader' in value &&
+    typeof (value as { getReader?: unknown }).getReader === 'function'
+  );
+}
+
+function isAsyncIterableBody(value: unknown): value is AsyncIterableResponseBody {
+  return isObject(value) && Symbol.asyncIterator in value;
+}
+
+function chunkBytes(chunk: ResponseChunk): Uint8Array {
+  return typeof chunk === 'string' ? new TextEncoder().encode(chunk) : chunk;
+}
+
+function appendLimitedChunk(
+  chunks: Uint8Array[],
+  chunk: ResponseChunk,
+  totalBytes: number,
+  maxBytes: number,
+  method: string
+): number {
+  const bytes = chunkBytes(chunk);
+  const nextTotal = totalBytes + bytes.byteLength;
+  if (nextTotal > maxBytes) {
+    throw new Error(`RPC request ${method} response body exceeds ${maxBytes} bytes`);
+  }
+  chunks.push(bytes);
+  return nextTotal;
+}
+
+function decodeChunks(chunks: Uint8Array[], totalBytes: number): string {
+  const body = new Uint8Array(totalBytes);
+  let offset = 0;
+  for (const chunk of chunks) {
+    body.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return new TextDecoder().decode(body);
+}
+
+async function readStreamBody(
+  body: ReadableStream<Uint8Array> | AsyncIterableResponseBody,
+  method: string,
+  maxBytes: number
+): Promise<string> {
+  const chunks: Uint8Array[] = [];
+  let totalBytes = 0;
+
+  if (isWebReadableStream(body)) {
+    const reader = body.getReader();
+    try {
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        if (value) {
+          totalBytes = appendLimitedChunk(chunks, value, totalBytes, maxBytes, method);
+        }
+      }
+    } catch (error) {
+      await reader.cancel().catch(() => undefined);
+      throw error;
+    } finally {
+      reader.releaseLock();
+    }
+    return decodeChunks(chunks, totalBytes);
+  }
+
+  for await (const chunk of body) {
+    totalBytes = appendLimitedChunk(chunks, chunk, totalBytes, maxBytes, method);
+  }
+  return decodeChunks(chunks, totalBytes);
+}
+
+async function readJsonResponseBody(
+  res: Response,
+  method: string,
+  maxBytes: number
+): Promise<unknown> {
+  const contentLength = res.headers.get('content-length');
+  if (contentLength !== null) {
+    const contentLengthBytes = Number(contentLength);
+    if (Number.isFinite(contentLengthBytes) && contentLengthBytes > maxBytes) {
+      throw new Error(`RPC request ${method} response body exceeds ${maxBytes} bytes`);
+    }
+  }
+
+  let text: string;
+  const body = res.body;
+  if (isWebReadableStream(body) || isAsyncIterableBody(body)) {
+    text = await readStreamBody(body, method, maxBytes);
+  } else if (contentLength !== null || maxBytes === Number.POSITIVE_INFINITY) {
+    text = await res.text();
+  } else {
+    throw new Error(`RPC request ${method} response body stream is not available`);
+  }
+  try {
+    return JSON.parse(text);
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : String(error);
+    throw new Error(`Invalid JSON: ${message}`);
+  }
+}
+
 export class PhantasmaAPI {
   host: string;
   rpcName: string;
   nexus: string;
   availableHosts: RpcPeer[];
+  maxRpcResponseBytes: number;
   private nextRpcRequestId = 1;
 
   private nextJsonRpcRequestId(): string {
@@ -113,11 +243,17 @@ export class PhantasmaAPI {
     });
   }
 
-  constructor(defHost: string, peersUrlJson: string | undefined | null, nexus: string) {
+  constructor(
+    defHost: string,
+    peersUrlJson: string | undefined | null,
+    nexus: string,
+    options: PhantasmaAPIOptions = {}
+  ) {
     this.rpcName = 'Auto';
     this.nexus = nexus;
     this.host = defHost;
     this.availableHosts = [];
+    this.maxRpcResponseBytes = normalizeMaxRpcResponseBytes(options.maxRpcResponseBytes);
 
     if (peersUrlJson != undefined && peersUrlJson != null) {
       fetch(peersUrlJson + '?_=' + new Date().getTime()).then(async (res) => {
@@ -168,7 +304,7 @@ export class PhantasmaAPI {
 
     let resJson: unknown;
     try {
-      resJson = await res.json();
+      resJson = await readJsonResponseBody(res, method, this.maxRpcResponseBytes);
     } catch (error: unknown) {
       return normalizeRpcError(error, `RPC request ${method} returned invalid JSON`);
     }
@@ -197,18 +333,31 @@ export class PhantasmaAPI {
 
   async JSONRPC(method: string, params: JsonRpcParam[]): Promise<unknown> {
     const requestId = this.nextJsonRpcRequestId();
-    const res = await fetch(this.host, {
-      method: 'POST',
-      mode: 'cors',
-      body: JSON.stringify({
-        jsonrpc: '2.0',
-        method: method,
-        params: params,
-        id: requestId,
-      }),
-      headers: { 'Content-Type': 'application/json' },
-    });
-    const resJson: unknown = await res.json();
+    let res;
+    try {
+      res = await fetch(this.host, {
+        method: 'POST',
+        mode: 'cors',
+        body: JSON.stringify({
+          jsonrpc: '2.0',
+          method: method,
+          params: params,
+          id: requestId,
+        }),
+        headers: { 'Content-Type': 'application/json' },
+      });
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error);
+      throw new Error(`RPC request ${method} failed: ${message}`);
+    }
+
+    if (!res.ok) {
+      throw new Error(
+        res.statusText ? `HTTP ${res.status}: ${res.statusText}` : `HTTP ${res.status}`
+      );
+    }
+
+    const resJson: unknown = await readJsonResponseBody(res, method, this.maxRpcResponseBytes);
     logger.log('method', method, resJson);
     if (!isObjectRecord(resJson)) {
       throw new Error(`RPC request ${method} returned an invalid response`);
@@ -222,7 +371,15 @@ export class PhantasmaAPI {
         return { error: response.error.message };
       return { error: response.error };
     }
+    if (!('result' in response)) {
+      throw new Error(`RPC request ${method} returned no result`);
+    }
     return response.result;
+  }
+
+  setMaxRpcResponseBytes(maxBytes: number): this {
+    this.maxRpcResponseBytes = normalizeMaxRpcResponseBytes(maxBytes);
+    return this;
   }
 
   setRpcHost(rpcHost: string) {

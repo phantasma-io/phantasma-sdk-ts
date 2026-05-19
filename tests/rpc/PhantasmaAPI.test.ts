@@ -235,6 +235,20 @@ describe('PhantasmaAPI RPC shapes', () => {
     }
   });
 
+  test('JSONRPC rejects success responses without a result field', async () => {
+    await withRpcServer(
+      (_body, response) => {
+        response.setHeader('content-type', 'application/json');
+        response.end(JSON.stringify({ jsonrpc: '2.0', id: '1' }));
+      },
+      async (url) => {
+        const api = new PhantasmaAPI(url, null, 'localnet');
+
+        await expect(api.JSONRPC('getBlockHeight', ['main'])).rejects.toThrow('returned no result');
+      }
+    );
+  });
+
   test('JSONRPC rejects id mismatches before application error objects', async () => {
     await withRpcServer(
       (_body, response) => {
@@ -310,6 +324,78 @@ describe('PhantasmaAPI RPC shapes', () => {
 
         expect(isRpcErrorResult(result)).toBe(true);
         expect(result).toMatchObject({ error: expect.stringMatching(/invalid json|Unexpected/iu) });
+      }
+    );
+  });
+
+  test('JSONRPC paths reject oversized response bodies with configurable limits', async () => {
+    const body = JSON.stringify({ jsonrpc: '2.0', id: '1', result: '0123456789ABCDEF' });
+
+    await withRpcServer(
+      (_requestBody, response) => {
+        response.setHeader('content-type', 'application/json');
+        response.setHeader('content-length', String(Buffer.byteLength(body)));
+        response.end(body);
+      },
+      async (url) => {
+        const api = new PhantasmaAPI(url, null, 'localnet', {
+          maxRpcResponseBytes: Buffer.byteLength(body) - 1,
+        });
+
+        const result = await api.JSONRPCResult('getBlockHeight', ['main']);
+        expect(isRpcErrorResult(result)).toBe(true);
+        expect(result).toMatchObject({ error: expect.stringContaining('exceeds') });
+      }
+    );
+
+    await withRpcServer(
+      (_requestBody, response) => {
+        response.setHeader('content-type', 'application/json');
+        response.setHeader('content-length', String(Buffer.byteLength(body)));
+        response.end(body);
+      },
+      async (url) => {
+        const api = new PhantasmaAPI(url, null, 'localnet', {
+          maxRpcResponseBytes: Buffer.byteLength(body) - 1,
+        });
+
+        await expect(api.JSONRPC('getBlockHeight', ['main'])).rejects.toThrow('exceeds');
+      }
+    );
+  });
+
+  test('JSONRPC paths reject oversized chunked response bodies before full materialization', async () => {
+    const body = JSON.stringify({ jsonrpc: '2.0', id: '1', result: '0123456789ABCDEF' });
+
+    await withRpcServer(
+      (_requestBody, response) => {
+        response.setHeader('content-type', 'application/json');
+        response.write(body.slice(0, 12));
+        response.end(body.slice(12));
+      },
+      async (url) => {
+        const api = new PhantasmaAPI(url, null, 'localnet', {
+          maxRpcResponseBytes: Buffer.byteLength(body) - 1,
+        });
+
+        const result = await api.JSONRPCResult('getBlockHeight', ['main']);
+        expect(isRpcErrorResult(result)).toBe(true);
+        expect(result).toMatchObject({ error: expect.stringContaining('exceeds') });
+      }
+    );
+
+    await withRpcServer(
+      (_requestBody, response) => {
+        response.setHeader('content-type', 'application/json');
+        response.write(body.slice(0, 12));
+        response.end(body.slice(12));
+      },
+      async (url) => {
+        const api = new PhantasmaAPI(url, null, 'localnet', {
+          maxRpcResponseBytes: Buffer.byteLength(body) - 1,
+        });
+
+        await expect(api.JSONRPC('getBlockHeight', ['main'])).rejects.toThrow('exceeds');
       }
     );
   });
