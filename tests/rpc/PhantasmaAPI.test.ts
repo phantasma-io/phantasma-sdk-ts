@@ -47,7 +47,7 @@ describe('PhantasmaAPI RPC shapes', () => {
       (body, response) => {
         postedBody = body;
         response.setHeader('content-type', 'application/json');
-        response.end(JSON.stringify({ jsonrpc: '2.0', result: { height: 42 }, id: '1' }));
+        response.end(JSON.stringify({ jsonrpc: '2.0', result: { height: 42 }, id: 1 }));
       },
       async (url) => {
         const api = new PhantasmaAPI(url, null, 'localnet');
@@ -62,6 +62,52 @@ describe('PhantasmaAPI RPC shapes', () => {
         });
       }
     );
+  });
+
+  test('JSONRPCResult rejects missing, null, stale, and mismatched response ids', async () => {
+    // The typed result path returns a normalized RPC error instead of exposing an uncorrelated result.
+    for (const responseId of [undefined, null, 0, '0', '99', { bad: 'id' }]) {
+      await withRpcServer(
+        (_body, response) => {
+          response.setHeader('content-type', 'application/json');
+          const envelope: Record<string, unknown> = { jsonrpc: '2.0', result: { height: 42 } };
+          if (responseId !== undefined) {
+            envelope.id = responseId;
+          }
+          response.end(JSON.stringify(envelope));
+        },
+        async (url) => {
+          const api = new PhantasmaAPI(url, null, 'localnet');
+          const result = await api.JSONRPCResult('getBlockHeight', ['main']);
+
+          expect(isRpcErrorResult(result)).toBe(true);
+          expect(result).toMatchObject({
+            error: expect.stringContaining('mismatched response id'),
+          });
+        }
+      );
+    }
+  });
+
+  test('JSONRPCResult increments request ids and accepts only the echoed id', async () => {
+    const postedIds: Array<unknown> = [];
+
+    await withRpcServer(
+      (body, response) => {
+        const request = JSON.parse(body) as { id: string };
+        postedIds.push(request.id);
+        response.setHeader('content-type', 'application/json');
+        response.end(JSON.stringify({ jsonrpc: '2.0', id: request.id, result: { ok: true } }));
+      },
+      async (url) => {
+        const api = new PhantasmaAPI(url, null, 'localnet');
+
+        expect(unwrapRpcResult(await api.JSONRPCResult('first', []))).toEqual({ ok: true });
+        expect(unwrapRpcResult(await api.JSONRPCResult('second', []))).toEqual({ ok: true });
+      }
+    );
+
+    expect(postedIds).toEqual(['1', '2']);
   });
 
   test('JSONRPCResult normalizes JSON-RPC error objects', async () => {
@@ -91,6 +137,29 @@ describe('PhantasmaAPI RPC shapes', () => {
     );
   });
 
+  test('JSONRPCResult rejects id mismatches before JSON-RPC error objects', async () => {
+    await withRpcServer(
+      (_body, response) => {
+        response.setHeader('content-type', 'application/json');
+        response.end(
+          JSON.stringify({
+            jsonrpc: '2.0',
+            error: { code: -32601, message: 'unknown method' },
+            id: '0',
+          })
+        );
+      },
+      async (url) => {
+        const api = new PhantasmaAPI(url, null, 'localnet');
+        const result = await api.JSONRPCResult('missing', []);
+
+        expect(isRpcErrorResult(result)).toBe(true);
+        expect(result).toMatchObject({ error: expect.stringContaining('mismatched response id') });
+        expect(result).not.toMatchObject({ error: expect.stringContaining('unknown method') });
+      }
+    );
+  });
+
   test('blank script error fields are not treated as RPC errors', () => {
     const scriptResult = { events: [], result: '03020800', error: '', results: [], oracles: [] };
 
@@ -115,6 +184,73 @@ describe('PhantasmaAPI RPC shapes', () => {
         const result = await api.JSONRPC('missing', []);
 
         expect(result).toEqual({ error: 'unknown method' });
+      }
+    );
+  });
+
+  test('JSONRPC increments request ids and rejects a stale response echo', async () => {
+    // The historical JSONRPC path shares the same request-id contract as
+    // JSONRPCResult: a stale echo from the previous request must fail closed.
+    const postedIds: string[] = [];
+
+    await withRpcServer(
+      (body, response) => {
+        const request = JSON.parse(body) as { id: string };
+        postedIds.push(request.id);
+        const responseId = postedIds.length === 2 ? postedIds[0] : request.id;
+        response.setHeader('content-type', 'application/json');
+        response.end(JSON.stringify({ jsonrpc: '2.0', id: responseId, result: 7 }));
+      },
+      async (url) => {
+        const api = new PhantasmaAPI(url, null, 'localnet');
+
+        expect(await api.JSONRPC('first', [])).toBe(7);
+        await expect(api.JSONRPC('second', [])).rejects.toThrow('mismatched response id');
+      }
+    );
+
+    expect(postedIds).toEqual(['1', '2']);
+  });
+
+  test('JSONRPC rejects missing, null, stale, and mismatched response ids', async () => {
+    // The historical JSONRPC path throws on protocol-level id failures before returning a result.
+    for (const responseId of [undefined, null, 0, '0', '99', { bad: 'id' }]) {
+      await withRpcServer(
+        (_body, response) => {
+          response.setHeader('content-type', 'application/json');
+          const envelope: Record<string, unknown> = { jsonrpc: '2.0', result: 7 };
+          if (responseId !== undefined) {
+            envelope.id = responseId;
+          }
+          response.end(JSON.stringify(envelope));
+        },
+        async (url) => {
+          const api = new PhantasmaAPI(url, null, 'localnet');
+
+          await expect(api.JSONRPC('getBlockHeight', ['main'])).rejects.toThrow(
+            'mismatched response id'
+          );
+        }
+      );
+    }
+  });
+
+  test('JSONRPC rejects id mismatches before application error objects', async () => {
+    await withRpcServer(
+      (_body, response) => {
+        response.setHeader('content-type', 'application/json');
+        response.end(
+          JSON.stringify({
+            jsonrpc: '2.0',
+            error: { code: -32601, message: 'unknown method' },
+            id: '0',
+          })
+        );
+      },
+      async (url) => {
+        const api = new PhantasmaAPI(url, null, 'localnet');
+
+        await expect(api.JSONRPC('missing', [])).rejects.toThrow('mismatched response id');
       }
     );
   });

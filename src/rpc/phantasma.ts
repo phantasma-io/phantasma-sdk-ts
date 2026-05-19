@@ -51,6 +51,7 @@ function rpcHttpError(status: number, statusText: string): RpcErrorResult {
 }
 
 interface HistoricalJsonRpcResponse {
+  id?: string | number | null;
   result?: unknown;
   error?: { message?: string } | string;
 }
@@ -59,11 +60,28 @@ function parseRpcNumber(result: unknown): number {
   return typeof result === 'string' ? parseInt(result, 10) : (result as number);
 }
 
+function rpcResponseIdMatches(responseId: unknown, requestId: string): boolean {
+  if (typeof responseId === 'string') {
+    return responseId === requestId;
+  }
+  if (typeof responseId === 'number' && Number.isInteger(responseId)) {
+    return String(responseId) === requestId;
+  }
+  return false;
+}
+
 export class PhantasmaAPI {
   host: string;
   rpcName: string;
   nexus: string;
   availableHosts: RpcPeer[];
+  private nextRpcRequestId = 1;
+
+  private nextJsonRpcRequestId(): string {
+    const requestId = String(this.nextRpcRequestId);
+    this.nextRpcRequestId += 1;
+    return requestId;
+  }
 
   pingAsync(host: string): Promise<number> {
     return new Promise((resolve, reject) => {
@@ -126,6 +144,7 @@ export class PhantasmaAPI {
   }
 
   async JSONRPCResult<T = unknown>(method: string, params: JsonRpcParam[]): Promise<RpcResult<T>> {
+    const requestId = this.nextJsonRpcRequestId();
     let res;
     try {
       res = await fetch(this.host, {
@@ -135,7 +154,7 @@ export class PhantasmaAPI {
           jsonrpc: '2.0',
           method: method,
           params: params,
-          id: '1',
+          id: requestId,
         }),
         headers: { 'Content-Type': 'application/json' },
       });
@@ -160,6 +179,12 @@ export class PhantasmaAPI {
     }
 
     const response = resJson as Partial<JsonRpcResponse<T>> & { error?: unknown };
+    if (!rpcResponseIdMatches(response.id, requestId)) {
+      return normalizeRpcError(
+        undefined,
+        `RPC request ${method} returned a mismatched response id`
+      );
+    }
     if (response.error !== undefined && response.error !== null) {
       return normalizeRpcError(response.error, `RPC request ${method} failed`);
     }
@@ -171,6 +196,7 @@ export class PhantasmaAPI {
   }
 
   async JSONRPC(method: string, params: JsonRpcParam[]): Promise<unknown> {
+    const requestId = this.nextJsonRpcRequestId();
     const res = await fetch(this.host, {
       method: 'POST',
       mode: 'cors',
@@ -178,18 +204,25 @@ export class PhantasmaAPI {
         jsonrpc: '2.0',
         method: method,
         params: params,
-        id: '1',
+        id: requestId,
       }),
       headers: { 'Content-Type': 'application/json' },
     });
-    const resJson = (await res.json()) as HistoricalJsonRpcResponse;
+    const resJson: unknown = await res.json();
     logger.log('method', method, resJson);
-    if (resJson.error) {
-      if (typeof resJson.error === 'object' && resJson.error.message)
-        return { error: resJson.error.message };
-      return { error: resJson.error };
+    if (!isObjectRecord(resJson)) {
+      throw new Error(`RPC request ${method} returned an invalid response`);
     }
-    return resJson.result;
+    const response = resJson as HistoricalJsonRpcResponse;
+    if (!rpcResponseIdMatches(response.id, requestId)) {
+      throw new Error(`RPC request ${method} returned a mismatched response id`);
+    }
+    if (response.error) {
+      if (typeof response.error === 'object' && response.error.message)
+        return { error: response.error.message };
+      return { error: response.error };
+    }
+    return response.result;
   }
 
   setRpcHost(rpcHost: string) {
