@@ -1,7 +1,7 @@
 import { logger } from '../utils/logger.js';
 import fetch from 'cross-fetch';
 import { Balance } from './interfaces/balance.js';
-import { Organization } from './interfaces/organization.js';
+import { Organization, OrganizationMember, RpcAddressType } from './interfaces/organization.js';
 import { Nexus } from './interfaces/nexus.js';
 import { Account } from './interfaces/account.js';
 import { Leaderboard } from './interfaces/leaderboard.js';
@@ -561,23 +561,42 @@ export class PhantasmaAPI {
     return (await this.JSONRPC('getContractByAddress', params)) as Contract;
   }
 
-  //Returns info about an organization.
-  // Warning: current Carbon RPC endpoint is stubbed and returns a default organization object.
-  async getOrganization(ID: string, extended: boolean = true): Promise<Organization> {
-    const params: JsonRpcParam[] = [ID, extended];
+  async getOrganization(name: string, includeMemberCount: boolean = false): Promise<Organization> {
+    const params: JsonRpcParam[] = [name, includeMemberCount];
     return (await this.JSONRPC('getOrganization', params)) as Organization;
   }
 
-  // Warning: current Carbon RPC endpoint is stubbed and returns a default organization object.
-  async getOrganizationByName(name: string, extended: boolean = true): Promise<Organization> {
-    const params: JsonRpcParam[] = [name, extended];
-    return (await this.JSONRPC('getOrganizationByName', params)) as Organization;
+  async getOrganizations(
+    pageSize: number = 10,
+    cursor: string = '',
+    includeMemberCount: boolean = false
+  ): Promise<CursorPaginatedResult<Organization[]>> {
+    const params: JsonRpcParam[] = [pageSize, cursor, includeMemberCount];
+    return (await this.JSONRPC('getOrganizations', params)) as CursorPaginatedResult<
+      Organization[]
+    >;
   }
 
-  // Warning: current Carbon RPC endpoint is stubbed and returns an empty array.
-  async getOrganizations(extended: boolean = false): Promise<Organization[]> {
-    const params: JsonRpcParam[] = [extended];
-    return (await this.JSONRPC('getOrganizations', params)) as Organization[];
+  async getOrganizationMembers(
+    name: string,
+    pageSize: number = 10,
+    cursor: string = '',
+    includeMemberTime: boolean = true
+  ): Promise<CursorPaginatedResult<OrganizationMember[]>> {
+    const params: JsonRpcParam[] = [name, pageSize, cursor, includeMemberTime];
+    return (await this.JSONRPC('getOrganizationMembers', params)) as CursorPaginatedResult<
+      OrganizationMember[]
+    >;
+  }
+
+  async getOrganizationMember(
+    name: string,
+    address: string,
+    checkAddressReservedByte: boolean = true,
+    addressType: RpcAddressType = 'Phantasma'
+  ): Promise<OrganizationMember> {
+    const params: JsonRpcParam[] = [name, address, checkAddressReservedByte, addressType];
+    return (await this.JSONRPC('getOrganizationMember', params)) as OrganizationMember;
   }
 
   //Returns content of a Phantasma leaderboard.

@@ -13,6 +13,7 @@ import type {
   Nexus,
   NFT,
   Organization,
+  OrganizationMember,
   Paginated,
   PhantasmaVmConfig,
   Script,
@@ -76,11 +77,14 @@ describe('RPC response model shape', () => {
     expectType<Promise<Organization>>(
       undefined as unknown as ReturnType<PhantasmaAPI['getOrganization']>
     );
-    expectType<Promise<Organization>>(
-      undefined as unknown as ReturnType<PhantasmaAPI['getOrganizationByName']>
-    );
-    expectType<Promise<Organization[]>>(
+    expectType<Promise<CursorPaginatedResult<Organization[]>>>(
       undefined as unknown as ReturnType<PhantasmaAPI['getOrganizations']>
+    );
+    expectType<Promise<CursorPaginatedResult<OrganizationMember[]>>>(
+      undefined as unknown as ReturnType<PhantasmaAPI['getOrganizationMembers']>
+    );
+    expectType<Promise<OrganizationMember>>(
+      undefined as unknown as ReturnType<PhantasmaAPI['getOrganizationMember']>
     );
     expectType<Promise<Leaderboard>>(
       undefined as unknown as ReturnType<PhantasmaAPI['getLeaderboard']>
@@ -300,7 +304,19 @@ describe('RPC response model shape', () => {
     };
     const chain: Chain = { height: 0 };
     const nexus: Nexus = { protocol: 0 };
-    const organization: Organization = {};
+    const organization: Organization = {
+      name: 'masters',
+      owner: 'Powner',
+      carbonOwner: '0xowner',
+      metadata: [{ key: 'role', value: 'validators' }],
+      memberCount: '2',
+    };
+    const organizationMember: OrganizationMember = {
+      address: 'Pmember',
+      carbonAddress: '0xmember',
+      isMember: true,
+      memberTime: 123,
+    };
     const leaderboard: Leaderboard = {};
     const archive: Archive = { time: 0, size: 0, blockCount: 0 };
     const config: PhantasmaVmConfig = {
@@ -324,7 +340,9 @@ describe('RPC response model shape', () => {
     expect(contract.owner).toBeUndefined();
     expect(chain.height).toBe(0);
     expect(nexus.protocol).toBe(0);
-    expect(organization.members).toBeUndefined();
+    expect(organization.metadata?.[0]?.key).toBe('role');
+    expect(organization.memberCount).toBe('2');
+    expect(organizationMember.isMember).toBe(true);
     expect(leaderboard.rows).toBeUndefined();
     expect(archive.blockCount).toBe(0);
     expect(config.fuelPerContractDeploy).toBe('1');

@@ -449,4 +449,20 @@ describe('PhantasmaAPI RPC shapes', () => {
       { method: 'getPhantasmaVmConfig', params: ['main'] },
     ]);
   });
+
+  test('organization helpers use the final name-first RPC contract', async () => {
+    const api = new CapturingAPI();
+
+    await api.getOrganization('masters');
+    await api.getOrganizationMembers('masters', 2, 'cursor', false);
+    await api.getOrganizationMember('masters', 'Pmember', true, 'Phantasma');
+    await api.getOrganizations(2, '', true);
+
+    expect(api.calls).toEqual([
+      { method: 'getOrganization', params: ['masters', false] },
+      { method: 'getOrganizationMembers', params: ['masters', 2, 'cursor', false] },
+      { method: 'getOrganizationMember', params: ['masters', 'Pmember', true, 'Phantasma'] },
+      { method: 'getOrganizations', params: [2, '', true] },
+    ]);
+  });
 });
