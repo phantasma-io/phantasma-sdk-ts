@@ -32,6 +32,11 @@
       "import": "./dist/esm/link/index.js",
       "require": "./dist/cjs/link/index.js"
     },
+    "./link/v5": {
+      "types": "./dist/types/link/v5/index.d.ts",
+      "import": "./dist/esm/link/v5/index.js",
+      "require": "./dist/cjs/link/v5/index.js"
+    },
     "./rpc": {
       "types": "./dist/types/rpc/index.d.ts",
       "import": "./dist/esm/rpc/index.js",

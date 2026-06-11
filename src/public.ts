@@ -271,6 +271,9 @@ export { PhantasmaLink } from './link/phantasma-link.js';
 export { ProofOfWork } from './link/interfaces/proof-of-work.js';
 export type { LinkAccount, LinkFile } from './link/index.js';
 export type { PrebuiltTransactionSignResult } from './link/phantasma-link.js';
+// Phantasma Link v5 (new generation). Namespaced because v5 defines its own `SignatureKind`
+// (string union) distinct from the contract `SignatureKind` enum exported flatly above.
+export * as PhantasmaLinkV5 from './link/v5/index.js';
 
 export { Signature, SignatureKind } from './interfaces/signature.js';
 export { NativeContractKind } from './interfaces/contract.js';
