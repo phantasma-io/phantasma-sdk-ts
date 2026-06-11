@@ -22,6 +22,8 @@ export interface PairingParams {
   symKey?: Uint8Array;
   /** Present when `mode === 'ecdh'`. */
   dappPublicKey?: Uint8Array;
+  /** Where the wallet opens response deeplinks for this pairing (spec §19). */
+  callback?: string;
   meta?: DappMetadata;
 }
 
@@ -32,6 +34,8 @@ export interface BuildPairingUriInput {
   symKey?: Uint8Array;
   dappPublicKey?: Uint8Array;
   relay?: string;
+  /** dApp URL the wallet opens to deliver deeplink responses (required for deeplink use). */
+  callback?: string;
   meta?: DappMetadata;
   /** `universal` (default) => `https://<host>/v5/pair`; `scheme` => `phantasma://v5/pair`. */
   scheme?: 'universal' | 'scheme';
@@ -49,6 +53,9 @@ export function buildPairingUri(input: BuildPairingUriInput): string {
   params.set('t', input.topic);
   if (input.relay) {
     params.set('relay', input.relay);
+  }
+  if (input.callback) {
+    params.set('cb', input.callback);
   }
 
   if (input.mode === 'sym') {
@@ -104,6 +111,7 @@ export function parsePairingUri(uri: string): PairingParams {
   }
 
   const relay = params.get('relay') ?? undefined;
+  const callback = params.get('cb') ?? undefined;
 
   let meta: DappMetadata | undefined;
   const metaRaw = params.get('meta');
@@ -118,10 +126,18 @@ export function parsePairingUri(uri: string): PairingParams {
   const sk = params.get('sk');
   const pk = params.get('pk');
   if (sk) {
-    return { version, topic, relay, mode: 'sym', symKey: base64UrlToBytes(sk), meta };
+    return { version, topic, relay, callback, mode: 'sym', symKey: base64UrlToBytes(sk), meta };
   }
   if (pk) {
-    return { version, topic, relay, mode: 'ecdh', dappPublicKey: base64UrlToBytes(pk), meta };
+    return {
+      version,
+      topic,
+      relay,
+      callback,
+      mode: 'ecdh',
+      dappPublicKey: base64UrlToBytes(pk),
+      meta,
+    };
   }
   throw new LinkError(LinkErrorCode.InvalidRequest, 'Pairing URI carries neither sk nor pk');
 }

@@ -32,6 +32,8 @@ import {
   InvokeScriptResult,
 } from './methods.js';
 import { LoopbackTransport, LoopbackTransportOptions } from './loopback-transport.js';
+import { DeeplinkTransport, DeeplinkTransportOptions } from './deeplink.js';
+import { LinkError, LinkErrorCode } from './errors.js';
 
 /** Options for {@link PhantasmaLink5}. */
 export type PhantasmaLink5Options = LinkSessionClientOptions;
@@ -42,16 +44,40 @@ export type PhantasmaLink5Options = LinkSessionClientOptions;
  * (account/chain/session changes) are delivered via {@link onEvent}.
  */
 export class PhantasmaLink5 {
+  private readonly transport: LinkTransport;
   private readonly session: LinkSessionClient;
   private lastConnect?: ConnectResult;
 
   constructor(transport: LinkTransport, options: PhantasmaLink5Options = {}) {
+    this.transport = transport;
     this.session = new LinkSessionClient(transport, options);
   }
 
   /** Build a client over the desktop loopback transport (plaintext, trusted-local). */
   static loopback(options: LoopbackTransportOptions = {}): PhantasmaLink5 {
     return new PhantasmaLink5(new LoopbackTransport(options));
+  }
+
+  /** Build a client over the deeplink transport (spec §19). The channel key from pairing is
+   * MANDATORY here: deeplink URLs are interceptable, so plaintext frames are never allowed. */
+  static deeplink(
+    options: DeeplinkTransportOptions & { sessionKey: Uint8Array; requestTimeoutMs?: number }
+  ): PhantasmaLink5 {
+    if (!options.sessionKey || options.sessionKey.length !== 32) {
+      throw new LinkError(
+        LinkErrorCode.InvalidParams,
+        'Deeplink requires the 32-byte pairing session key'
+      );
+    }
+    return new PhantasmaLink5(new DeeplinkTransport(options), {
+      sessionKey: options.sessionKey,
+      requestTimeoutMs: options.requestTimeoutMs,
+    });
+  }
+
+  /** Feed an OS-delivered URL into a deeplink-backed client; see DeeplinkTransport.deliverUrl. */
+  deliverUrl(url: string): boolean {
+    return this.transport instanceof DeeplinkTransport && this.transport.deliverUrl(url);
   }
 
   /** The account from the last successful {@link connect}, if any. */
