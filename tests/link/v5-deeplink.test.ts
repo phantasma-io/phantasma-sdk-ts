@@ -1,3 +1,4 @@
+import { jest } from '@jest/globals';
 import {
   buildRequestUrl,
   parseRequestUrl,
@@ -75,6 +76,36 @@ describe('PhantasmaLink5.deeplink (encrypted end-to-end over a fake OS hop)', ()
     expect(() =>
       PhantasmaLink5.deeplink({ topic: 't', opener: () => {}, sessionKey: new Uint8Array(8) })
     ).toThrow(LinkError);
+  });
+
+  // A deeplink round-trip includes an app switch and a human consent, so the factory must
+  // default to the 5-minute deeplink timeout, not the generic 60 s session default that
+  // would expire the money path mid-consent.
+  it('defaults the request timeout to 5 minutes', async () => {
+    jest.useFakeTimers();
+    try {
+      const client = PhantasmaLink5.deeplink({
+        topic: 't',
+        opener: () => {},
+        sessionKey: generateSessionKey(),
+      });
+      const promise = client.getChains();
+      let settled = false;
+      promise.catch(() => {
+        settled = true;
+      });
+
+      jest.advanceTimersByTime(299_000); // the old 60 s default would have fired long ago
+      await Promise.resolve();
+      expect(settled).toBe(false);
+
+      jest.advanceTimersByTime(2_000); // past 300 s - now it must time out
+      await Promise.resolve();
+      expect(settled).toBe(true);
+      await expect(promise).rejects.toThrow(/timed out/);
+    } finally {
+      jest.useRealTimers();
+    }
   });
 
   // Full loop: the client seals the envelope, the "wallet" opens it with the pairing key,

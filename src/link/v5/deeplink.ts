@@ -18,6 +18,11 @@ import { bytesToBase64Url, base64UrlToBytes, utf8ToBytes, bytesToUtf8 } from './
 /** Default custom-scheme base of the wallet ("phantasma://v5/req"). */
 export const WALLET_SCHEME_BASE = 'phantasma://';
 
+/** Default per-request timeout on deeplink transports. A round-trip spans an app switch
+ * plus a human consent, so the generic 60 s session default is far too tight here - it
+ * would expire the money path while the user is still reading the wallet's Send screen. */
+export const DEEPLINK_REQUEST_TIMEOUT_MS = 300000;
+
 export interface DeeplinkUrls {
   topic: string;
   frame: string;

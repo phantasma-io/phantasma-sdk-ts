@@ -39,6 +39,12 @@ export const LinkEvent = {
   ChainChanged: 'pha_chainChanged',
   SessionDeleted: 'pha_sessionDeleted',
   SessionExpired: 'pha_sessionExpired',
+  /** Unsolicited connect result pushed right after a pairing approval (spec §17 step 3),
+   * letting the first connection complete in one user gesture. Unlike the other events it
+   * also rides the deeplink transport: the wallet is foreground at the approval moment, so
+   * it CAN open the callback (this is a reply to the pairing, not a spontaneous push).
+   * `data` carries the same shape as a `pha_connect` result. */
+  SessionEstablished: 'pha_sessionEstablished',
 } as const;
 export type LinkEvent = (typeof LinkEvent)[keyof typeof LinkEvent];
 

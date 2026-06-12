@@ -75,9 +75,15 @@ export class LinkSessionClient {
     transport.onClose?.((reason) => this.handleClose(reason));
   }
 
-  /** Set/refresh the session id sent on subsequent requests (e.g. after `pha_connect`). */
-  setSessionId(id: string): void {
+  /** Set/refresh the session id sent on subsequent requests (e.g. after `pha_connect`),
+   * or clear it with `undefined` (e.g. after `pha_disconnect`). */
+  setSessionId(id: string | undefined): void {
     this.sessionId = id;
+  }
+
+  /** The current session id, if a session is established. */
+  getSessionId(): string | undefined {
+    return this.sessionId;
   }
 
   /** Subscribe to wallet->dApp events; returns an unsubscribe function. */

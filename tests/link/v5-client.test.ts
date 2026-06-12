@@ -129,6 +129,84 @@ describe('PhantasmaLink5 (cohesive v5 client)', () => {
     await next;
   });
 
+  // connect() falls back to the options.dapp identity (set by factories) and refuses to
+  // run with no identity at all - a connect without dApp metadata is meaningless.
+  it('uses options.dapp for connect() and rejects without any dApp identity', async () => {
+    const bare = new PhantasmaLink5(new MockTransport());
+    await expect(bare.connect()).rejects.toMatchObject({ name: 'LinkError' });
+
+    const transport = new MockTransport();
+    const client = new PhantasmaLink5(transport, { dapp: { name: 'D', url: 'https://d.app' } });
+    const promise = client.connect();
+    const envelope = transport.lastEnvelope();
+    expect(envelope.params?.dapp).toEqual({ name: 'D', url: 'https://d.app' });
+    transport.inject(
+      JSON.stringify({
+        plv: PLV,
+        id: envelope.id,
+        result: {
+          wallet: { name: 'PGL', version: '1.0' },
+          capabilities: {
+            plvVersions: [5],
+            methods: [],
+            chains: [],
+            txFormats: [],
+            signatureKinds: [],
+          },
+          account: { address: 'P2K...' },
+          session: { id: 's1' },
+        },
+      })
+    );
+    await expect(promise).resolves.toMatchObject({ session: { id: 's1' } });
+  });
+
+  // After disconnect the wallet has dropped the session, so the client must stop sending
+  // the dead session id (and clear the cached account).
+  it('clears the session and cached account after disconnect', async () => {
+    const transport = new MockTransport();
+    const client = new PhantasmaLink5(transport, { dapp: { name: 'D', url: 'https://d.app' } });
+
+    const connecting = client.connect();
+    transport.inject(
+      JSON.stringify({
+        plv: PLV,
+        id: transport.lastEnvelope().id,
+        result: {
+          wallet: { name: 'PGL', version: '1.0' },
+          capabilities: {
+            plvVersions: [5],
+            methods: [],
+            chains: [],
+            txFormats: [],
+            signatureKinds: [],
+          },
+          account: { address: 'P2K...' },
+          session: { id: 'sess-x' },
+        },
+      })
+    );
+    await connecting;
+    expect(client.account).toBeDefined();
+
+    const disconnecting = client.disconnect();
+    expect(transport.lastEnvelope().session).toBe('sess-x'); // the disconnect itself is in-session
+    transport.inject(JSON.stringify({ plv: PLV, id: transport.lastEnvelope().id, result: {} }));
+    await disconnecting;
+
+    expect(client.account).toBeUndefined();
+    const after = client.getChains();
+    expect(transport.lastEnvelope().session).toBeUndefined(); // dead id no longer sent
+    transport.inject(
+      JSON.stringify({
+        plv: PLV,
+        id: transport.lastEnvelope().id,
+        result: { chains: [], current: '', nexus: 'x' },
+      })
+    );
+    await after;
+  });
+
   // Every typed forwarder must emit the right method name and pass params through verbatim -
   // a wrong method string here would silently hit MethodNotFound on the wallet.
   it('maps every typed method to its pha_* wire name with verbatim params', async () => {
@@ -167,6 +245,69 @@ describe('PhantasmaLink5 (cohesive v5 client)', () => {
       transport.inject(JSON.stringify({ plv: PLV, id: envelope.id, result: {} }));
       await promise;
     }
+  });
+
+  // One-tap pairing (spec §17 step 3): a wallet-pushed sessionEstablished event must be
+  // adopted exactly like a connect result - live session id, cached account, persistence
+  // callback - while still reaching ordinary event subscribers.
+  it('adopts a wallet-pushed pha_sessionEstablished event as the live session', async () => {
+    const transport = new MockTransport();
+    const changes: unknown[] = [];
+    const client = new PhantasmaLink5(transport, { onSessionChange: (c) => changes.push(c) });
+    const events: string[] = [];
+    client.onEvent((event) => events.push(event));
+
+    transport.inject(
+      JSON.stringify({
+        plv: PLV,
+        type: 'event',
+        event: 'pha_sessionEstablished',
+        session: 'push-1',
+        data: {
+          wallet: { name: 'PGL', version: '1.0' },
+          capabilities: {
+            plvVersions: [5],
+            methods: [],
+            chains: [],
+            txFormats: [],
+            signatureKinds: [],
+          },
+          account: { address: 'P2K...' },
+          session: { id: 'push-1' },
+        },
+      })
+    );
+
+    expect(client.account?.address).toBe('P2K...');
+    expect(changes).toHaveLength(1);
+    expect(events).toEqual(['pha_sessionEstablished']);
+
+    // The adopted session rides subsequent requests.
+    const promise = client.getChains();
+    expect(transport.lastEnvelope().session).toBe('push-1');
+    transport.inject(
+      JSON.stringify({
+        plv: PLV,
+        id: transport.lastEnvelope().id,
+        result: { chains: [], current: '', nexus: 'x' },
+      })
+    );
+    await promise;
+  });
+
+  // A malformed push (no session id) must be ignored, never half-adopted.
+  it('ignores a malformed pha_sessionEstablished payload', () => {
+    const transport = new MockTransport();
+    const client = new PhantasmaLink5(transport);
+    transport.inject(
+      JSON.stringify({
+        plv: PLV,
+        type: 'event',
+        event: 'pha_sessionEstablished',
+        data: { account: { address: 'P2K...' } }, // no session.id
+      })
+    );
+    expect(client.account).toBeUndefined();
   });
 
   // Events reach subscribers through the client facade, and close() makes further calls fail.

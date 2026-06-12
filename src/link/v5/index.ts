@@ -13,4 +13,5 @@ export * from './pairing.js';
 export * from './transport.js';
 export * from './loopback-transport.js';
 export * from './deeplink.js';
+export * from './web-deeplink.js';
 export * from './client.js';
