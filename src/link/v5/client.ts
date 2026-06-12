@@ -37,6 +37,7 @@ import {
   DeeplinkTransportOptions,
   DEEPLINK_REQUEST_TIMEOUT_MS,
 } from './deeplink.js';
+import { RelayTransport, RelayTransportOptions } from './relay-transport.js';
 import { LinkError, LinkErrorCode } from './errors.js';
 import { buildPairingUri } from './pairing.js';
 import { base64UrlToBytes } from './encoding.js';
@@ -110,6 +111,25 @@ export class PhantasmaLink5 {
     return new PhantasmaLink5(new DeeplinkTransport(options), {
       sessionKey: options.sessionKey,
       // Deeplink round-trips include an app switch + human consent; see the constant.
+      requestTimeoutMs: options.requestTimeoutMs ?? DEEPLINK_REQUEST_TIMEOUT_MS,
+    });
+  }
+
+  /** Build a client over the relay transport (spec §6.4/§18). The channel key from
+   * pairing is MANDATORY: relay payloads are ALWAYS encrypted (spec §8) - the relay is
+   * E2E-blind and must stay that way. */
+  static relay(
+    options: RelayTransportOptions & { sessionKey: Uint8Array; requestTimeoutMs?: number }
+  ): PhantasmaLink5 {
+    if (!options.sessionKey || options.sessionKey.length !== 32) {
+      throw new LinkError(
+        LinkErrorCode.InvalidParams,
+        'Relay requires the 32-byte pairing session key'
+      );
+    }
+    return new PhantasmaLink5(new RelayTransport(options), {
+      sessionKey: options.sessionKey,
+      // Relay round-trips include human consents too; same generous default.
       requestTimeoutMs: options.requestTimeoutMs ?? DEEPLINK_REQUEST_TIMEOUT_MS,
     });
   }
