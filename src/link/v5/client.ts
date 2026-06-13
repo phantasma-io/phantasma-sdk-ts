@@ -37,7 +37,7 @@ import {
   DeeplinkTransportOptions,
   DEEPLINK_REQUEST_TIMEOUT_MS,
 } from './deeplink.js';
-import { RelayTransport, RelayTransportOptions } from './relay-transport.js';
+import { RelayTransport, RelayTransportOptions, DEFAULT_RELAY_URL } from './relay-transport.js';
 import { LinkError, LinkErrorCode } from './errors.js';
 import { buildPairingUri } from './pairing.js';
 import { base64UrlToBytes } from './encoding.js';
@@ -49,6 +49,12 @@ import {
   createWebDeeplinkRecord,
   stripUrlFragment,
 } from './web-deeplink.js';
+import {
+  deriveSessionKey,
+  generateEphemeralKeyPair,
+  randomToken,
+  EphemeralKeyPair,
+} from './session-crypto.js';
 
 /** Options for {@link PhantasmaLink5}. */
 export interface PhantasmaLink5Options extends LinkSessionClientOptions {
@@ -132,6 +138,54 @@ export class PhantasmaLink5 {
       // Relay round-trips include human consents too; same generous default.
       requestTimeoutMs: options.requestTimeoutMs ?? DEEPLINK_REQUEST_TIMEOUT_MS,
     });
+  }
+
+  /**
+   * Build a client for the ecdh pairing fallback (spec §17/§20.1): the custom-scheme
+   * channel is hijackable, so NO secret rides the pairing URI - only the dApp's
+   * ephemeral X25519 PUBLIC key. The wallet answers over the relay with its own public
+   * key plus the sealed connect result; the session key is derived on arrival and the
+   * client refuses to send (or accept) anything before that. Show {@link pairingUri}
+   * (a phantasma:// URI) to start; the session then arrives one-tap.
+   */
+  static relayEcdh(
+    options: Omit<RelayTransportOptions, 'topic' | 'onWalletKey'> & {
+      topic?: string;
+      dapp?: DappMetadata;
+      keyPair?: EphemeralKeyPair;
+      requestTimeoutMs?: number;
+    }
+  ): PhantasmaLink5 {
+    const topic = options.topic ?? randomToken(32);
+    const pair = options.keyPair ?? generateEphemeralKeyPair();
+    const relayUrl = options.url ?? DEFAULT_RELAY_URL;
+
+    const transport = new RelayTransport({
+      ...options,
+      topic,
+      url: relayUrl,
+      onWalletKey: (publicKeyB64Url) => {
+        // Fires only when the wallet's hop arrives, long after `client` below exists.
+        const walletPublicKey = base64UrlToBytes(publicKeyB64Url);
+        client.session.setSessionKey(deriveSessionKey(walletPublicKey, pair.secretKey));
+      },
+    });
+    const client = new PhantasmaLink5(transport, {
+      dapp: options.dapp,
+      requireSessionKey: true,
+      requestTimeoutMs: options.requestTimeoutMs ?? DEEPLINK_REQUEST_TIMEOUT_MS,
+    });
+    client.pairingUriValue = buildPairingUri({
+      topic,
+      mode: 'ecdh',
+      dappPublicKey: pair.publicKey,
+      relay: relayUrl,
+      meta: options.dapp,
+      // The whole point of ecdh is the hijackable custom scheme; a safe channel
+      // (universal link / QR) should use the simpler sym mode instead.
+      scheme: 'scheme',
+    });
+    return client;
   }
 
   /**

@@ -39,6 +39,10 @@ export interface LinkSessionClientOptions {
    * ONLY for a trusted local transport (loopback/injected); deeplink and relay MUST set a
    * key (spec §8). */
   sessionKey?: Uint8Array;
+  /** Refuse to SEND until a session key is set (see {@link LinkSessionClient.setSessionKey}).
+   * Used by the ecdh pairing flow, where the key is derived only after the wallet's
+   * public key arrives - plaintext must never leave the client in the meantime. */
+  requireSessionKey?: boolean;
   /** Session id attached to outgoing requests after connect/pairing. */
   sessionId?: string;
   /** Per-request timeout in ms; 0 disables. Default 60000. */
@@ -59,7 +63,8 @@ interface Pending {
  */
 export class LinkSessionClient {
   private readonly transport: LinkTransport;
-  private readonly sessionKey?: Uint8Array;
+  private sessionKey?: Uint8Array;
+  private readonly requireSessionKey: boolean;
   private sessionId?: string;
   private readonly requestTimeoutMs: number;
   private readonly pending = new Map<string, Pending>();
@@ -69,6 +74,7 @@ export class LinkSessionClient {
   constructor(transport: LinkTransport, options: LinkSessionClientOptions = {}) {
     this.transport = transport;
     this.sessionKey = options.sessionKey;
+    this.requireSessionKey = options.requireSessionKey ?? false;
     this.sessionId = options.sessionId;
     this.requestTimeoutMs = options.requestTimeoutMs ?? 60000;
     transport.onMessage((frame) => this.handleFrame(frame));
@@ -86,6 +92,16 @@ export class LinkSessionClient {
     return this.sessionId;
   }
 
+  /** Install the channel key once it is established (ecdh pairing derives it only after
+   * the wallet's ephemeral public key arrives, spec §20.1). From here on every frame is
+   * sealed/opened with it, exactly as if it had been passed at construction. */
+  setSessionKey(key: Uint8Array): void {
+    if (key.length !== 32) {
+      throw new LinkError(LinkErrorCode.InternalError, 'Invalid session key length');
+    }
+    this.sessionKey = key;
+  }
+
   /** Subscribe to wallet->dApp events; returns an unsubscribe function. */
   onEvent(handler: LinkEventHandler): () => void {
     this.eventHandlers.add(handler);
@@ -99,6 +115,16 @@ export class LinkSessionClient {
     if (this.closed) {
       return Promise.reject(
         new LinkError(LinkErrorCode.Disconnected, 'Phantasma Link transport is closed')
+      );
+    }
+    // The ecdh flow forbids plaintext: until the wallet's key hop arrives there is no
+    // channel key, and nothing may be sent (spec §8: relay payloads are always sealed).
+    if (this.requireSessionKey && !this.sessionKey) {
+      return Promise.reject(
+        new LinkError(
+          LinkErrorCode.Unauthorized,
+          'Channel key not established yet; complete the pairing first'
+        )
       );
     }
 
@@ -161,6 +187,11 @@ export class LinkSessionClient {
 
   private decodeIncoming(frame: string): LinkMessage {
     if (!this.sessionKey) {
+      // Mirror of the sending guard: a key-requiring channel must not accept plaintext
+      // either - anything arriving before the key hop is forged by definition.
+      if (this.requireSessionKey) {
+        throw new LinkError(LinkErrorCode.Unauthorized, 'Channel key not established yet');
+      }
       return decodeEnvelope(frame);
     }
     let parsed: EncryptedFrame;

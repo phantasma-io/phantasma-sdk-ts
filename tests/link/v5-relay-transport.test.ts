@@ -6,10 +6,14 @@ import { LinkError } from '../../src/link/v5/errors.js';
 import { PLV } from '../../src/link/v5/protocol.js';
 import {
   generateSessionKey,
+  generateEphemeralKeyPair,
+  deriveSessionKey,
   sealEnvelopeText,
   openEnvelopeText,
   EncryptedFrame,
 } from '../../src/link/v5/session-crypto.js';
+import { bytesToBase64Url } from '../../src/link/v5/encoding.js';
+import { parsePairingUri } from '../../src/link/v5/pairing.js';
 
 /** A controllable WebSocket double; tests play the relay server. */
 class FakeSocket implements WebSocketLike {
@@ -235,6 +239,158 @@ describe('RelayTransport', () => {
     } finally {
       jest.useRealTimers();
     }
+  });
+});
+
+describe('PhantasmaLink5.relayEcdh (custom-scheme pairing, key derived from the wallet hop)', () => {
+  const DAPP = { name: 'ecdh dApp', url: 'https://dapp.example' };
+  const CONNECT_RESULT = {
+    wallet: { name: 'PGL', version: '1.0' },
+    capabilities: { plvVersions: [5], methods: [], chains: [], txFormats: [], signatureKinds: [] },
+    account: { address: 'P2KEcdh' },
+    session: { id: 'ecdh-1' },
+  };
+
+  function buildEcdh() {
+    const sockets: FakeSocket[] = [];
+    const keyPair = generateEphemeralKeyPair();
+    const client = PhantasmaLink5.relayEcdh({
+      dapp: DAPP,
+      keyPair,
+      webSocketFactory: (url) => {
+        const socket = new FakeSocket(url);
+        sockets.push(socket);
+        return socket;
+      },
+    });
+    return { client, sockets, keyPair };
+  }
+
+  // The hijackable custom scheme must carry NO secret, and the client must refuse to
+  // speak (in either direction) until the wallet's key hop establishes the channel.
+  it('puts only the public key in the URI and refuses to send before the key hop', async () => {
+    const { client, sockets, keyPair } = buildEcdh();
+    expect(client.pairingUri!.startsWith('phantasma://v5/pair#')).toBe(true);
+    const pairing = parsePairingUri(client.pairingUri!);
+    expect(pairing.mode).toBe('ecdh');
+    expect(pairing.dappPublicKey).toEqual(keyPair.publicKey);
+    expect(pairing.symKey).toBeUndefined();
+    expect(pairing.relay).toBeDefined();
+
+    await expect(client.getChains()).rejects.toMatchObject({ code: 4100 });
+    sockets[0].open();
+    // Nothing but the subscribe may have left the transport (no plaintext, no publish).
+    expect(sockets[0].sentJson()).toEqual([{ op: 'subscribe', topic: pairing.topic }]);
+  });
+
+  // The full fallback handshake (spec §20.1): wallet pub + sealed connect result in one
+  // payload; the client derives the key, adopts the session, and then talks sealed.
+  it('derives the session key from the wallet hop and adopts the pushed session', async () => {
+    const { client, sockets, keyPair } = buildEcdh();
+    const socket = sockets[0];
+    socket.open();
+    const topic = parsePairingUri(client.pairingUri!).topic;
+
+    // Wallet side: own ephemeral pair, box.before-derived key, sealed event.
+    const walletPair = generateEphemeralKeyPair();
+    const derived = deriveSessionKey(keyPair.publicKey, walletPair.secretKey);
+    const eventEnvelope = JSON.stringify({
+      plv: PLV,
+      type: 'event',
+      event: 'pha_sessionEstablished',
+      session: 'ecdh-1',
+      data: CONNECT_RESULT,
+    });
+    const sealedEvent = sealEnvelopeText(eventEnvelope, derived);
+    socket.receive({
+      op: 'deliver',
+      topic,
+      payload: { wpk: bytesToBase64Url(walletPair.publicKey), ...sealedEvent },
+    });
+
+    expect(client.account?.address).toBe('P2KEcdh');
+
+    // Sealed round-trip with the derived key proves both sides hold the same secret.
+    const promise = client.getChains();
+    const publish = socket.sentJson().find((f) => f.op === 'publish')!;
+    const envelope = JSON.parse(
+      openEnvelopeText(JSON.parse(publish.payload as string) as EncryptedFrame, derived)
+    );
+    expect(envelope.method).toBe('pha_getChains');
+    socket.receive({ op: 'ack', topic, id: publish.id });
+    const response = JSON.stringify({
+      plv: PLV,
+      id: envelope.id,
+      result: { chains: [], current: '', nexus: 'simnet' },
+    });
+    socket.receive({
+      op: 'deliver',
+      topic,
+      payload: JSON.stringify(sealEnvelopeText(response, derived)),
+    });
+    await expect(promise).resolves.toMatchObject({ nexus: 'simnet' });
+  });
+
+  // A second key hop must be ignored: the channel key is fixed at establishment, and a
+  // late forged wpk must not be able to re-key a live session.
+  it('ignores duplicate key hops and pre-key plaintext', () => {
+    const { client, sockets, keyPair } = buildEcdh();
+    const socket = sockets[0];
+    socket.open();
+    const topic = parsePairingUri(client.pairingUri!).topic;
+
+    // Plaintext before the key: dropped silently (never parsed as an envelope).
+    socket.receive({
+      op: 'deliver',
+      topic,
+      payload: JSON.stringify({
+        plv: PLV,
+        type: 'event',
+        event: 'pha_sessionEstablished',
+        data: CONNECT_RESULT,
+      }),
+    });
+    expect(client.account).toBeUndefined();
+
+    const walletPair = generateEphemeralKeyPair();
+    const derived = deriveSessionKey(keyPair.publicKey, walletPair.secretKey);
+    const sealedEvent = sealEnvelopeText(
+      JSON.stringify({
+        plv: PLV,
+        type: 'event',
+        event: 'pha_sessionEstablished',
+        data: CONNECT_RESULT,
+      }),
+      derived
+    );
+    socket.receive({
+      op: 'deliver',
+      topic,
+      payload: { wpk: bytesToBase64Url(walletPair.publicKey), ...sealedEvent },
+    });
+    expect(client.account?.address).toBe('P2KEcdh');
+
+    // A forged re-key attempt with a different pair changes nothing: frames sealed with
+    // the ORIGINAL derived key still open.
+    const attacker = generateEphemeralKeyPair();
+    socket.receive({
+      op: 'deliver',
+      topic,
+      payload: { wpk: bytesToBase64Url(attacker.publicKey) },
+    });
+    const events: string[] = [];
+    client.onEvent((event) => events.push(event));
+    socket.receive({
+      op: 'deliver',
+      topic,
+      payload: JSON.stringify(
+        sealEnvelopeText(
+          JSON.stringify({ plv: PLV, type: 'event', event: 'pha_chainChanged', data: {} }),
+          derived
+        )
+      ),
+    });
+    expect(events).toEqual(['pha_chainChanged']);
   });
 });
 

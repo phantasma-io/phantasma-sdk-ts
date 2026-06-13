@@ -46,6 +46,10 @@ export interface RelayTransportOptions {
   publishAckTimeoutMs?: number;
   /** Reconnect backoff ladder; the last entry repeats. Default 0.5/1/2/5/15 s. */
   reconnectDelaysMs?: number[];
+  /** ecdh pairing (spec §20.1): called ONCE with the wallet's ephemeral X25519 public key
+   * (base64url) when the key hop arrives; the caller derives the session key before any
+   * sealed frame embedded in the same payload is forwarded. */
+  onWalletKey?: (publicKeyB64Url: string) => void;
 }
 
 interface PendingPublish {
@@ -92,6 +96,8 @@ export class RelayTransport implements LinkTransport {
   private socket?: WebSocketLike;
   private messageHandler?: (frame: string) => void;
   private closeHandler?: (reason?: string) => void;
+  private readonly onWalletKey?: (publicKeyB64Url: string) => void;
+  private walletKeySeen = false;
   private readonly pending = new Map<string, PendingPublish>();
   private readonly partials = new Map<string, Partial>();
   private publishSeq = 0;
@@ -110,6 +116,7 @@ export class RelayTransport implements LinkTransport {
     this.maxAssembledBytes = options.maxAssembledBytes ?? 64 * 1024 * 1024;
     this.publishAckTimeoutMs = options.publishAckTimeoutMs ?? 15_000;
     this.reconnectDelaysMs = options.reconnectDelaysMs ?? [500, 1000, 2000, 5000, 15000];
+    this.onWalletKey = options.onWalletKey;
     this.connect();
   }
 
@@ -260,7 +267,22 @@ export class RelayTransport implements LinkTransport {
         if (typeof payload === 'string') {
           this.messageHandler?.(payload);
         } else if (payload && typeof payload === 'object') {
-          this.acceptChunk(payload as Record<string, unknown>);
+          const record = payload as Record<string, unknown>;
+          // ecdh key hop (spec §20.1): the wallet's public key plus the first sealed
+          // envelope in one payload. The key callback runs FIRST so the session layer
+          // can already open the embedded frame; repeats are ignored (one hop per
+          // pairing - a second wpk on a live channel is noise or forgery).
+          if (typeof record.wpk === 'string') {
+            if (this.onWalletKey && !this.walletKeySeen) {
+              this.walletKeySeen = true;
+              this.onWalletKey(record.wpk);
+              if (typeof record.nonce === 'string' && typeof record.ct === 'string') {
+                this.messageHandler?.(JSON.stringify({ nonce: record.nonce, ct: record.ct }));
+              }
+            }
+            return;
+          }
+          this.acceptChunk(record);
         }
         return;
       }
