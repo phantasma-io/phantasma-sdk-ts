@@ -385,6 +385,16 @@ export class PhantasmaLink5 {
     return result;
   }
 
+  /** Drop the local (and persisted) session WITHOUT notifying the wallet. Use when a wallet
+   * round-trip is undesirable - notably deeplink, where pha_disconnect would navigate to the
+   * wallet and reload this page, so the cleanup after the request never runs and the session
+   * would resume on the next load. The wallet's side lapses on its own session TTL (spec §7). */
+  forgetSession(): void {
+    this.lastConnect = undefined;
+    this.session.setSessionId(undefined);
+    this.onSessionChange?.(undefined);
+  }
+
   /** Subscribe to wallet->dApp events; returns an unsubscribe function. */
   onEvent(handler: LinkEventHandler): () => void {
     return this.session.onEvent(handler);
