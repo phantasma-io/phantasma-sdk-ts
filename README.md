@@ -41,6 +41,12 @@ import { Transaction } from 'phantasma-sdk-ts/core/tx/Transaction';
 
 Those compatibility paths are deprecated. New code should use `/public` or the lowercase module paths shown above.
 
+## Phantasma Link v5 protocol
+
+The dApp↔wallet connection protocol (envelope, transports, pairing, sessions, encryption)
+is specified in [`spec/phantasma-link-v5.md`](spec/phantasma-link-v5.md). This package is
+its reference implementation, exposed under the `phantasma-sdk-ts/link/v5` entry point.
+
 ## RPC Example
 
 ```ts

@@ -1,4 +1,4 @@
-// Phantasma Link v5 - web-dApp deeplink glue (spec §17/§19). A web page that talks to the
+// Phantasma Link v5 - web-dApp deeplink glue (spec §15/§17). A web page that talks to the
 // wallet over deeplink needs the same few pieces every time: pairing material (topic +
 // session key), a pairing URI to show, persistence that survives the page being unloaded
 // while the wallet is in the foreground, and intake of the response URLs the wallet opens
@@ -169,7 +169,7 @@ export function stripUrlFragment(url: string): string {
   return hashIndex < 0 ? url : url.slice(0, hashIndex);
 }
 
-/** Generate fresh pairing material for a new channel (spec §17: 32-byte topic + key). */
+/** Generate fresh pairing material for a new channel (spec §15: 32-byte topic + key). */
 export function createWebDeeplinkRecord(callback: string): WebDeeplinkRecord {
   return {
     v: 1,

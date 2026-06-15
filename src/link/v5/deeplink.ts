@@ -1,9 +1,9 @@
-// Phantasma Link v5 - deeplink transport (spec §19). dApp and wallet live in separate apps on
+// Phantasma Link v5 - deeplink transport (spec §17). dApp and wallet live in separate apps on
 // the SAME device and talk by opening URLs at each other:
 //   request:  {walletBase}/v5/req#t=<topic>&f=<base64url(frame)>   (dApp opens the wallet)
 //   response: {callback}#plv=5&t=<topic>&f=<base64url(frame)>      (wallet opens the dApp back)
 // One request = one URL hop each way ("ping-pong"), sized for SMALL operations; big payloads go
-// over the relay (spec §18). Frames on this transport are ALWAYS the encrypted envelope
+// over the relay (spec §16). Frames on this transport are ALWAYS the encrypted envelope
 // {nonce, ct} sealed with the pairing session key - custom-scheme URLs are interceptable, so
 // plaintext is never allowed here (enforced by PhantasmaLink5.deeplink()).
 //

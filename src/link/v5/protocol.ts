@@ -6,7 +6,7 @@
  * this value rejects the message with {@link LinkErrorCode.InvalidRequest}. */
 export const PLV = 5 as const;
 
-/** Default subdomain that hosts the universal links + AASA/assetlinks + relay (spec §19).
+/** Default subdomain that hosts the universal links + AASA/assetlinks + relay (spec §17).
  * NEVER `phantasma.io` (hostile). */
 export const DEFAULT_LINK_HOST = 'link.phantasma.info';
 
@@ -39,7 +39,7 @@ export const LinkEvent = {
   ChainChanged: 'pha_chainChanged',
   SessionDeleted: 'pha_sessionDeleted',
   SessionExpired: 'pha_sessionExpired',
-  /** Unsolicited connect result pushed right after a pairing approval (spec §17 step 3),
+  /** Unsolicited connect result pushed right after a pairing approval (spec §15 step 3),
    * letting the first connection complete in one user gesture. Unlike the other events it
    * also rides the deeplink transport: the wallet is foreground at the approval moment, so
    * it CAN open the callback (this is a reply to the pairing, not a spontaneous push).

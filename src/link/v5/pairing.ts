@@ -1,4 +1,4 @@
-// Phantasma Link v5 - pairing URI build/parse (spec §17). The pairing material rides in the
+// Phantasma Link v5 - pairing URI build/parse (spec §15). The pairing material rides in the
 // URL FRAGMENT (never sent to the server). Two channels decide the key-establishment mode:
 //   - `sym`  : a 32-byte session key in the fragment - ONLY for safe channels (a
 //              domain-verified universal link, or a QR). Simplest + MITM-proof.
@@ -22,7 +22,7 @@ export interface PairingParams {
   symKey?: Uint8Array;
   /** Present when `mode === 'ecdh'`. */
   dappPublicKey?: Uint8Array;
-  /** Where the wallet opens response deeplinks for this pairing (spec §19). */
+  /** Where the wallet opens response deeplinks for this pairing (spec §17). */
   callback?: string;
   meta?: DappMetadata;
 }
@@ -44,7 +44,7 @@ export interface BuildPairingUriInput {
 }
 
 /** Build a pairing URI. Enforces the security rule that a symmetric key (a secret) must
- * NOT be placed in a hijackable custom-scheme URL (spec §17/§20). */
+ * NOT be placed in a hijackable custom-scheme URL (spec §15/§18). */
 export function buildPairingUri(input: BuildPairingUriInput): string {
   const scheme = input.scheme ?? 'universal';
 

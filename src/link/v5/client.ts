@@ -97,7 +97,7 @@ export class PhantasmaLink5 {
     });
     this.defaultDapp = options.dapp;
     this.onSessionChange = options.onSessionChange;
-    // One-tap pairing (spec §17 step 3): the wallet may push the connect result as an
+    // One-tap pairing (spec §15 step 3): the wallet may push the connect result as an
     // unsolicited event right after the pairing approval, instead of waiting for an
     // explicit pha_connect. Adopt it exactly like a connect result so the session is
     // live (and persisted via onSessionChange) the moment the event arrives.
@@ -113,7 +113,7 @@ export class PhantasmaLink5 {
     return new PhantasmaLink5(new LoopbackTransport(options));
   }
 
-  /** Build a client over the deeplink transport (spec §19). The channel key from pairing is
+  /** Build a client over the deeplink transport (spec §17). The channel key from pairing is
    * MANDATORY here: deeplink URLs are interceptable, so plaintext frames are never allowed. */
   static deeplink(
     options: DeeplinkTransportOptions & { sessionKey: Uint8Array; requestTimeoutMs?: number }
@@ -131,7 +131,7 @@ export class PhantasmaLink5 {
     });
   }
 
-  /** Build a client over the relay transport (spec §6.4/§18). The channel key from
+  /** Build a client over the relay transport (spec §6.4/§16). The channel key from
    * pairing is MANDATORY: relay payloads are ALWAYS encrypted (spec §8) - the relay is
    * E2E-blind and must stay that way. */
   static relay(
@@ -151,7 +151,7 @@ export class PhantasmaLink5 {
   }
 
   /**
-   * Build a client for the ecdh pairing fallback (spec §17/§20.1): the custom-scheme
+   * Build a client for the ecdh pairing fallback (spec §15/§18.1): the custom-scheme
    * channel is hijackable, so NO secret rides the pairing URI - only the dApp's
    * ephemeral X25519 PUBLIC key. The wallet answers over the relay with its own public
    * key plus the sealed connect result; the session key is derived on arrival and the
@@ -199,7 +199,7 @@ export class PhantasmaLink5 {
   }
 
   /**
-   * Build a ready-to-use client for a WEB dApp over the deeplink transport (spec §19),
+   * Build a ready-to-use client for a WEB dApp over the deeplink transport (spec §17),
    * bundling the per-dApp glue: pairing material generation, the pairing URI, persistence
    * (localStorage by default), restore + session resume across page loads, and intake of
    * the response URLs the wallet opens back at the page (initial URL + `hashchange`).
@@ -244,7 +244,7 @@ export class PhantasmaLink5 {
     );
 
     // The pairing URI is always available (idempotent to re-show); `sym` requires the
-    // domain-verified universal link - a symmetric key never rides a custom scheme (§17).
+    // domain-verified universal link - a symmetric key never rides a custom scheme (§15).
     client.pairingUriValue = buildPairingUri({
       topic: stored.topic,
       mode: 'sym',

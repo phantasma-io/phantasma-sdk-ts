@@ -110,7 +110,7 @@ export class LinkSessionClient {
   }
 
   /** Install the channel key once it is established (ecdh pairing derives it only after
-   * the wallet's ephemeral public key arrives, spec §20.1). From here on every frame is
+   * the wallet's ephemeral public key arrives, spec §18.1). From here on every frame is
    * sealed/opened with it, exactly as if it had been passed at construction. */
   setSessionKey(key: Uint8Array): void {
     if (key.length !== 32) {

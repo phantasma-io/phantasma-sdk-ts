@@ -1,4 +1,4 @@
-// Phantasma Link v5 - session channel cryptography (spec §8, §20).
+// Phantasma Link v5 - session channel cryptography (spec §8, §18).
 //
 // Construction (AGREED, FINAL): NaCl `secretbox` (XSalsa20-Poly1305) for every session
 // message, under one 32-byte session key, with a 24-byte random nonce per message

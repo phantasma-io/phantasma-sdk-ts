@@ -1,5 +1,5 @@
 // Phantasma Link v5 - encoding helpers. The transport carries binary (ciphertext, nonces,
-// keys, serialized txs) as base64 (spec §4 / §20), which halves the wire size vs the
+// keys, serialized txs) as base64 (spec §4 / §18), which halves the wire size vs the
 // v1-v4 hex. Implemented dependency-free and environment-agnostic (browser + Node), since
 // the SDK ships to both and `Buffer`/`btoa` are not uniformly available.
 
@@ -73,7 +73,7 @@ export function base64ToBytes(input: string): Uint8Array {
   return out;
 }
 
-/** Encode bytes as url-safe base64 without padding (for use in URL fragments, spec §17). */
+/** Encode bytes as url-safe base64 without padding (for use in URL fragments, spec §15). */
 export function bytesToBase64Url(bytes: Uint8Array): string {
   return bytesToBase64(bytes).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 }

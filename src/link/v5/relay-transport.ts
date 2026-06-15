@@ -1,4 +1,4 @@
-// Phantasma Link v5 - relay transport (spec §6.4/§18). dApp and wallet meet on an
+// Phantasma Link v5 - relay transport (spec §6.4/§16). dApp and wallet meet on an
 // E2E-blind pub/sub server: both subscribe to the pairing topic; every frame is
 // published as OPAQUE payload (the NaCl-sealed envelope text - the relay never sees
 // plaintext, enforced by PhantasmaLink5.relay() requiring the session key). Unlike
@@ -7,10 +7,10 @@
 //
 // Mobile-network reality shapes this file: the socket reconnects with backoff and
 // re-subscribes; publishes are tracked until the relay acks them and are re-sent after
-// a reconnect (the wallet de-duplicates by envelope id, spec §20.2, so at-least-once
+// a reconnect (the wallet de-duplicates by envelope id, spec §18.2, so at-least-once
 // is safe); frames above the relay's per-frame cap are chunked as
 // {msgId, seq, total, chunk} and reassembled before the session layer ever sees them
-// (spec §18). Keepalive needs nothing here: the relay SERVER pings, browsers auto-pong.
+// (spec §16). Keepalive needs nothing here: the relay SERVER pings, browsers auto-pong.
 
 import { LinkError, LinkErrorCode } from './errors.js';
 import { LinkTransport } from './transport.js';
@@ -18,21 +18,21 @@ import { DEFAULT_LINK_HOST } from './protocol.js';
 import { WebSocketLike, WebSocketFactory } from './loopback-transport.js';
 import { randomToken } from './session-crypto.js';
 
-/** Default relay endpoint on the universal-link host (spec §19). */
+/** Default relay endpoint on the universal-link host (spec §17). */
 export const DEFAULT_RELAY_URL = `wss://${DEFAULT_LINK_HOST}/relay`;
 
 /** Outgoing chunk threshold. The relay caps a whole frame at 1 MiB; this leaves room
  * for the publish envelope around the payload. */
 export const RELAY_CHUNK_BYTES = 900_000;
 
-// Reassembly bounds (spec §18: enforce total and per-message ceilings so a peer cannot
+// Reassembly bounds (spec §16: enforce total and per-message ceilings so a peer cannot
 // balloon our memory). 64 chunks x 900 KB covers the 32 MiB chain ceiling after base64.
 const MAX_CHUNKS_PER_MESSAGE = 64;
 const MAX_CONCURRENT_PARTIALS = 8;
 const PARTIAL_STALE_MS = 120_000;
 
 export interface RelayTransportOptions {
-  /** The pairing topic both sides subscribe to (bearer capability, spec §18). */
+  /** The pairing topic both sides subscribe to (bearer capability, spec §16). */
   topic: string;
   /** Relay WebSocket URL; default {@link DEFAULT_RELAY_URL}. */
   url?: string;
@@ -46,12 +46,12 @@ export interface RelayTransportOptions {
   publishAckTimeoutMs?: number;
   /** Reconnect backoff ladder; the last entry repeats. Default 0.5/1/2/5/15 s. */
   reconnectDelaysMs?: number[];
-  /** ecdh pairing (spec §20.1): called ONCE with the wallet's ephemeral X25519 public key
+  /** ecdh pairing (spec §18.1): called ONCE with the wallet's ephemeral X25519 public key
    * (base64url) when the key hop arrives; the caller derives the session key before any
    * sealed frame embedded in the same payload is forwarded. */
   onWalletKey?: (publicKeyB64Url: string) => void;
   /** Optional sink for diagnostics the transport cannot attribute to a caller - notably relay
-   * `error` frames that match no in-flight publish (spec §18: clients MUST surface error frames,
+   * `error` frames that match no in-flight publish (spec §16: clients MUST surface error frames,
    * not drop them). Defaults to console.warn; wire this to redirect or silence. */
   log?: (message: string) => void;
 }
@@ -274,7 +274,7 @@ export class RelayTransport implements LinkTransport {
           this.messageHandler?.(payload);
         } else if (payload && typeof payload === 'object') {
           const record = payload as Record<string, unknown>;
-          // ecdh key hop (spec §20.1): the wallet's public key plus the first sealed
+          // ecdh key hop (spec §18.1): the wallet's public key plus the first sealed
           // envelope in one payload. The key callback runs FIRST so the session layer
           // can already open the embedded frame; repeats are ignored (one hop per
           // pairing - a second wpk on a live channel is noise or forgery).
@@ -317,7 +317,7 @@ export class RelayTransport implements LinkTransport {
           return;
         }
         // No publish matches this error (e.g. a subscribe refusal like topic_limit, which carries
-        // no publish id). Spec §18 requires clients to surface error frames, not drop them - a
+        // no publish id). Spec §16 requires clients to surface error frames, not drop them - a
         // silent drop is exactly what let a refused subscribe hang. We do NOT force a close here
         // (a fatal error is followed by the server closing, which the reconnect path handles);
         // surfacing keeps the failure visible instead of invisible.
@@ -333,7 +333,7 @@ export class RelayTransport implements LinkTransport {
 
   /** Collect one chunk; emit the reassembled frame when complete. Bounds: chunk count,
    * total bytes, concurrent partial messages, and a staleness GC - a hostile peer can
-   * waste its own topic, but not this client's memory (spec §18). */
+   * waste its own topic, but not this client's memory (spec §16). */
   private acceptChunk(raw: Record<string, unknown>): void {
     const msgId = raw.msgId;
     const seq = raw.seq;
