@@ -1,6 +1,6 @@
 {
   "name": "phantasma-sdk-ts",
-  "version": "0.9.2",
+  "version": "0.10.0",
   "description": "Typescript SDK for interacting with the Phantasma Chain",
   "author": "Phantasma Team",
   "main": "dist/cjs/index.js",
@@ -276,7 +276,7 @@
     "type": "git",
     "url": "git+https://github.com/phantasma-io/phantasma-sdk-ts.git"
   },
-  "license": "ISC",
+  "license": "Apache-2.0",
   "bugs": {
     "url": "https://github.com/phantasma-io/phantasma-sdk-ts/issues"
   },
