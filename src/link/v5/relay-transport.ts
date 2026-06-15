@@ -50,6 +50,10 @@ export interface RelayTransportOptions {
    * (base64url) when the key hop arrives; the caller derives the session key before any
    * sealed frame embedded in the same payload is forwarded. */
   onWalletKey?: (publicKeyB64Url: string) => void;
+  /** Optional sink for diagnostics the transport cannot attribute to a caller - notably relay
+   * `error` frames that match no in-flight publish (spec §18: clients MUST surface error frames,
+   * not drop them). Defaults to console.warn; wire this to redirect or silence. */
+  log?: (message: string) => void;
 }
 
 interface PendingPublish {
@@ -97,6 +101,7 @@ export class RelayTransport implements LinkTransport {
   private messageHandler?: (frame: string) => void;
   private closeHandler?: (reason?: string) => void;
   private readonly onWalletKey?: (publicKeyB64Url: string) => void;
+  private readonly log?: (message: string) => void;
   private walletKeySeen = false;
   private readonly pending = new Map<string, PendingPublish>();
   private readonly partials = new Map<string, Partial>();
@@ -117,6 +122,7 @@ export class RelayTransport implements LinkTransport {
     this.publishAckTimeoutMs = options.publishAckTimeoutMs ?? 15_000;
     this.reconnectDelaysMs = options.reconnectDelaysMs ?? [500, 1000, 2000, 5000, 15000];
     this.onWalletKey = options.onWalletKey;
+    this.log = options.log;
     this.connect();
   }
 
@@ -296,20 +302,28 @@ export class RelayTransport implements LinkTransport {
         return;
       }
       case 'error': {
-        // A publish-scoped error settles that publish; other errors precede a server
-        // close, which the reconnect logic already handles.
         const entry = typeof frame.id === 'string' ? this.pending.get(frame.id) : undefined;
+        const message = (frame as { message?: unknown }).message;
         if (entry) {
+          // A publish-scoped error settles that one publish.
           this.pending.delete(frame.id as string);
           clearTimeout(entry.timer);
-          const message = (frame as { message?: unknown }).message;
           entry.reject(
             new LinkError(
               LinkErrorCode.InternalError,
               typeof message === 'string' ? message : 'Relay rejected the publish'
             )
           );
+          return;
         }
+        // No publish matches this error (e.g. a subscribe refusal like topic_limit, which carries
+        // no publish id). Spec §18 requires clients to surface error frames, not drop them - a
+        // silent drop is exactly what let a refused subscribe hang. We do NOT force a close here
+        // (a fatal error is followed by the server closing, which the reconnect path handles);
+        // surfacing keeps the failure visible instead of invisible.
+        const code = (frame as { code?: unknown }).code;
+        const detail = `relay error${typeof code !== 'undefined' ? ` code=${String(code)}` : ''}${typeof message === 'string' ? `: ${message}` : ''}`;
+        (this.log ?? ((m: string) => console.warn(`[phantasma-link relay] ${m}`)))(detail);
         return;
       }
       default:
