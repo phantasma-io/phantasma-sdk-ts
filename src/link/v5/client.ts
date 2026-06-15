@@ -9,6 +9,7 @@ import {
   LinkSessionClient,
   LinkSessionClientOptions,
   LinkEventHandler,
+  UnmatchedResponse,
 } from './transport.js';
 import {
   ConnectParams,
@@ -80,11 +81,20 @@ export class PhantasmaLink5 {
   // run once on close() so a discarded client does not keep page hooks alive.
   private readonly disposers: Array<() => void> = [];
   private lastConnect?: ConnectResult;
+  private lastUnmatched?: UnmatchedResponse;
   private pairingUriValue?: string;
 
   constructor(transport: LinkTransport, options: PhantasmaLink5Options = {}) {
     this.transport = transport;
-    this.session = new LinkSessionClient(transport, options);
+    // Capture responses that arrive with no in-flight request (the deeplink page reloaded
+    // mid-flow). The web-deeplink factory delivers any such response during construction, so a
+    // caller can recover it via takeUnmatchedResponse() right after building the client.
+    this.session = new LinkSessionClient(transport, {
+      ...options,
+      onUnmatchedResponse: (response) => {
+        this.lastUnmatched = response;
+      },
+    });
     this.defaultDapp = options.dapp;
     this.onSessionChange = options.onSessionChange;
     // One-tap pairing (spec §17 step 3): the wallet may push the connect result as an
@@ -273,6 +283,16 @@ export class PhantasmaLink5 {
    * `hashchange` call it explicitly on route events. */
   deliverUrl(url: string): boolean {
     return this.transport instanceof DeeplinkTransport && this.transport.deliverUrl(url);
+  }
+
+  /** Take (and clear) a wallet response that arrived with no in-flight request to match it -
+   * the deeplink reload case, where the page that issued the request was discarded before the
+   * answer returned. The web-deeplink factory delivers it during construction, so read it right
+   * after building the client. Returns undefined when there is nothing to recover. */
+  takeUnmatchedResponse(): UnmatchedResponse | undefined {
+    const response = this.lastUnmatched;
+    this.lastUnmatched = undefined;
+    return response;
   }
 
   /** The pairing URI for this client's channel (set by pairing-capable factories such as
