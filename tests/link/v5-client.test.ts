@@ -310,6 +310,54 @@ describe('PhantasmaLink5 (cohesive v5 client)', () => {
     expect(client.account).toBeUndefined();
   });
 
+  // Counterpart to one-tap establish: a wallet-pushed pha_sessionDeleted (user revoke / LRU evict /
+  // idle expiry) must drop the live session so a reload cannot resume a dead one - cached account
+  // cleared and the persistence callback fired with undefined.
+  it('drops the session on a wallet-pushed pha_sessionDeleted event', () => {
+    const transport = new MockTransport();
+    const changes: unknown[] = [];
+    const client = new PhantasmaLink5(transport, { onSessionChange: (c) => changes.push(c) });
+
+    // First adopt a live session (one-tap), then have the wallet delete it.
+    transport.inject(
+      JSON.stringify({
+        plv: PLV,
+        type: 'event',
+        event: 'pha_sessionEstablished',
+        session: 'sess-x',
+        data: {
+          wallet: { name: 'PGL', version: '1.0' },
+          capabilities: {
+            plvVersions: [5],
+            methods: [],
+            chains: [],
+            txFormats: [],
+            signatureKinds: [],
+          },
+          account: { address: 'P2K...' },
+          session: { id: 'sess-x' },
+        },
+      })
+    );
+    expect(client.account?.address).toBe('P2K...');
+
+    // The wallet's delete notice carries the id at the envelope level with data:{}.
+    transport.inject(
+      JSON.stringify({
+        plv: PLV,
+        type: 'event',
+        event: 'pha_sessionDeleted',
+        session: 'sess-x',
+        data: {},
+      })
+    );
+
+    expect(client.account).toBeUndefined();
+    // onSessionChange fired twice: adopt (the connect result), then forget (undefined).
+    expect(changes).toHaveLength(2);
+    expect(changes[1]).toBeUndefined();
+  });
+
   // Events reach subscribers through the client facade, and close() makes further calls fail.
   it('forwards events and fails fast after close', async () => {
     const transport = new MockTransport();

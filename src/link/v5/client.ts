@@ -104,6 +104,14 @@ export class PhantasmaLink5 {
     this.session.onEvent((event, data) => {
       if (event === LinkEvent.SessionEstablished && isConnectResult(data)) {
         this.adoptConnectResult(data);
+      } else if (event === LinkEvent.SessionDeleted || event === LinkEvent.SessionExpired) {
+        // The wallet tore this session down (user revoke / LRU evict / idle expiry) and notified us
+        // over the channel. Drop our session so a reload cannot resume a dead one: forgetSession
+        // clears lastConnect + the session id and fires onSessionChange(undefined), which also drops
+        // the persisted web-deeplink record. The deleted id rides the envelope `session` field, not
+        // `data` (the wallet sends data:{}), so no payload is needed - the frame already decrypted
+        // with this session's channel key, which authenticates it as ours.
+        this.forgetSession();
       }
     });
   }
