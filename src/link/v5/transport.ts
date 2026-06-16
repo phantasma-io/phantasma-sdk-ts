@@ -51,6 +51,11 @@ export interface LinkSessionClientOptions {
    * the wallet was open, discarding the original request promise). Without it such responses
    * are dropped. Never fires on same-page flows - those always have a pending entry. */
   onUnmatchedResponse?: (response: UnmatchedResponse) => void;
+  /** Optional diagnostic sink for the receive path: frames dropped (undecodable / wrong key) and
+   * events received. Mirrors the relay transport's `log` seam so a host can trace the otherwise
+   * silent deeplink/relay receive path. METADATA ONLY - never receives secrets or plaintext
+   * payloads. Default: no-op. */
+  log?: (message: string) => void;
 }
 
 interface Pending {
@@ -83,6 +88,7 @@ export class LinkSessionClient {
   private sessionId?: string;
   private readonly requestTimeoutMs: number;
   private readonly onUnmatchedResponse?: (response: UnmatchedResponse) => void;
+  private readonly log?: (message: string) => void;
   private readonly pending = new Map<string, Pending>();
   private readonly eventHandlers = new Set<LinkEventHandler>();
   private closed = false;
@@ -94,6 +100,7 @@ export class LinkSessionClient {
     this.sessionId = options.sessionId;
     this.requestTimeoutMs = options.requestTimeoutMs ?? 60000;
     this.onUnmatchedResponse = options.onUnmatchedResponse;
+    this.log = options.log;
     transport.onMessage((frame) => this.handleFrame(frame));
     transport.onClose?.((reason) => this.handleClose(reason));
   }
@@ -225,7 +232,10 @@ export class LinkSessionClient {
     try {
       message = this.decodeIncoming(frame);
     } catch {
-      // Drop undecodable/forged frames; a real authenticated peer never sends these.
+      // Drop undecodable/forged frames; a real authenticated peer never sends these. Log the drop
+      // (no payload) so a wrong-key channel - e.g. a deeplink return after the pairing was
+      // regenerated - is visible instead of silently vanishing.
+      this.log?.('frame dropped: undecodable or wrong session key');
       return;
     }
 
@@ -270,6 +280,7 @@ export class LinkSessionClient {
   }
 
   private emitEvent(message: LinkEventMessage): void {
+    this.log?.(`event received: ${message.event}`);
     for (const handler of this.eventHandlers) {
       try {
         handler(message.event, message.data, message.session);

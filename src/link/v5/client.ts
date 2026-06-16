@@ -236,12 +236,14 @@ export class PhantasmaLink5 {
         topic: stored.topic,
         opener: hooks.opener,
         walletBase: options.walletBase,
+        log: options.log,
       }),
       {
         dapp: options.dapp,
         sessionKey,
         sessionId: stored.sessionId,
         requestTimeoutMs: options.requestTimeoutMs ?? DEEPLINK_REQUEST_TIMEOUT_MS,
+        log: options.log,
         onSessionChange: (connect) => {
           // Session layer only - the pairing material stays valid across disconnects.
           stored.sessionId = connect?.session.id;

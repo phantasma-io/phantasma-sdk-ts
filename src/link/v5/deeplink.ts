@@ -84,6 +84,10 @@ export interface DeeplinkTransportOptions {
   opener: (url: string) => void;
   /** Wallet base; defaults to the custom scheme {@link WALLET_SCHEME_BASE}. */
   walletBase?: string;
+  /** Optional diagnostic sink for inbound response URLs: whether a delivered URL matched this
+   * channel's topic or was ignored (foreign topic / not a v5 response). METADATA ONLY - never the
+   * sealed `f` payload. Default: no-op. */
+  log?: (message: string) => void;
 }
 
 /**
@@ -95,6 +99,7 @@ export class DeeplinkTransport implements LinkTransport {
   private readonly topic: string;
   private readonly opener: (url: string) => void;
   private readonly walletBase: string;
+  private readonly log?: (message: string) => void;
   private messageHandler?: (frame: string) => void;
   private closeHandler?: (reason?: string) => void;
   private closed = false;
@@ -106,6 +111,7 @@ export class DeeplinkTransport implements LinkTransport {
     this.topic = options.topic;
     this.opener = options.opener;
     this.walletBase = options.walletBase ?? WALLET_SCHEME_BASE;
+    this.log = options.log;
   }
 
   send(frame: string): void {
@@ -132,9 +138,18 @@ export class DeeplinkTransport implements LinkTransport {
       return false;
     }
     const parsed = parseResponseUrl(url);
-    if (!parsed || parsed.topic !== this.topic) {
+    if (!parsed) {
+      return false; // not a v5 response URL: a foreign navigation, not ours - stay silent
+    }
+    if (parsed.topic !== this.topic) {
+      // A v5 response for a DIFFERENT channel. The usual cause is a regenerated pairing (the page
+      // reloaded or opened in another tab with a fresh topic), so the wallet's answer can never
+      // match. Log it: this is the silent drop that makes a "nothing happened" deeplink return so
+      // hard to diagnose.
+      this.log?.('deliverUrl: v5 response for a different topic, ignored (pairing likely regenerated)');
       return false;
     }
+    this.log?.('deliverUrl: v5 response matched this channel, dispatching');
     this.messageHandler?.(parsed.frame);
     return true;
   }

@@ -52,6 +52,10 @@ export interface WebDeeplinkOptions {
   callback?: string;
   /** Per-request timeout; the web default is 5 minutes (an app switch + human consent). */
   requestTimeoutMs?: number;
+  /** Optional diagnostic sink for the deeplink lifecycle (return-URL matched / ignored, frame
+   * drops, events received). METADATA ONLY - never the symKey or sealed payload. Default: no-op.
+   * A host can wire this to surface why a deeplink return did or did not land. */
+  log?: (message: string) => void;
 }
 
 /** The persisted pairing/session state of one web dApp <-> wallet deeplink channel. */

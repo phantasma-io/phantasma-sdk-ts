@@ -63,6 +63,26 @@ describe('DeeplinkTransport', () => {
     expect(received).toEqual(['R-1']);
   });
 
+  // The diagnostic log makes the otherwise-silent topic-mismatch drop visible (a deeplink return
+  // for a regenerated pairing - reload / new tab). A match and a mismatch each emit one
+  // metadata-only line; a foreign (non-v5) navigation stays silent.
+  it('logs whether a delivered response matched this channel', () => {
+    const logs: string[] = [];
+    const transport = new DeeplinkTransport({ topic: 'top', opener: () => {}, log: (m) => logs.push(m) });
+
+    // Foreign (non-v5) URL: silent, no diagnostic noise.
+    expect(transport.deliverUrl('https://d.app/#not-a-v5-response')).toBe(false);
+    expect(logs).toHaveLength(0);
+
+    // v5 response for a different topic: ignored but logged; matched: dispatched and logged.
+    expect(transport.deliverUrl(buildResponseUrl('https://d.app/', 'other', 'X'))).toBe(false);
+    expect(transport.deliverUrl(buildResponseUrl('https://d.app/', 'top', 'R'))).toBe(true);
+
+    expect(logs).toHaveLength(2);
+    expect(logs[0]).toContain('different topic');
+    expect(logs[1]).toContain('matched');
+  });
+
   it('fails fast after close', () => {
     const transport = new DeeplinkTransport({ topic: 't', opener: () => {} });
     transport.close();
