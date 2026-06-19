@@ -64,6 +64,38 @@ describe('PhantasmaAPI RPC shapes', () => {
     );
   });
 
+  test('sends the configured X-Api-Key header on RPC requests', async () => {
+    let receivedKey: string | undefined;
+    await withRpcServer(
+      (_body, response, request) => {
+        receivedKey = request.headers['x-api-key'] as string | undefined;
+        response.setHeader('content-type', 'application/json');
+        response.end(JSON.stringify({ jsonrpc: '2.0', result: { height: 1 }, id: 1 }));
+      },
+      async (url) => {
+        const api = new PhantasmaAPI(url, null, 'localnet', { apiKey: 'test-key' });
+        await api.JSONRPCResult('getBlockHeight', ['main']);
+        expect(receivedKey).toBe('test-key');
+      }
+    );
+  });
+
+  test('omits the X-Api-Key header when no key is configured', async () => {
+    let hadKeyHeader = true;
+    await withRpcServer(
+      (_body, response, request) => {
+        hadKeyHeader = 'x-api-key' in request.headers;
+        response.setHeader('content-type', 'application/json');
+        response.end(JSON.stringify({ jsonrpc: '2.0', result: { height: 1 }, id: 1 }));
+      },
+      async (url) => {
+        const api = new PhantasmaAPI(url, null, 'localnet');
+        await api.JSONRPCResult('getBlockHeight', ['main']);
+        expect(hadKeyHeader).toBe(false);
+      }
+    );
+  });
+
   test('JSONRPCResult rejects missing, null, stale, and mismatched response ids', async () => {
     // The typed result path returns a normalized RPC error instead of exposing an uncorrelated result.
     for (const responseId of [undefined, null, 0, '0', '99', { bad: 'id' }]) {

@@ -58,6 +58,8 @@ interface HistoricalJsonRpcResponse {
 
 export interface PhantasmaAPIOptions {
   maxRpcResponseBytes?: number;
+  /** Optional API key sent in the X-Api-Key header on every RPC request. */
+  apiKey?: string;
 }
 
 export const DEFAULT_MAX_RPC_RESPONSE_BYTES = 16 * 1024 * 1024;
@@ -206,11 +208,20 @@ export class PhantasmaAPI {
   availableHosts: RpcPeer[];
   maxRpcResponseBytes: number;
   private nextRpcRequestId = 1;
+  private apiKey?: string;
 
   private nextJsonRpcRequestId(): string {
     const requestId = String(this.nextRpcRequestId);
     this.nextRpcRequestId += 1;
     return requestId;
+  }
+
+  private rpcHeaders(): Record<string, string> {
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (this.apiKey) {
+      headers['X-Api-Key'] = this.apiKey;
+    }
+    return headers;
   }
 
   pingAsync(host: string): Promise<number> {
@@ -254,6 +265,7 @@ export class PhantasmaAPI {
     this.host = defHost;
     this.availableHosts = [];
     this.maxRpcResponseBytes = normalizeMaxRpcResponseBytes(options.maxRpcResponseBytes);
+    this.apiKey = options.apiKey || undefined;
 
     if (peersUrlJson != undefined && peersUrlJson != null) {
       fetch(peersUrlJson + '?_=' + new Date().getTime()).then(async (res) => {
@@ -292,7 +304,7 @@ export class PhantasmaAPI {
           params: params,
           id: requestId,
         }),
-        headers: { 'Content-Type': 'application/json' },
+        headers: this.rpcHeaders(),
       });
     } catch (error: unknown) {
       return normalizeRpcError(error, `RPC request ${method} failed`);
@@ -344,7 +356,7 @@ export class PhantasmaAPI {
           params: params,
           id: requestId,
         }),
-        headers: { 'Content-Type': 'application/json' },
+        headers: this.rpcHeaders(),
       });
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : String(error);
@@ -379,6 +391,11 @@ export class PhantasmaAPI {
 
   setMaxRpcResponseBytes(maxBytes: number): this {
     this.maxRpcResponseBytes = normalizeMaxRpcResponseBytes(maxBytes);
+    return this;
+  }
+
+  setApiKey(apiKey: string): this {
+    this.apiKey = apiKey || undefined;
     return this;
   }
 
