@@ -230,6 +230,11 @@ export class PhantasmaAPI {
       const http = new XMLHttpRequest();
 
       http.open('GET', host + '/rpc', true);
+      // Under keys-only mode the health-check ping must present the key too, otherwise it gets 401 and
+      // the host is wrongly dropped from availableHosts during auto-discovery.
+      if (this.apiKey) {
+        http.setRequestHeader('X-Api-Key', this.apiKey);
+      }
       http.timeout = 4500;
       http.onreadystatechange = function () {
         if (http.readyState == 4 && http.status == 200) {
