@@ -146,7 +146,9 @@ export class DeeplinkTransport implements LinkTransport {
       // reloaded or opened in another tab with a fresh topic), so the wallet's answer can never
       // match. Log it: this is the silent drop that makes a "nothing happened" deeplink return so
       // hard to diagnose.
-      this.log?.('deliverUrl: v5 response for a different topic, ignored (pairing likely regenerated)');
+      this.log?.(
+        'deliverUrl: v5 response for a different topic, ignored (pairing likely regenerated)'
+      );
       return false;
     }
     this.log?.('deliverUrl: v5 response matched this channel, dispatching');

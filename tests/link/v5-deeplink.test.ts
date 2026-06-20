@@ -68,7 +68,11 @@ describe('DeeplinkTransport', () => {
   // metadata-only line; a foreign (non-v5) navigation stays silent.
   it('logs whether a delivered response matched this channel', () => {
     const logs: string[] = [];
-    const transport = new DeeplinkTransport({ topic: 'top', opener: () => {}, log: (m) => logs.push(m) });
+    const transport = new DeeplinkTransport({
+      topic: 'top',
+      opener: () => {},
+      log: (m) => logs.push(m),
+    });
 
     // Foreign (non-v5) URL: silent, no diagnostic noise.
     expect(transport.deliverUrl('https://d.app/#not-a-v5-response')).toBe(false);

@@ -7,11 +7,12 @@ This is an engineering specification and the source of truth for the dApp↔wall
 connection protocol.
 
 Design constraints:
+
 - Own relay (self-hosted), JSON envelope, keep loopback.
 - Deeplink ping-pong = primary path for the ~99% small requests AND relay-independent
   (a relay outage must not break normal signing). Relay = large payloads (~1% "fat" tx)
-  + cross-device. Universal-link domain = the dedicated subdomain `link.phantasma.info`
-  (not the main site; see §17).
+  - cross-device. Universal-link domain = the dedicated subdomain `link.phantasma.info`
+    (not the main site; see §17).
 - Budget from chain: 1 MiB metadata struct (~750 KB image) / 32 MiB max tx.
 
 ---
@@ -19,6 +20,7 @@ Design constraints:
 ## 1. Goals / non-goals
 
 Goals:
+
 1. **iOS support** via deeplink (the immediate driver). Works without a wallet-hosted
    local server (impossible on iOS).
 2. **Remove the artificial size cap.** Carry transactions up to the real chain
@@ -32,12 +34,14 @@ Goals:
    drift).
 
 Non-goals (v5):
+
 - Replacing on-chain data with hash-references; images stay on-chain, inside the tx.
 - Multi-wallet-aggregator UX, WalletConnect interop (this protocol runs its own relay;
   WC bridging could be a later additive capability).
 - Changing any chain/validator/RPC behavior. v5 is purely the transport+envelope.
 
 ## 2. Terminology
+
 - **dApp**: the requesting app (web page, native app, game). Holds NO keys.
 - **Wallet**: holds keys, shows approval UI, signs. (PoltergeistLite desktop, Ecto
   extension, ecto-mobile, future native apps.)
@@ -51,6 +55,7 @@ Non-goals (v5):
   dApp and a wallet that can't reach each other directly (§6.4).
 
 ## 3. Architecture at a glance
+
 ```
             ┌─────────────── ONE JSON envelope (§4) ───────────────┐
             │                                                        │
@@ -60,6 +65,7 @@ Non-goals (v5):
   selection: injected → loopback → deeplink(small) → relay(big/x-device)
   resilience: deeplink(small) works even if relay is down.
 ```
+
 The dApp calls high-level SDK methods (`signTransaction`, …). The SDK builds an
 envelope and picks a transport. The wallet implements ONE envelope handler regardless
 of transport. Wake/handoff on mobile is always via deeplink; data moves over the
@@ -71,28 +77,45 @@ All messages are UTF-8 JSON. Binary fields are **base64** (NOT hex - halves wire
 size vs the old protocol). One logical request = one envelope; correlation by `id`.
 
 Request:
+
 ```json
 {
   "plv": 5,
-  "id": "f1c2…",            // unique per request (uuid v4 or monotonic+session)
-  "session": "s_9a8b…",     // omitted only on the very first connect/pair
+  "id": "f1c2…", // unique per request (uuid v4 or monotonic+session)
+  "session": "s_9a8b…", // omitted only on the very first connect/pair
   "method": "pha_signTransaction",
-  "params": { /* method-specific, named fields */ }
+  "params": {
+    /* method-specific, named fields */
+  }
 }
 ```
+
 Success response:
+
 ```json
-{ "plv": 5, "id": "f1c2…", "result": { /* method-specific */ } }
+{
+  "plv": 5,
+  "id": "f1c2…",
+  "result": {
+    /* method-specific */
+  }
+}
 ```
+
 Error response:
+
 ```json
 { "plv": 5, "id": "f1c2…", "error": { "code": 4001, "message": "User rejected", "data": null } }
 ```
+
 Wallet→dApp events (no `id` reply expected):
+
 ```json
 { "plv": 5, "type": "event", "session": "s_9a8b…", "event": "pha_accountsChanged", "data": { … } }
 ```
+
 Rules:
+
 - `plv` MUST be 5. A peer that doesn't recognize it errors `-32600`.
 - Unknown `method` → `-32601`; bad params → `-32602`; malformed JSON → `-32700`.
 - No positional args, no `,`/`/` delimiters, no version-gated arg layouts. New fields
@@ -102,9 +125,11 @@ Rules:
   MUST correlate responses by `id` (no global single-in-flight flag like v1-v4).
 
 ## 5. Capability handshake (replaces the magic version int)
+
 At connect/pair, both sides exchange capabilities once; cached in the session.
 
 Wallet → dApp (in the `pha_connect` result):
+
 ```json
 {
   "wallet": { "name": "Poltergeist Lite", "version": "x.y.z", "icon": "https://…" },
@@ -118,6 +143,7 @@ Wallet → dApp (in the `pha_connect` result):
   "account": { "address": "P2K…", "name": "…", "balances": [ … ] }
 }
 ```
+
 dApp → wallet (in `pha_connect` params): dApp metadata `{ name, url, icon, description }`,
 requested `chains`, `methods`, desired `features`, and the dApp public key for E2E (§8).
 
@@ -130,6 +156,7 @@ features are additive capabilities; no new protocol version forks every implemen
 The SDK selects in this order; each is described below.
 
 ### 6.1 Injected (browser extension wallet - Ecto)
+
 - The extension injects a provider on the page. Envelopes pass page→content→background
   via the extension messaging bridge (as today, but carrying the v5 envelope).
 - Detection: provider object present on `window`.
@@ -137,6 +164,7 @@ The SDK selects in this order; each is described below.
 - Best UX on desktop when the extension is installed.
 
 ### 6.2 Loopback (desktop browser/app ↔ desktop wallet) - KEPT
+
 - The desktop wallet runs a **loopback-only** WebSocket server (rebuilt on a vetted
   library, bound to 127.0.0.1/localhost ONLY - fix the v1-v4 `IPAddress.Any`), path
   `/phantasma/v5`, carrying v5 envelopes (text frames; large messages allowed).
@@ -148,9 +176,11 @@ The SDK selects in this order; each is described below.
   available; loopback callers without a verifiable origin get a clearly-labeled prompt.
 
 ### 6.3 Deeplink ping-pong (mobile, small requests) - PRIMARY, RELAY-INDEPENDENT
+
 For the ~99% of requests that fit in a URL. No server, no relay.
 
 Flow (request):
+
 1. SDK serializes the envelope, seals it with the session key (§8, §18.2), base64url-encodes
    the sealed frame, and builds a link routed by the pairing topic:
    `https://link.phantasma.info/v5/req#t=<topic>&f=<b64url(sealed frame)>`
@@ -173,6 +203,7 @@ the SDK MUST fall back to the relay (§6.4). Small signs (authorize, signMessage
 tx) stay on deeplink even with the relay down - satisfying the resilience rule.
 
 dApp-type routing:
+
 - NATIVE-app dApp ↔ wallet app: clean deeplink ping-pong (return via the dApp's own
   scheme/universal link). Relay-independent.
 - WEB-page dApp on mobile: the return would reopen the browser tab (page reload). So
@@ -181,6 +212,7 @@ dApp-type routing:
   smooth normally, still works when the relay is down.
 
 Security notes:
+
 - Universal links are domain-verified (only the app the OS associated with
   link.phantasma.info can claim them) → resistant to the custom-scheme hijack where a
   malicious app registers `phantasma://`. Custom scheme is fallback only.
@@ -188,6 +220,7 @@ Security notes:
   fallback scheme can't read request/result contents.
 
 ### 6.4 Relay (large payloads + cross-device) - self-hosted, E2E-blind
+
 For "fat" transactions (image-bearing, up to chain limits) and desktop-dApp↔phone-wallet.
 
 Model: a self-hosted pub/sub server. Each session has a **topic**. Either side
@@ -205,6 +238,7 @@ useful elsewhere - Rust dApp tooling / any future chain-aware relay feature - bu
 core relay does not depend on it.)
 
 Flow (request, mobile):
+
 1. (Session already paired - see §7.) dApp encrypts the envelope, publishes to the topic.
 2. dApp opens a small deeplink to WAKE the wallet (no payload in the URL - just a nudge to
    foreground the wallet, which then drains its pairings' mailboxes): `https://link.phantasma.info/v5/wake`.
@@ -228,13 +262,14 @@ Relay outage degrades gracefully: big tx + cross-device unavailable; everyday si
 keeps working.
 
 ## 7. Pairing & sessions
+
 - **Pairing** (one-time) creates a Session. Two entry points:
   - Same-device mobile: dApp opens a `…/link/v5/pair?…` universal link; wallet prompts
     the user to approve, returns its capabilities + account + its E2E public key.
   - Cross-device: dApp shows a QR encoding the pairing URI; the phone wallet scans it.
 - **Session** (persistent on BOTH sides, surviving wallet restarts):
   `{ sessionId, dappMeta, account, chains, methods, features, sharedKey(material),
-  createdAt, expiresAt }`. The user picks the lifetime at approval (session / 1h / 1d /
+createdAt, expiresAt }`. The user picks the lifetime at approval (session / 1h / 1d /
   1mo / always). The wallet has a **revocation UI** listing active sessions.
 - Re-connect: `pha_connect` with an existing `sessionId` resumes without a new prompt
   (until expiry/revoke). Account/chain changes are pushed as events (§9).
@@ -261,6 +296,7 @@ keeps working.
     full history.
 
 ## 8. Encryption & keys
+
 - Every transport EXCEPT injected/loopback-with-trusted-origin carries E2E-encrypted
   payloads. Deeplink and relay payloads are ALWAYS encrypted (they traverse the OS / the
   relay).
@@ -299,7 +335,9 @@ keeps working.
 ## 9. Method catalog (v5)
 
 ### 9.1 Naming principles (durability)
+
 The v1-v4 names are NOT durable and are redesigned here. Rules:
+
 1. **No internal codenames in public names.** `signCarbonTxAndBroadcast` bakes the
    Gen3 codename "Carbon" into the API - it ages the moment the codename changes or a
    second format exists. Methods are named by WHAT they do; the tx format is advertised
@@ -315,12 +353,14 @@ The v1-v4 names are NOT durable and are redesigned here. Rules:
    This maximizes durability and external-dev familiarity (and any future WC bridge).
 5. Keep genuine Phantasma domain terms (e.g. `nexus`) as FIELDS, not as cryptic method
    names.
-Prefix: **`pha_`** (mirrors `eth_`).
+   Prefix: **`pha_`** (mirrors `eth_`).
 
 Names are namespaced `pha_*`. Params/results are JSON objects (named). Binary = base64.
 
 ### 9.2 Methods
+
 Connection / session:
+
 - `pha_connect` - pair or resume. Params: dappMeta, requested chains/methods/features,
   dApp pubkey. Result: capability handshake (§5) incl. account(s) + session.
 - `pha_disconnect` - end session.
@@ -331,6 +371,7 @@ Connection / session:
   `getWalletVersion` and `getPeer`).
 
 Signing / sending (the transaction FORMAT is an explicit param - see §9.4):
+
 - `pha_signMessage` - sign an arbitrary message (base64). Result: signature + the random
   the wallet prepended. Non-tx-forgeable (§8). (was `signData`)
 - `pha_signTransaction` - `{ format, tx }` → sign ONLY, return the assembled signed tx
@@ -342,6 +383,7 @@ Signing / sending (the transaction FORMAT is an explicit param - see §9.4):
   broadcast / `signCarbonTxAndBroadcast`)
 
 Read:
+
 - `pha_invokeScript` - read-only VM invoke (eth_call-like); Result: decoded results[].
   (was `invokeScript` / `invokeRawScript`)
 
@@ -354,21 +396,24 @@ Events (wallet→dApp): `pha_accountsChanged`, `pha_chainChanged`, `pha_sessionD
 unsolicited connect result pushed right after pairing approval; see §9.5).
 
 ### 9.3 Legacy → v5 name map (for migration + the compat shim)
-| v1-v4 | v5 |
-|---|---|
-| `authorize` | `pha_connect` |
-| `getAccount` | `pha_getAccounts` |
-| `getNexus` | `pha_getChains` (nexus as field) |
-| `getPeer` / `getWalletVersion` | `pha_getWalletInfo` |
-| `signData` | `pha_signMessage` |
+
+| v1-v4                                                                   | v5                                          |
+| ----------------------------------------------------------------------- | ------------------------------------------- |
+| `authorize`                                                             | `pha_connect`                               |
+| `getAccount`                                                            | `pha_getAccounts`                           |
+| `getNexus`                                                              | `pha_getChains` (nexus as field)            |
+| `getPeer` / `getWalletVersion`                                          | `pha_getWalletInfo`                         |
+| `signData`                                                              | `pha_signMessage`                           |
 | `signTx` (no broadcast) / `signTxSignature` / `signPrebuiltTransaction` | `pha_signTransaction` (sign-only, `format`) |
-| `signTx` (broadcast) / `signCarbonTxAndBroadcast` | `pha_sendTransaction` (`format`) |
-| `invokeScript` / `invokeRawScript` | `pha_invokeScript` |
-| `getN3Address`, `writeArchive`, `multiSig` | DROPPED in v5 |
+| `signTx` (broadcast) / `signCarbonTxAndBroadcast`                       | `pha_sendTransaction` (`format`)            |
+| `invokeScript` / `invokeRawScript`                                      | `pha_invokeScript`                          |
+| `getN3Address`, `writeArchive`, `multiSig`                              | DROPPED in v5                               |
 
 ### 9.4 Transaction formats (how the wallet picks the RPC endpoint)
+
 The chain accepts two DISTINCT signed-transaction formats, each via its OWN RPC
 submission endpoint:
+
 - **`script`** - the classic Phantasma `Transaction` (nexus/chain/script/payload/
   expiration/signatures) → RPC `SendRawTransaction` (`Transaction.Unserialize`,
   `network.SendRawPhantasmaTransaction`). Still used on Gen3 for VM/contract-lifecycle
@@ -387,11 +432,13 @@ format later = a new enum value + capability, never a new method. This is exactl
 keeps the signing surface durable while honoring the real two-endpoint RPC.
 
 ### 9.5 Method contracts
+
 Per-method params, results, and edge cases.
 
 **`pha_connect`** - params `{ dapp:{name,url,icon,description}, pubkey, chains[],
 methods[], features[] }`; result = capability handshake (§5) + the granted `account` +
 `session{ id, expiresAt }`.
+
 - The wallet returns the GRANTED capabilities, which MAY be a subset of what was
   requested (WC-style partial approval); the dApp inspects what it actually got.
 - Resume = `pha_connect` carrying an existing `session` id → no prompt unless
@@ -413,6 +460,7 @@ via the same node; no keys/approval involved.
 
 **`pha_signMessage`** - params `{ message:base64, display?:string }`; result
 `{ signature:base64, random:base64 }`. Construction + non-forgeability: §8.
+
 - `signature` is the RAW 64-byte Ed25519 DETACHED signature over
   `DOMAIN_TAG || random || message` (not a kind-prefixed envelope), signed by the
   account's Phantasma key - verifiable with any NaCl stack against the public key
@@ -421,6 +469,7 @@ via the same node; no keys/approval involved.
 **`pha_signTransaction`** - params `{ format:"script"|"carbon", tx:base64,
 signatureKind?, pow? }`; result `{ signedTx:base64 }` (does NOT broadcast - the dApp
 submits it). Covers the prebuilt-sign flow (e.g. token deployment).
+
 - `pow` (ProofOfWork enum: None/Minimal/Moderate/Hard/Heavy/Extreme) is meaningful ONLY
   for `format:"script"` (Phantasma-VM PoW); ignored for `carbon`.
 - For PREBUILT script transactions the wallet does NOT mine pow: mining would mutate the
@@ -444,6 +493,7 @@ equally call the node directly.
 **Events** (wallet→dApp): `pha_accountsChanged{accounts}`, `pha_chainChanged{chain}`,
 `pha_sessionDeleted{session}`, `pha_sessionExpired{session}`,
 `pha_sessionEstablished{<pha_connect result>}`.
+
 - Transport caveat: live events require a PERSISTENT transport (injected / loopback /
   relay subscription). A stateless deeplink-ping-pong session has no open channel, so it
   does NOT receive pushed events; such a dApp re-queries account/chain on its next
@@ -458,6 +508,7 @@ equally call the node directly.
   first connection is a single user gesture.
 
 ### 9.6 `format` values: `"script"` | `"carbon"`
+
 Classic `Transaction` is, in practice, the **script-carrying** tx (its only present-day
 use is a VM script), so `"script"` (not the ambiguous `"phantasma"`). Carbon stays
 `"carbon"` (the real system term: `SendCarbonTransaction`/`CarbonBlob`). Nuance kept
@@ -465,7 +516,9 @@ honest: a Carbon `TxMsgPhantasma` ALSO wraps a script, but it is still the `carb
 envelope - routing is by ENVELOPE/serialization, not by "contains a script".
 
 ### 9.7 Multi-platform signing
+
 `signatureKind` selects WHICH KEY signs a **Phantasma** transaction/message:
+
 - `Ed25519` → the Phantasma key; `ECDSA` → the secp256k1 key (used by ETH/BSC-interop
   accounts). Both sign the SAME Phantasma tx bytes (`transaction.ToByteArray(false)`) - a
   Phantasma tx can carry an ECDSA signature when the account is ETH-key-backed.
@@ -481,20 +534,23 @@ The value selects the key that signs the Phantasma payload. Native Ethereum/BSC 
 signing and broadcast is NOT part of v5 (a possible future additive capability).
 
 ## 10. Error codes
+
 JSON-RPC reserved:
+
 - `-32700` parse error, `-32600` invalid request, `-32601` method not found,
   `-32602` invalid params, `-32603` internal error.
-App-level (EIP-1193-aligned where sensible):
+  App-level (EIP-1193-aligned where sensible):
 - `4001` user rejected, `4100` unauthorized / no valid session, `4900` wallet
   disconnected / locked, `4902` unsupported chain.
-Phantasma-specific:
+  Phantasma-specific:
 - `5001` payload too large (carries `maxPayloadBytes` in `data`), `5002` nexus/chain
   mismatch, `5003` unsupported signature kind, `5004` capability not supported,
   `5100` session expired, `5101` session revoked.
-Errors are STRUCTURED (`{code,message,data}`) - no more free-text string matching like
-v1-v4 (e.g. `startsWith('nexus mismatch')`).
+  Errors are STRUCTURED (`{code,message,data}`) - no more free-text string matching like
+  v1-v4 (e.g. `startsWith('nexus mismatch')`).
 
 ## 11. Sizes & budget
+
 - `maxPayloadBytes` advertised per transport in the handshake. Defaults: deeplink 8192
   (conservative URL budget), loopback/relay 32 MiB (chain max-tx).
 - An image-bearing token/NFT tx is bounded by the chain's 1 MiB metadata struct
@@ -507,6 +563,7 @@ v1-v4 (e.g. `startsWith('nexus mismatch')`).
   `{ msgId, seq, total, chunk }` frames defined in §16, reassembled before decryption.
 
 ## 12. Backward compatibility & migration
+
 - Wallets run BOTH dispatchers in parallel:
   - Legacy v1-v4 string protocol (`{id},authorize/…`) - unchanged, for existing dApps.
   - v5 envelope - detected by the structured `pha_connect` / `plv:5` handshake (and the
@@ -517,6 +574,7 @@ v1-v4 (e.g. `startsWith('nexus mismatch')`).
 - ecto-mobile MUST stop vendoring an old SDK copy and consume the canonical SDK.
 
 ## 13. Reference implementation & conformance
+
 - ONE reference implementation of the v5 envelope + transports in `phantasma-sdk-ts`
   (`src/link/v5/`; canonical per workspace rule; never reimplement VM/script/serialization - reuse the
   SDK). Wallets consume it: Ecto/ecto-mobile via the TS SDK; PoltergeistLite via the C#
@@ -526,6 +584,7 @@ v1-v4 (e.g. `startsWith('nexus mismatch')`).
   cases, handshake, encryption KATs). Parity is already a mandatory SDK rule.
 
 ## 14. Security considerations (summary)
+
 - E2E encryption on deeplink + relay; relay is blind; no secret in any URL (ECDH).
 - Universal links (domain-verified) primary; custom scheme fallback only;
   `link.phantasma.info` must serve `apple-app-site-association` + Android `assetlinks.json`.
@@ -538,6 +597,7 @@ v1-v4 (e.g. `startsWith('nexus mismatch')`).
 - Relay abuse controls (rate-limit, topic auth, message TTL) - design in the relay spec.
 
 ## 15. Pairing URI + handshake
+
 A pairing URI carries everything needed to bootstrap an encrypted session. It is shown as
 a QR (cross-device: desktop dApp → phone wallet) or opened as a deeplink (same-device).
 
@@ -547,18 +607,22 @@ key-establishment method (full crypto in §18). Everything sensitive sits in the
 logs never see it; the OS still hands the full URL (incl. fragment) to the app.
 
 PRIMARY - universal link or QR (channels a relay/other app cannot intercept):
+
 ```
 https://link.phantasma.info/v5/pair#v=5&t=<topic>&relay=<host>&sk=<symKey b64url>&meta=<dappMetaB64>
 ```
+
 - `sk` = a random 32-byte SESSION KEY (CSPRNG). Safe to place here because a universal link
   is domain-verified (only the link.phantasma.info-associated app receives it - no
   scheme-squatter) and a QR is optical/user-mediated. The relay NEVER sees `sk`. → no MITM.
 
 FALLBACK - custom scheme `phantasma://v5/pair#…` (last resort; a scheme-squatting app
 could read it), so NO secret goes in it:
+
 ```
 phantasma://v5/pair#v=5&t=<topic>&relay=<host>&pk=<dappX25519Pub b64url>
 ```
+
 - `pk` = the dApp's EPHEMERAL X25519 PUBLIC key; the session key is derived by ECDH (§18).
   No secret in the URL.
 
@@ -566,6 +630,7 @@ Common fields: `t` = topic (32 random bytes, b64url, the relay channel id); `rel
 (or omitted → default); `meta` (dApp name/url/icon) MAY instead be sent encrypted.
 
 Handshake:
+
 1. dApp creates the topic + the key material (a `symKey` for the primary channel, OR an
    ephemeral X25519 keypair for the custom-scheme fallback), builds the URI, subscribes to
    the topic on the relay, and shows the QR / opens the deeplink.
@@ -587,11 +652,13 @@ Handshake:
 Crypto construction, MITM analysis, nonces, and replay handling are specified in §18.
 
 ## 16. Relay protocol
+
 A dumb, E2E-blind pub/sub over WSS. Self-hosted with the explorer (§6.4).
 
 Frames (JSON): `{ op, topic, id?, payload? }`, `op ∈ { subscribe, unsubscribe, publish,
 deliver, ack, error }`. `payload` is OPAQUE ciphertext (NaCl box, §8) - the relay never
 decrypts.
+
 - **Routing**: by `topic` (the 32-byte pairing id). The relay forwards a `publish` on a
   topic to every other subscriber of that topic as `deliver`.
 - **Mailbox / TTL**: if no subscriber is currently connected (e.g. the wallet hasn't been
@@ -616,9 +683,11 @@ decrypts.
 - The relay needs NO Phantasma SDK and does NO chain logic.
 
 ## 17. Deeplinks & universal-link hosting
+
 Paths under `https://link.phantasma.info/v5/` (and mirrored `phantasma://v5/…`):
+
 - `/pair` - pairing (§15).
-- `/req`  - small same-device request: `#t=<topic>&f=<b64url(sealed frame)>`
+- `/req` - small same-device request: `#t=<topic>&f=<b64url(sealed frame)>`
   (sealed payload in the fragment, routed by the pairing topic; the session id is inside the
   envelope and the callback is the one fixed at pairing; size-gated per §6.3).
 - `/wake` - foreground the wallet so it reconnects to the relay and drains its pairings'
@@ -627,6 +696,7 @@ Paths under `https://link.phantasma.info/v5/` (and mirrored `phantasma://v5/…`
   link; web: an https URL) with `#plv=5&t=<topic>&f=<b64url(sealed frame)>`.
 
 Hosting - on a DEDICATED SUBDOMAIN `link.phantasma.info`, NOT the main website:
+
 - Why a subdomain: universal links / App Links are per-host; a subdomain is its own host
   for verification, so it works identically to a root domain. This keeps the whole feature
   off the main phantasma.info site. The ONLY change to existing infra is a DNS record.
@@ -647,12 +717,14 @@ Hosting - on a DEDICATED SUBDOMAIN `link.phantasma.info`, NOT the main website:
   only; universal/app links are primary (domain-verified, anti-hijack).
 
 ## 18. Cryptographic construction
+
 Primitive: NaCl **`secretbox` (XSalsa20-Poly1305)** for EVERY session message, under one
 32-byte session key. X25519 is used ONLY for the custom-scheme fallback's key
 establishment. Everything is standard NaCl, wire-interoperable across the §8 packages
 (`tweetnacl` / `crypto_box` / `NaCl.Net` / `x/crypto/nacl` / libsodium).
 
 ### 18.1 Session-key establishment (channel decides)
+
 Refinement of the earlier "no secret in URL" rule - the accurate rule is "no secret in a
 HIJACKABLE url". A symmetric key is the simplest STRONG design where the delivery channel
 is itself safe; ECDH is the fallback for the one hijackable channel:
@@ -665,7 +737,7 @@ is itself safe; ECDH is the fallback for the one hijackable channel:
   than ECDH on these paths.
 - **Custom scheme (FALLBACK, hijackable):** no `symKey` in the URL. X25519 ECDH instead -
   dApp ephemeral pub in the URL (public, useless to a squatter), wallet ephemeral pub
-  returned over the relay, both derive the key via `box.before`. 
+  returned over the relay, both derive the key via `box.before`.
   - MITM analysis: only PUBLIC keys travel; a passive relay/3rd party cannot derive the
     key. An ACTIVE compromised relay could swap the wallet's returned pubkey - but this is
     ONE-SIDED: the relay can spoof the wallet→dApp direction, yet it CANNOT derive the
@@ -680,6 +752,7 @@ is itself safe; ECDH is the fallback for the one hijackable channel:
 Either path yields one 32-byte session key; the channel is uniform `secretbox` thereafter.
 
 ### 18.2 Per-message
+
 - `nonce` = 24 CSPRNG bytes per message (XSalsa20's 192-bit nonce → random nonces are
   collision-safe; no cross-transport counter coordination needed).
 - `ct` = `secretbox(utf8(envelope_json), nonce, sessionKey)`.
@@ -689,6 +762,7 @@ Either path yields one 32-byte session key; the channel is uniform `secretbox` t
   `nonce`; the session binds a monotonic sequence.
 
 ### 18.3 Key hygiene
+
 - The session key and any X25519 ephemerals are EPHEMERAL per pairing, in-memory only,
   rotated on re-pair, destroyed on disconnect/expiry/revoke.
 - They are NEVER the account signing key: Ed25519/ECDSA are used strictly for signing
