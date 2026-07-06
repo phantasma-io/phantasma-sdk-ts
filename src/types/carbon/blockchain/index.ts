@@ -3,6 +3,7 @@ export * from './modules/index.js';
 export * from './tx-helpers/index.js';
 export * from './vm/index.js';
 export * from './carbon-token-flags.js';
+export * from './gas-config.js';
 export * from './module-id.js';
 export * from './signed-tx-msg.js';
 export * from './tx-msg.js';

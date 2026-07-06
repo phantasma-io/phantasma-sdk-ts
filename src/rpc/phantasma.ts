@@ -6,6 +6,7 @@ import { Nexus } from './interfaces/nexus.js';
 import { Account } from './interfaces/account.js';
 import { Leaderboard } from './interfaces/leaderboard.js';
 import { Chain } from './interfaces/chain.js';
+import { GasConfigResult } from './interfaces/gas-config.js';
 import { Contract } from './interfaces/contract.js';
 import { TransactionData } from './interfaces/transaction-data.js';
 import { AccountTransactions } from './interfaces/account-transactions.js';
@@ -551,6 +552,17 @@ export class PhantasmaAPI {
   async getChain(name: string, extended: boolean = true): Promise<Chain> {
     const params: JsonRpcParam[] = [name, extended];
     return (await this.JSONRPC('getChain', params)) as Chain;
+  }
+
+  /**
+   * Returns the current on-chain gas configuration plus the chain parameters fee estimation
+   * needs (block rate target, expiry window). Changes only via governance resolutions, so the
+   * result is safe to cache. Feed gasConfigFromRpc() into estimateNativeFee() for Tier-1 fee
+   * estimates.
+   */
+  async getGasConfig(): Promise<GasConfigResult> {
+    const params: JsonRpcParam[] = [];
+    return (await this.JSONRPC('getGasConfig', params)) as GasConfigResult;
   }
 
   //Returns info about the nexus.

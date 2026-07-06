@@ -14,6 +14,7 @@ export * from './contract.js';
 export * from './dapp.js';
 export * from './event.js';
 export * from './event-extended.js';
+export * from './gas-config.js';
 export * from './governance.js';
 export * from './interop.js';
 export * from './key-value.js';
