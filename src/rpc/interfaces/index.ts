@@ -12,6 +12,7 @@ export * from './chain.js';
 export * from './channel.js';
 export * from './contract.js';
 export * from './dapp.js';
+export * from './estimate-transaction.js';
 export * from './event.js';
 export * from './event-extended.js';
 export * from './gas-config.js';

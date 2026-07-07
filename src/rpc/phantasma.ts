@@ -7,6 +7,7 @@ import { Account } from './interfaces/account.js';
 import { Leaderboard } from './interfaces/leaderboard.js';
 import { Chain } from './interfaces/chain.js';
 import { GasConfigResult } from './interfaces/gas-config.js';
+import { EstimateTransactionResult } from './interfaces/estimate-transaction.js';
 import { Contract } from './interfaces/contract.js';
 import { TransactionData } from './interfaces/transaction-data.js';
 import { AccountTransactions } from './interfaces/account-transactions.js';
@@ -563,6 +564,19 @@ export class PhantasmaAPI {
   async getGasConfig(): Promise<GasConfigResult> {
     const params: JsonRpcParam[] = [];
     return (await this.JSONRPC('getGasConfig', params)) as GasConfigResult;
+  }
+
+  /**
+   * Dry-runs a serialized transaction envelope against current chain state and returns its exact
+   * fee bill with recommended maxGas/maxData ceilings (gas-model-v2 Tier-2 estimate). Signatures
+   * inside the envelope may be zero-filled dummies of the correct length - the simulation skips
+   * signature checks, and dummies preserve the exact envelope byte length the bill depends on.
+   * Until the estimate service is launched this method returns a standard RPC error; use the
+   * Tier-1 estimateNativeFee() with getGasConfig() as the fallback.
+   */
+  async estimateTransaction(txData: string): Promise<EstimateTransactionResult> {
+    const params: JsonRpcParam[] = [txData];
+    return (await this.JSONRPC('estimateTransaction', params)) as EstimateTransactionResult;
   }
 
   //Returns info about the nexus.
