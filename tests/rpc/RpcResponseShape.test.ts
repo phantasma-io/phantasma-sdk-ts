@@ -451,6 +451,7 @@ describe('RPC response model shape', () => {
       expiration: 0,
     };
 
+    // Pre-gas-model-v2 block: the producerAddress key is omitted, so the optional stays undefined.
     const block: Block = {
       hash: transaction.blockHash,
       previousHash: 'B155ED33B5E34F40FCBFD7EC9B2537C2243E0F33D520CC3D2C71298487E7100A',
@@ -463,7 +464,15 @@ describe('RPC response model shape', () => {
       reward: '0',
     };
 
+    // Gas-model-v2 block: producerAddress is present and distinct in meaning from validatorAddress.
+    const v2Block: Block = {
+      ...block,
+      producerAddress: transaction.sender,
+    };
+
     expect(block.txs[0]?.signatures[0]?.kind).toBe('Ed25519');
+    expect(block.producerAddress).toBeUndefined();
+    expect(v2Block.producerAddress).toBe(transaction.sender);
     const transactionWithoutDebugComment: TransactionData = { ...transaction };
     delete transactionWithoutDebugComment.debugComment;
     expect(transactionWithoutDebugComment.debugComment).toBeUndefined();
