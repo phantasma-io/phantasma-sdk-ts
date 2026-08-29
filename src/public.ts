@@ -322,10 +322,13 @@ export {
   phantasmaCanonicalRomBytes,
   planFees,
   storageQuantaFor,
+  summarizeFeePlan,
 } from './types/carbon/blockchain/tx-helpers/index.js';
 export type {
   FeePlan,
   FeePlanOptions,
+  FeePlanSummary,
+  FeePlanSummaryDecimals,
   FeeQuote,
   NativeFeeEstimate,
   NativeFeeParams,
