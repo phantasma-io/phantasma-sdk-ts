@@ -4,7 +4,7 @@ import {
 } from '../../src/rpc/interfaces/estimate-transaction';
 
 // estimateTransaction response decoding: the node serializes 64-bit amounts as decimal strings
-// (JSON-number precision), and a completed estimate must convert into the same NativeFeeEstimate
+// (JSON-number precision), and a completed estimate must convert into the same FeeQuote
 // the Tier-1 estimator produces so wallet code consumes both tiers identically.
 
 // Completed dry run: recommendations present, no abort. recommendedMaxGas deliberately exceeds
@@ -33,7 +33,7 @@ const aborted: EstimateTransactionResult = {
 };
 
 describe('feeEstimateFromRpc', () => {
-  it('converts a completed estimate into a NativeFeeEstimate', () => {
+  it('converts a completed estimate into a FeeQuote', () => {
     const estimate = feeEstimateFromRpc(completed);
 
     // Above-2^53 value survives exactly because it rides a string.
