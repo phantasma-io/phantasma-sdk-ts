@@ -296,5 +296,33 @@ export type { KeyPair } from './interfaces/key-pair.js';
 export type { Ledger } from './ledger/interfaces/ledger.js';
 export type { Serializable } from './interfaces/serializable.js';
 export type { StackLike } from './interfaces/stack.js';
-export type { TxSigner } from './types/carbon/blockchain/extensions/tx-signer.js';
 export type { TokenDescriptor } from './interfaces/token.js';
+export type { TxSigner } from './types/carbon/blockchain/extensions/tx-signer.js';
+
+// Fee planning: the chain's prices, the planner that reads them, and the calculator underneath.
+// Sizing an actual message is `SignedTxMsg.envelopeBytes`, so the byte-count helper the calculator
+// exposes for callers who hold only a serialized length is deliberately not re-exported here.
+export { GasConfig } from './types/carbon/blockchain/gas-config.js';
+export { gasConfigFromRpc } from './rpc/interfaces/gas-config.js';
+export type { GasConfigData, GasConfigResult } from './rpc/interfaces/gas-config.js';
+export { FeePlanner } from './rpc/fee-planner.js';
+export type {
+  ChainFeeParams,
+  FeePlannerOptions,
+  GasConfigSource,
+  PlanRequestOptions,
+} from './rpc/fee-planner.js';
+export {
+  estimateNativeFee,
+  NativeFeeKind,
+  phantasmaCanonicalRomBytes,
+  planFees,
+  storageQuantaFor,
+} from './types/carbon/blockchain/tx-helpers/index.js';
+export type {
+  FeePlan,
+  FeePlanOptions,
+  FeeQuote,
+  NativeFeeEstimate,
+  NativeFeeParams,
+} from './types/carbon/blockchain/tx-helpers/index.js';
