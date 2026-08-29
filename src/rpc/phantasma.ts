@@ -175,6 +175,28 @@ async function readStreamBody(
   return decodeChunks(chunks, totalBytes);
 }
 
+// The RPC answers an application failure ("Token symbol not found", "name not registered") with
+// an HTTP error status AND a JSON-RPC error body. The body is the answer; the status alone would
+// hide it behind "HTTP 400: Bad Request".
+async function jsonRpcErrorMessage(
+  res: Response,
+  method: string,
+  maxBytes: number
+): Promise<string | undefined> {
+  let body: unknown;
+  try {
+    body = await readJsonResponseBody(res, method, maxBytes);
+  } catch {
+    return undefined;
+  }
+  if (!isObjectRecord(body) || !('error' in body)) return undefined;
+  const error = (body as { error?: unknown }).error;
+  if (isObjectRecord(error) && typeof error.message === 'string' && error.message) {
+    return error.message;
+  }
+  return typeof error === 'string' && error ? error : undefined;
+}
+
 async function readJsonResponseBody(
   res: Response,
   method: string,
@@ -320,7 +342,10 @@ export class PhantasmaAPI {
     }
 
     if (!res.ok) {
-      return rpcHttpError(res.status, res.statusText);
+      const message = await jsonRpcErrorMessage(res, method, this.maxRpcResponseBytes);
+      return message
+        ? { error: message, status: res.status, statusText: res.statusText }
+        : rpcHttpError(res.status, res.statusText);
     }
 
     let resJson: unknown;
@@ -373,6 +398,8 @@ export class PhantasmaAPI {
     }
 
     if (!res.ok) {
+      const message = await jsonRpcErrorMessage(res, method, this.maxRpcResponseBytes);
+      if (message) return { error: message };
       throw new Error(
         res.statusText ? `HTTP ${res.status}: ${res.statusText}` : `HTTP ${res.status}`
       );

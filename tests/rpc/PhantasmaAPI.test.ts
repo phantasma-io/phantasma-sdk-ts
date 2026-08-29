@@ -360,6 +360,35 @@ describe('PhantasmaAPI RPC shapes', () => {
     );
   });
 
+  // The RPC answers "no such token" and "no such name" with an HTTP 400 that carries the JSON-RPC
+  // error; the message is the answer and must survive, not be replaced by the status line.
+  test('JSONRPC paths surface the JSON-RPC error carried by an HTTP error response', async () => {
+    const handler: RpcHandler = (_body, response) => {
+      response.statusCode = 400;
+      response.statusMessage = 'Bad Request';
+      response.setHeader('content-type', 'application/json');
+      response.end(
+        JSON.stringify({
+          jsonrpc: '2.0',
+          id: 1,
+          error: { code: -32603, message: 'Token symbol not found' },
+        })
+      );
+    };
+
+    await withRpcServer(handler, async (url) => {
+      const api = new PhantasmaAPI(url, null, 'localnet');
+      expect(await api.JSONRPCResult('getToken', ['ZZZZ', true, '0'])).toEqual({
+        error: 'Token symbol not found',
+        status: 400,
+        statusText: 'Bad Request',
+      });
+      expect(await api.JSONRPC('getToken', ['ZZZZ', true, '0'])).toEqual({
+        error: 'Token symbol not found',
+      });
+    });
+  });
+
   test('JSONRPC paths reject oversized response bodies with configurable limits', async () => {
     const body = JSON.stringify({ jsonrpc: '2.0', id: '1', result: '0123456789ABCDEF' });
 
