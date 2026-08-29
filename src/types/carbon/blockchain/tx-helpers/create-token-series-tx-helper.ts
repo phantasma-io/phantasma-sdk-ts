@@ -4,36 +4,28 @@ import { PhantasmaKeys } from '../../../phantasma-keys.js';
 import { Bytes32 } from '../../bytes32.js';
 import { SmallString } from '../../small-string.js';
 import { TxTypes } from '../../tx-types.js';
-import { TxMsgSigner } from '../extensions/tx-msg-signer.js';
+import { GasConfig } from '../gas-config.js';
 import { ModuleId } from '../module-id.js';
 import { SeriesInfo, TokenContractMethods } from '../modules/index.js';
 import { TxMsg } from '../tx-msg.js';
 import { TxMsgCall } from '../tx-msg-call.js';
-import { CreateSeriesFeeOptions } from './fee-options.js';
+import { PlanAndSignOptions, planAndSignWithKeys } from './plan-and-sign.js';
+import { applyTxLimits, TxLimits } from './tx-limits.js';
 
 export class CreateTokenSeriesTxHelper {
-  /** Build a Tx without signing. */
+  /** Builds the Token.CreateTokenSeries call. Fees are planned from the message afterwards. */
   static buildTx(
     tokenId: bigint, // ulong
     seriesInfo: SeriesInfo,
     creatorPublicKey: Bytes32,
-    feeOptions?: CreateSeriesFeeOptions,
-    maxData?: bigint,
-    expiry?: bigint
+    limits?: TxLimits
   ): TxMsg {
-    const fees = feeOptions ?? new CreateSeriesFeeOptions();
-    const maxGas = fees.calculateMaxGas();
-
     const argsW = new CarbonBinaryWriter();
     argsW.write8(tokenId);
     seriesInfo.write(argsW);
 
-    // --- Tx message: Call(Token.CreateTokenSeries, args) ---
     const msg = new TxMsg();
     msg.type = TxTypes.Call;
-    msg.expiry = expiry ?? BigInt(Date.now() + 60_000);
-    msg.maxGas = maxGas;
-    msg.maxData = maxData ?? 0n;
     msg.gasFrom = creatorPublicKey;
     msg.payload = SmallString.empty;
 
@@ -43,41 +35,29 @@ export class CreateTokenSeriesTxHelper {
     call.args = argsW.toUint8Array();
     msg.msg = call;
 
-    return msg;
+    return applyTxLimits(msg, limits);
   }
 
-  /** Build and sign, returning raw bytes. */
+  /** Builds, plans against `config` and signs with in-memory keys, returning the envelope bytes. */
   static buildTxAndSign(
     tokenId: bigint,
     seriesInfo: SeriesInfo,
     signer: PhantasmaKeys,
-    feeOptions?: CreateSeriesFeeOptions,
-    maxData?: bigint,
-    expiry?: bigint
+    config: GasConfig,
+    options?: PlanAndSignOptions
   ): Uint8Array {
-    const tx = this.buildTx(
-      tokenId,
-      seriesInfo,
-      new Bytes32(signer.publicKey),
-      feeOptions,
-      maxData,
-      expiry
-    );
-    return TxMsgSigner.signAndSerialize(tx, signer);
+    const tx = this.buildTx(tokenId, seriesInfo, new Bytes32(signer.publicKey), options);
+    return planAndSignWithKeys(tx, [signer], config, options);
   }
 
-  /** Build, sign and return hex string. */
   static buildTxAndSignHex(
     tokenId: bigint,
     seriesInfo: SeriesInfo,
     signer: PhantasmaKeys,
-    feeOptions?: CreateSeriesFeeOptions,
-    maxData?: bigint,
-    expiry?: bigint
+    config: GasConfig,
+    options?: PlanAndSignOptions
   ): string {
-    return bytesToHex(
-      this.buildTxAndSign(tokenId, seriesInfo, signer, feeOptions, maxData, expiry)
-    );
+    return bytesToHex(this.buildTxAndSign(tokenId, seriesInfo, signer, config, options));
   }
 
   static parseResult(resultHex: string): number {

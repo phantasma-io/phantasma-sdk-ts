@@ -2,10 +2,9 @@ import { bytesToHex, hexToBytes } from '../../../../utils/index.js';
 import { CarbonBinaryReader, CarbonBinaryWriter } from '../../../carbon-serialization.js';
 import { PhantasmaKeys } from '../../../phantasma-keys.js';
 import { Bytes32 } from '../../bytes32.js';
-import { IntX } from '../../int-x.js';
 import { SmallString } from '../../small-string.js';
 import { TxTypes } from '../../tx-types.js';
-import { TxMsgSigner } from '../extensions/tx-msg-signer.js';
+import { GasConfig } from '../gas-config.js';
 import { ModuleId } from '../module-id.js';
 import {
   MintPhantasmaNonFungibleArgs,
@@ -15,121 +14,38 @@ import {
 } from '../modules/index.js';
 import { TxMsg } from '../tx-msg.js';
 import { TxMsgCall } from '../tx-msg-call.js';
-import { MintNftFeeOptions } from './fee-options.js';
+import { PlanAndSignOptions, planAndSignWithKeys } from './plan-and-sign.js';
+import { applyTxLimits, TxLimits } from './tx-limits.js';
+
+/** A deterministic Phantasma NFT mint: one call, one recipient, one entry per minted instance. */
+export interface PhantasmaNftMintParams extends TxLimits {
+  tokenId: bigint;
+  /** The account that pays the gas and signs the mint. */
+  sender: Bytes32;
+  /** The account that receives every instance this call mints. */
+  to: Bytes32;
+  /**
+   * One entry per instance, each naming the Phantasma series it is minted into and carrying the
+   * public ROM. Instances of several series may share one call; a single mint passes one entry.
+   */
+  tokens: readonly PhantasmaNftMintInfo[];
+}
 
 export class MintPhantasmaNonFungibleTxHelper {
-  static buildTx(
-    tokenId: bigint,
-    phantasmaSeriesId: bigint,
-    senderPublicKey: Bytes32,
-    receiverPublicKey: Bytes32,
-    publicRom: Uint8Array,
-    ram?: Uint8Array,
-    feeOptions?: MintNftFeeOptions,
-    maxData?: bigint,
-    expiry?: bigint
-  ): TxMsg;
-
-  static buildTx(
-    tokenId: bigint,
-    senderPublicKey: Bytes32,
-    receiverPublicKey: Bytes32,
-    tokens: PhantasmaNftMintInfo[],
-    feeOptions?: MintNftFeeOptions,
-    maxData?: bigint,
-    expiry?: bigint
-  ): TxMsg;
-
-  static buildTx(
-    tokenId: bigint,
-    arg1: bigint | Bytes32,
-    arg2: Bytes32,
-    arg3: Bytes32 | PhantasmaNftMintInfo[],
-    arg4?: Uint8Array | MintNftFeeOptions,
-    arg5?: Uint8Array | bigint,
-    arg6?: MintNftFeeOptions | bigint,
-    arg7?: bigint,
-    arg8?: bigint
-  ): TxMsg {
-    if (typeof arg1 === 'bigint') {
-      if (!(arg3 instanceof Bytes32)) {
-        throw new Error(
-          'receiverPublicKey is required for single-item MintPhantasmaNonFungible tx'
-        );
-      }
-
-      const publicRom = arg4;
-      const ram = arg5;
-      if (!(publicRom instanceof Uint8Array)) {
-        throw new Error(
-          'publicRom must be a Uint8Array for single-item MintPhantasmaNonFungible tx'
-        );
-      }
-      if (!(ram === undefined || ram instanceof Uint8Array)) {
-        throw new Error(
-          'ram must be a Uint8Array when provided for single-item MintPhantasmaNonFungible tx'
-        );
-      }
-
-      const safeRam = ram instanceof Uint8Array ? ram : new Uint8Array();
-
-      return this.buildTxCore(
-        tokenId,
-        arg2,
-        arg3,
-        [
-          new PhantasmaNftMintInfo({
-            phantasmaSeriesId: IntX.fromBigInt(arg1),
-            rom: publicRom,
-            ram: safeRam,
-          }),
-        ],
-        arg6 instanceof MintNftFeeOptions ? arg6 : undefined,
-        typeof arg7 === 'bigint' ? arg7 : undefined,
-        typeof arg8 === 'bigint' ? arg8 : undefined
-      );
-    }
-
-    if (arg3 instanceof Bytes32 || !Array.isArray(arg3)) {
-      throw new Error('tokens array is required for multi-item MintPhantasmaNonFungible tx');
-    }
-
-    return this.buildTxCore(
-      tokenId,
-      arg1,
-      arg2,
-      arg3,
-      arg4 instanceof MintNftFeeOptions ? arg4 : undefined,
-      typeof arg5 === 'bigint' ? arg5 : undefined,
-      typeof arg6 === 'bigint' ? arg6 : undefined
-    );
-  }
-
-  private static buildTxCore(
-    tokenId: bigint,
-    senderPublicKey: Bytes32,
-    receiverPublicKey: Bytes32,
-    tokens: PhantasmaNftMintInfo[],
-    feeOptions?: MintNftFeeOptions,
-    maxData?: bigint,
-    expiry?: bigint
-  ): TxMsg {
-    const fees = feeOptions ?? new MintNftFeeOptions();
-    const maxGas = fees.calculateMaxGas(tokens);
+  /** Builds the Token.MintPhantasmaNonFungible call. Fees are planned from the message afterwards. */
+  static buildTx(p: PhantasmaNftMintParams): TxMsg {
+    if (p.tokens.length === 0) throw new Error('tokens must not be empty');
 
     // This helper only packages the Token.Call ABI surface.
     const args = new MintPhantasmaNonFungibleArgs({
-      tokenId,
-      address: receiverPublicKey,
-      tokens,
+      tokenId: p.tokenId,
+      address: p.to,
+      tokens: [...p.tokens],
     });
 
     const msg = new TxMsg();
     msg.type = TxTypes.Call;
-    msg.expiry = expiry ?? BigInt(Date.now() + 60_000);
-    msg.maxGas = maxGas;
-    msg.maxData = maxData ?? 0n;
-    msg.gasFrom = senderPublicKey;
+    msg.gasFrom = p.sender;
     msg.payload = SmallString.empty;
 
     const call = new TxMsgCall();
@@ -140,131 +56,29 @@ export class MintPhantasmaNonFungibleTxHelper {
     call.args = argsWriter.toUint8Array();
     msg.msg = call;
 
-    return msg;
+    return applyTxLimits(msg, p);
   }
 
+  /**
+   * Builds, plans against `config` and signs with in-memory keys, returning the envelope bytes.
+   * The transaction's own limits come from `p`; `options` governs how the fee is planned.
+   */
   static buildTxAndSign(
-    tokenId: bigint,
-    phantasmaSeriesId: bigint,
+    p: PhantasmaNftMintParams,
     signer: PhantasmaKeys,
-    receiverPublicKey: Bytes32,
-    publicRom: Uint8Array,
-    ram?: Uint8Array,
-    feeOptions?: MintNftFeeOptions,
-    maxData?: bigint,
-    expiry?: bigint
-  ): Uint8Array;
-
-  static buildTxAndSign(
-    tokenId: bigint,
-    tokens: PhantasmaNftMintInfo[],
-    signer: PhantasmaKeys,
-    receiverPublicKey: Bytes32,
-    feeOptions?: MintNftFeeOptions,
-    maxData?: bigint,
-    expiry?: bigint
-  ): Uint8Array;
-
-  static buildTxAndSign(
-    tokenId: bigint,
-    arg1: bigint | PhantasmaNftMintInfo[],
-    signer: PhantasmaKeys,
-    receiverPublicKey: Bytes32,
-    arg4?: Uint8Array | MintNftFeeOptions,
-    arg5?: Uint8Array | bigint,
-    arg6?: MintNftFeeOptions | bigint,
-    arg7?: bigint,
-    arg8?: bigint
+    config: GasConfig,
+    options?: PlanAndSignOptions
   ): Uint8Array {
-    const senderPub = new Bytes32(signer.publicKey);
-
-    if (typeof arg1 === 'bigint') {
-      const tx = this.buildTx(
-        tokenId,
-        arg1,
-        senderPub,
-        receiverPublicKey,
-        arg4 as Uint8Array,
-        arg5 instanceof Uint8Array ? arg5 : undefined,
-        arg6 instanceof MintNftFeeOptions ? arg6 : undefined,
-        typeof arg7 === 'bigint' ? arg7 : undefined,
-        typeof arg8 === 'bigint' ? arg8 : undefined
-      );
-      return TxMsgSigner.signAndSerialize(tx, signer);
-    }
-
-    const tx = this.buildTx(
-      tokenId,
-      senderPub,
-      receiverPublicKey,
-      arg1,
-      arg4 instanceof MintNftFeeOptions ? arg4 : undefined,
-      typeof arg5 === 'bigint' ? arg5 : undefined,
-      typeof arg6 === 'bigint' ? arg6 : undefined
-    );
-    return TxMsgSigner.signAndSerialize(tx, signer);
+    return planAndSignWithKeys(this.buildTx(p), [signer], config, options);
   }
 
   static buildTxAndSignHex(
-    tokenId: bigint,
-    phantasmaSeriesId: bigint,
+    p: PhantasmaNftMintParams,
     signer: PhantasmaKeys,
-    receiverPublicKey: Bytes32,
-    publicRom: Uint8Array,
-    ram?: Uint8Array,
-    feeOptions?: MintNftFeeOptions,
-    maxData?: bigint,
-    expiry?: bigint
-  ): string;
-
-  static buildTxAndSignHex(
-    tokenId: bigint,
-    tokens: PhantasmaNftMintInfo[],
-    signer: PhantasmaKeys,
-    receiverPublicKey: Bytes32,
-    feeOptions?: MintNftFeeOptions,
-    maxData?: bigint,
-    expiry?: bigint
-  ): string;
-
-  static buildTxAndSignHex(
-    tokenId: bigint,
-    arg1: bigint | PhantasmaNftMintInfo[],
-    signer: PhantasmaKeys,
-    receiverPublicKey: Bytes32,
-    arg4?: Uint8Array | MintNftFeeOptions,
-    arg5?: Uint8Array | bigint,
-    arg6?: MintNftFeeOptions | bigint,
-    arg7?: bigint,
-    arg8?: bigint
+    config: GasConfig,
+    options?: PlanAndSignOptions
   ): string {
-    if (typeof arg1 === 'bigint') {
-      return bytesToHex(
-        this.buildTxAndSign(
-          tokenId,
-          arg1,
-          signer,
-          receiverPublicKey,
-          arg4 as Uint8Array,
-          arg5 instanceof Uint8Array ? arg5 : undefined,
-          arg6 instanceof MintNftFeeOptions ? arg6 : undefined,
-          typeof arg7 === 'bigint' ? arg7 : undefined,
-          typeof arg8 === 'bigint' ? arg8 : undefined
-        )
-      );
-    }
-
-    return bytesToHex(
-      this.buildTxAndSign(
-        tokenId,
-        arg1,
-        signer,
-        receiverPublicKey,
-        arg4 instanceof MintNftFeeOptions ? arg4 : undefined,
-        typeof arg5 === 'bigint' ? arg5 : undefined,
-        typeof arg6 === 'bigint' ? arg6 : undefined
-      )
-    );
+    return bytesToHex(this.buildTxAndSign(p, signer, config, options));
   }
 
   static parseResult(resultHex: string): PhantasmaNftMintResult[] {

@@ -38,10 +38,7 @@ import {
 import {
   CreateTokenSeriesTxHelper,
   CreateTokenTxHelper,
-  CreateSeriesFeeOptions,
-  CreateTokenFeeOptions,
   MintNonFungibleTxHelper,
-  MintNftFeeOptions,
 } from '../../src/core/types/Carbon/Blockchain/TxHelpers';
 import {
   VmDynamicStruct,
@@ -317,13 +314,11 @@ const carbonVectorTx = (kind: Kind): TxMsg => {
         metadata,
         schemas
       );
-      return CreateTokenTxHelper.buildTx(
-        tokenInfo,
-        senderPub,
-        new CreateTokenFeeOptions(10000n, 10000000000n, 10000000000n, 10000n),
-        100000000n,
-        1759711416000n
-      );
+      return CreateTokenTxHelper.buildTx(tokenInfo, senderPub, {
+        maxGas: (10000n + 10000000000n + (10000000000n >> 4n)) * 10000n,
+        maxData: 100000000n,
+        expiry: 1759711416000n,
+      });
     }
     case 'TX-CREATE-TOKEN-SERIES': {
       const schemas = TokenSchemasBuilder.prepareStandard(false);
@@ -335,14 +330,11 @@ const carbonVectorTx = (kind: Kind): TxMsg => {
         senderPub,
         []
       );
-      return CreateTokenSeriesTxHelper.buildTx(
-        (1n << 64n) - 1n,
-        seriesInfo,
-        senderPub,
-        new CreateSeriesFeeOptions(10000n, 2500000000n, 10000n),
-        100000000n,
-        1759711416000n
-      );
+      return CreateTokenSeriesTxHelper.buildTx((1n << 64n) - 1n, seriesInfo, senderPub, {
+        maxGas: (10000n + 2500000000n) * 10000n,
+        maxData: 100000000n,
+        expiry: 1759711416000n,
+      });
     }
     case 'TX-MINT-NON-FUNGIBLE': {
       const schemas = TokenSchemasBuilder.prepareStandard(false);
@@ -358,9 +350,7 @@ const carbonVectorTx = (kind: Kind): TxMsg => {
         senderPub,
         rom,
         new Uint8Array(),
-        new MintNftFeeOptions(10000n, 1000n),
-        100000000n,
-        1759711416000n
+        { maxGas: 10000n * 1000n, maxData: 100000000n, expiry: 1759711416000n }
       );
     }
     default:
@@ -891,13 +881,6 @@ describe('CarbonSerialization.ts ↔ C# fixtures (decode)', () => {
         const txSender = PhantasmaKeys.fromWIF(wif);
         const senderPubKey = new Bytes32(txSender.publicKey);
 
-        const feeOptions = new CreateTokenFeeOptions(
-          gasFeeBase,
-          gasFeeCreateTokenBase,
-          gasFeeCreateTokenSymbol,
-          feeMultiplier
-        );
-
         const decoded = v as TxMsg;
         expect(decoded.type).toBe(TxTypes.Call);
         expect(decoded.expiry).toBe(1759711416000n);
@@ -929,7 +912,11 @@ describe('CarbonSerialization.ts ↔ C# fixtures (decode)', () => {
         const schemas = TokenSchemas.read(new CarbonBinaryReader(tokenInfo.tokenSchemas!));
         expectStandardTokenSchemas(schemas);
 
-        const expectedMaxGas = feeOptions.calculateMaxGas(tokenInfo.symbol);
+        // The C# vector's v1 offer: (base + product fee, symbol fee halved per char) x multiplier.
+        const symbolShift = BigInt(tokenInfo.symbol.data.length - 1);
+        const expectedMaxGas =
+          (gasFeeBase + gasFeeCreateTokenBase + (gasFeeCreateTokenSymbol >> symbolShift)) *
+          feeMultiplier;
         expect(decoded.maxGas).toBe(expectedMaxGas);
 
         expectReencodedHex(decoded, c.hex);
@@ -950,12 +937,6 @@ describe('CarbonSerialization.ts ↔ C# fixtures (decode)', () => {
         const senderPubKey = new Bytes32(txSender.publicKey);
 
         const newPhantasmaSeriesId = (1n << 256n) - 1n;
-
-        const feeOptions = new CreateSeriesFeeOptions(
-          gasFeeBase,
-          gasFeeCreateTokenSeries,
-          feeMultiplier
-        );
 
         const decoded = v as TxMsg;
         expect(decoded.type).toBe(TxTypes.Call);
@@ -986,7 +967,7 @@ describe('CarbonSerialization.ts ↔ C# fixtures (decode)', () => {
         expectStructInt8(seriesMeta, 'mode', 0);
         expectStructBytes(seriesMeta, 'rom', new Uint8Array());
 
-        const expectedMaxGas = feeOptions.calculateMaxGas();
+        const expectedMaxGas = (gasFeeBase + gasFeeCreateTokenSeries) * feeMultiplier;
         expect(decoded.maxGas).toBe(expectedMaxGas);
 
         expectReencodedHex(decoded, c.hex);
@@ -1007,8 +988,6 @@ describe('CarbonSerialization.ts ↔ C# fixtures (decode)', () => {
 
         const phantasmaNftId = (1n << 256n) - 1n;
         const phantasmaRomData = new Uint8Array([0x01, 0x42]);
-
-        const feeOptions = new MintNftFeeOptions(gasFeeBase, feeMultiplier);
 
         const decoded = v as TxMsg;
         expect(decoded.type).toBe(TxTypes.MintNonFungible);
@@ -1037,7 +1016,7 @@ describe('CarbonSerialization.ts ↔ C# fixtures (decode)', () => {
         expectStructString(romStruct, 'infoURL', 'https://images.nasa.gov/details/PIA13227');
         expectStructInt32(romStruct, 'royalties', 10000000);
 
-        const expectedMaxGas = feeOptions.calculateMaxGas();
+        const expectedMaxGas = gasFeeBase * feeMultiplier;
         expect(decoded.maxGas).toBe(expectedMaxGas);
 
         expectReencodedHex(decoded, c.hex);

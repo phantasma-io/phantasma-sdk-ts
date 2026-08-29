@@ -3,14 +3,10 @@ import {
   CarbonBlobLike,
   ContractDescriptor,
   ContractInterface,
-  CreateSeriesFeeOptions,
   Ed25519Signature,
-  FeeOptions,
-  FeeOptionsLike,
   IAccount,
   ICarbonBlob,
   IContract,
-  IFeeOptions,
   IFile,
   IKeyPair,
   ILedger,
@@ -20,7 +16,6 @@ import {
   Ledger,
   LinkAccount,
   LinkFile,
-  MintNftFeeOptions,
   PhantasmaKeys,
   Stack,
   StackLike,
@@ -65,12 +60,6 @@ describe('interface compatibility', () => {
     const blob: CarbonBlobLike = { write: () => undefined, read: () => undefined };
     const legacyBlob: ICarbonBlob = blob;
 
-    const feeOptions: FeeOptionsLike = {
-      feeMultiplier: 1n,
-      calculateMaxGas: () => 1n,
-    };
-    const legacyFeeOptions: IFeeOptions = feeOptions;
-
     const ledger: Ledger = {
       device: { enabled: false },
       publicKey: '',
@@ -112,29 +101,8 @@ describe('interface compatibility', () => {
     expect(canonicalStack).toBe(legacyStack);
     expect(legacyAccount.files[0]).toBe(legacyFile);
     expect(legacyBlob).toBe(blob);
-    expect(legacyFeeOptions.calculateMaxGas()).toBe(1n);
     expect(legacyLedger).toBe(ledger);
     expect(legacyContract.ABI).toBe(contract.abi);
     expect(legacyToken.Symbol).toBe(token.symbol);
-  });
-
-  it('scales count-sensitive fee options and rejects invalid count context', () => {
-    const base = new FeeOptions(10n, 1000n);
-    const series = new CreateSeriesFeeOptions(10n, 20n, 30n);
-    const mint = new MintNftFeeOptions(10n, 1000n);
-    const seriesLike: FeeOptionsLike = series;
-
-    expect(base.calculateMaxGas()).toBe(10_000n);
-    expect(base.calculateMaxGas(3)).toBe(30_000n);
-
-    expect(mint.calculateMaxGas()).toBe(10_000n);
-    expect(mint.calculateMaxGas(3)).toBe(30_000n);
-    expect(mint.calculateMaxGas([{}, {}, {}])).toBe(30_000n);
-
-    expect(series.calculateMaxGas()).toBe(900n);
-    expect(seriesLike.calculateMaxGas(1)).toBe(900n);
-    expect(() => seriesLike.calculateMaxGas(2)).toThrow(/not count-sensitive/);
-    expect(() => base.calculateMaxGas(0)).toThrow(/positive/);
-    expect(() => mint.calculateMaxGas([])).toThrow(/positive/);
   });
 });

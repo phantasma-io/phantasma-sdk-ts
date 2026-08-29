@@ -169,6 +169,7 @@ export {
   FieldType,
   IntX,
   MetadataField,
+  NativeTxHelper,
   MintNonFungibleTxHelper,
   MintPhantasmaNonFungibleTxHelper,
   ModuleId,
@@ -291,7 +292,6 @@ export {
 } from './ledger/index.js';
 export type { CarbonBlobLike } from './interfaces/carbon/carbon-blob-like.js';
 export type { ContractDescriptor } from './interfaces/contract.js';
-export type { FeeOptionsLike } from './types/carbon/blockchain/tx-helpers/fee-options.js';
 export type { KeyPair } from './interfaces/key-pair.js';
 export type { Ledger } from './ledger/interfaces/ledger.js';
 export type { Serializable } from './interfaces/serializable.js';
@@ -313,7 +313,9 @@ export type {
   PlanRequestOptions,
 } from './rpc/fee-planner.js';
 export {
+  DEFAULT_TX_EXPIRY_MS,
   estimateNativeFee,
+  expiryWithin,
   NativeFeeKind,
   phantasmaCanonicalRomBytes,
   planFees,
@@ -325,4 +327,13 @@ export type {
   FeeQuote,
   NativeFeeEstimate,
   NativeFeeParams,
+  BurnFungibleParams,
+  BurnNonFungibleParams,
+  MintFungibleParams,
+  NativeTxParties,
+  PhantasmaNftMintParams,
+  PlanAndSignOptions,
+  TransferFungibleParams,
+  TransferNonFungibleParams,
+  TxLimits,
 } from './types/carbon/blockchain/tx-helpers/index.js';
