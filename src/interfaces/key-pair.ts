@@ -1,5 +1,10 @@
 import { Signature } from './signature.js';
 
+/**
+ * A key pair held in this process. Signing a Carbon transaction takes the wider `TxSigner`, which
+ * this satisfies without an adapter: a signer needs only the public key and the signature, so a
+ * hardware wallet or a remote service can fill the same slot.
+ */
 export interface KeyPair {
   privateKey: Uint8Array;
   publicKey: Uint8Array;
