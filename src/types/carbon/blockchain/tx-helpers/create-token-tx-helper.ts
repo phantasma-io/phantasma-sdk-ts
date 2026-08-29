@@ -64,9 +64,13 @@ export class CreateTokenTxHelper {
     return bytesToHex(bytes);
   }
 
-  static parseResult(resultHex: string): number {
-    // UInt32 carbon tokenId
+  /**
+   * The token id the creation returned. Token.CreateToken answers with a u64, and a token id is a
+   * `bigint` everywhere else in the SDK - a `number` cannot hold the whole range, and reading only
+   * its low half would return a wrong id rather than fail.
+   */
+  static parseResult(resultHex: string): bigint {
     const r = new CarbonBinaryReader(hexToBytes(resultHex));
-    return r.read4u();
+    return r.read8u();
   }
 }
