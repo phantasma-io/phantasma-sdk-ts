@@ -1,25 +1,34 @@
 import {
   Bytes32,
+  expiryWithin,
+  NativeTxHelper,
+  parseUnits,
+  PhantasmaAPI,
   PhantasmaLink,
-  SmallString,
   TxMsg,
-  TxMsgTransferFungible,
-  TxTypes,
 } from 'phantasma-sdk-ts/public';
 
-export function buildCarbonTransferForWalletSigning(
+// A wallet-link dapp never holds the sending key. It builds the message, plans the fee against the
+// chain it talks to, and hands the planned message to the wallet, which signs and broadcasts it.
+// The plan needs no key: the signed size is known from the message alone.
+export async function buildCarbonTransferForWalletSigning(
+  api: PhantasmaAPI,
   senderPublicKeyBytes: Uint8Array,
   receiverPublicKeyBytes: Uint8Array
-): TxMsg {
-  return new TxMsg(
-    TxTypes.TransferFungible,
-    BigInt(Math.floor(Date.now() / 1000) + 300),
-    100000n,
-    0n,
-    new Bytes32(senderPublicKeyBytes),
-    SmallString.empty,
-    new TxMsgTransferFungible(new Bytes32(receiverPublicKeyBytes), 1n, 10_00000000n)
-  );
+): Promise<TxMsg> {
+  // A person now stands between this message and its signature: the wallet has to open, show the
+  // transaction and wait to be approved. The builder's default lifetime is sized for a transaction
+  // signed on the spot, so this one takes the whole window the chain allows instead.
+  const { expiryWindow } = await api.fees.chainParams();
+  const transfer = NativeTxHelper.transferFungible({
+    from: new Bytes32(senderPublicKeyBytes),
+    to: new Bytes32(receiverPublicKeyBytes),
+    tokenId: 1n, // KCAL
+    amount: parseUnits('0.1', 10), // KCAL has ten decimals
+    expiry: expiryWithin(expiryWindow),
+  });
+  const plan = await api.fees.plan(transfer);
+  return plan.apply(transfer);
 }
 
 export function requestCarbonSignature(link: PhantasmaLink, txMsg: TxMsg): void {
