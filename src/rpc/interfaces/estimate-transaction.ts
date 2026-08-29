@@ -1,4 +1,4 @@
-import { NativeFeeEstimate } from '../../types/carbon/blockchain/tx-helpers/native-fee-estimator.js';
+import { FeeQuote } from '../../types/carbon/blockchain/tx-helpers/native-fee-estimator.js';
 
 /**
  * Response of the estimateTransaction RPC method: the exact fee bill of one serialized
@@ -6,8 +6,8 @@ import { NativeFeeEstimate } from '../../types/carbon/blockchain/tx-helpers/nati
  * Tier-2). 64-bit amounts arrive as decimal strings (they can exceed the 2^53 precision of JSON
  * numbers). Amounts are kcal-base atoms of the gas token; escrow amounts are data-token atoms.
  * Service availability (routing, gas model, node budget) surfaces as a standard RPC error, never
- * through this shape. Feed {@link feeEstimateFromRpc} into the same NativeFeeEstimate wallets use
- * for Tier-1 estimates.
+ * through this shape. Feed {@link feeEstimateFromRpc} into the same FeeQuote wallets use for
+ * Tier-1 estimates.
  */
 export interface EstimateTransactionResult {
   /** True when the transaction would not complete on-chain as submitted; see abortReason. */
@@ -29,12 +29,12 @@ export interface EstimateTransactionResult {
 }
 
 /**
- * Converts a completed estimate into the same NativeFeeEstimate struct Tier-1 estimates produce,
- * so wallet code consumes both tiers identically: maxGas/maxData are the recommended ceilings and
+ * Converts a completed estimate into the same FeeQuote struct Tier-1 estimates produce, so wallet
+ * code consumes both tiers identically: maxGas/maxData are the recommended ceilings and
  * expectedGasBill is the exact settled bill. Throws when wouldAbort is set - an aborted simulation
  * has no recommendations (retry with a higher offer or fall back to the Tier-1 estimator).
  */
-export function feeEstimateFromRpc(result: EstimateTransactionResult): NativeFeeEstimate {
+export function feeEstimateFromRpc(result: EstimateTransactionResult): FeeQuote {
   if (result.wouldAbort) {
     throw new Error(
       `estimateTransaction reported the transaction would abort: ${result.abortReason ?? ''}`
