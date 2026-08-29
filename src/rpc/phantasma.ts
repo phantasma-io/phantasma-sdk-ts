@@ -474,6 +474,14 @@ export class PhantasmaAPI {
     }
   }
 
+  /**
+   * @deprecated Use `formatUnits` instead. This method will be removed in v1.0.
+   *
+   * It divides in binary floating point, so it cannot express an amount exactly: KCAL has ten
+   * decimals, and an integer number of atoms stops being representable in a `number` above roughly
+   * 900,720 KCAL. `formatUnits` takes the atoms as a `bigint` and returns a decimal string, which
+   * is exact for every amount and every token.
+   */
   convertDecimals(amount: number, decimals: number): number {
     const mult = Math.pow(10, decimals);
     return amount / mult;
