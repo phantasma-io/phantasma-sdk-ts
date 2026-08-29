@@ -337,3 +337,8 @@ export type {
   TransferNonFungibleParams,
   TxLimits,
 } from './types/carbon/blockchain/tx-helpers/index.js';
+// Sending: the one-step path and the chain-state checks it runs before signing.
+export { TransactionPreflightError, preflightTransaction } from './rpc/transaction-preflight.js';
+export type { PreflightSource } from './rpc/transaction-preflight.js';
+export type { SendTransactionOptions } from './rpc/phantasma.js';
+export { GovernanceContractMethods } from './types/carbon/blockchain/modules/governance-contract-methods.js';

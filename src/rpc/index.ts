@@ -3,3 +3,4 @@ export * from './helpers/index.js';
 export * from './interfaces/index.js';
 export * from './phantasma.js';
 export * from './rpc-result.js';
+export * from './transaction-preflight.js';
