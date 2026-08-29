@@ -9,7 +9,15 @@ import { Leaderboard } from './interfaces/leaderboard.js';
 import { Chain } from './interfaces/chain.js';
 import { GasConfigResult } from './interfaces/gas-config.js';
 import { EstimateTransactionResult } from './interfaces/estimate-transaction.js';
-import { FeePlanner } from './fee-planner.js';
+import { FeePlanner, PlanRequestOptions } from './fee-planner.js';
+import { preflightTransaction } from './transaction-preflight.js';
+import { unwrapRpcResult } from './rpc-result.js';
+import { bytesToHex } from '../utils/index.js';
+import { SignedTxMsg } from '../types/carbon/blockchain/signed-tx-msg.js';
+import { TxMsg } from '../types/carbon/blockchain/tx-msg.js';
+import { TxMsgSigner } from '../types/carbon/blockchain/extensions/tx-msg-signer.js';
+import { TxSigner } from '../types/carbon/blockchain/extensions/tx-signer.js';
+
 import { Contract } from './interfaces/contract.js';
 import { TransactionData } from './interfaces/transaction-data.js';
 import { AccountTransactions } from './interfaces/account-transactions.js';
@@ -34,6 +42,10 @@ import {
   RpcErrorResult,
   RpcResult,
 } from './rpc-result.js';
+export interface SendTransactionOptions extends PlanRequestOptions {
+  /** Check the chain state the message depends on before signing (see `preflightTransaction`). Default true. */
+  preflight?: boolean;
+}
 
 interface RpcPeer {
   url: string;
@@ -656,6 +668,36 @@ export class PhantasmaAPI {
   get fees(): FeePlanner {
     this.feePlanner ??= new FeePlanner(this);
     return this.feePlanner;
+  }
+
+  /**
+   * Sends a message in one step: pre-flight, fee plan, signatures, broadcast. A message whose
+   * `maxGas` is still zero is planned against this chain's prices (`fees.plan`); one the caller
+   * already planned is sent as it is. Every witness signs through its {@link TxSigner} - keys,
+   * hardware, or a remote service. Returns the transaction hash.
+   */
+  async sendTransaction(
+    msg: TxMsg,
+    signers: TxSigner | TxSigner[],
+    options: SendTransactionOptions = {}
+  ): Promise<string> {
+    const witnesses = Array.isArray(signers) ? signers : [signers];
+    const { preflight = true, ...planOptions } = options;
+    if (preflight) await preflightTransaction(this, msg);
+    // Only the witness-array types take their witness count from the caller; for every other type
+    // the message itself fixes the slots, and one signer may legitimately fill two of them.
+    const openWitnessSet = SignedTxMsg.requiredWitnesses(msg) === undefined;
+    const planned =
+      msg.maxGas === 0n
+        ? (
+            await this.fees.plan(msg, {
+              ...(openWitnessSet ? { witnessCount: witnesses.length } : {}),
+              ...planOptions,
+            })
+          ).apply(msg)
+        : msg;
+    const bytes = await TxMsgSigner.signAndSerializeWith(planned, witnesses);
+    return unwrapRpcResult(await this.sendCarbonTransaction(bytesToHex(bytes)));
   }
 
   //Returns info about the nexus.
