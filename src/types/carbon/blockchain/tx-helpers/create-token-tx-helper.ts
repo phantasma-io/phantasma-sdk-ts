@@ -4,29 +4,19 @@ import { PhantasmaKeys } from '../../../phantasma-keys.js';
 import { Bytes32 } from '../../bytes32.js';
 import { SmallString } from '../../small-string.js';
 import { TxTypes } from '../../tx-types.js';
-import { TxMsgSigner } from '../extensions/tx-msg-signer.js';
+import { GasConfig } from '../gas-config.js';
 import { ModuleId } from '../module-id.js';
 import { TokenContractMethods, TokenInfo } from '../modules/index.js';
 import { TxMsg } from '../tx-msg.js';
 import { TxMsgCall } from '../tx-msg-call.js';
-import { CreateTokenFeeOptions } from './fee-options.js';
+import { PlanAndSignOptions, planAndSignWithKeys } from './plan-and-sign.js';
+import { applyTxLimits, TxLimits } from './tx-limits.js';
 
 export class CreateTokenTxHelper {
-  static buildTx(
-    tokenInfo: TokenInfo,
-    creatorPublicKey: Bytes32,
-    feeOptions?: CreateTokenFeeOptions,
-    maxData?: bigint,
-    expiry?: bigint
-  ): TxMsg {
-    const fees = feeOptions ?? new CreateTokenFeeOptions();
-    const maxGas = fees.calculateMaxGas(tokenInfo.symbol);
-
+  /** Builds the Token.CreateToken call. Fees are planned from the message afterwards. */
+  static buildTx(tokenInfo: TokenInfo, creatorPublicKey: Bytes32, limits?: TxLimits): TxMsg {
     const msg = new TxMsg();
     msg.type = TxTypes.Call;
-    msg.expiry = expiry ?? BigInt(Date.now() + 60_000);
-    msg.maxGas = maxGas;
-    msg.maxData = maxData ?? 0n;
     msg.gasFrom = creatorPublicKey;
     msg.payload = SmallString.empty;
 
@@ -39,29 +29,27 @@ export class CreateTokenTxHelper {
     call.args = argsW.toUint8Array();
     msg.msg = call;
 
-    return msg;
+    return applyTxLimits(msg, limits);
   }
 
+  /** Builds, plans against `config` and signs with in-memory keys, returning the envelope bytes. */
   static buildTxAndSign(
     tokenInfo: TokenInfo,
     signer: PhantasmaKeys,
-    feeOptions?: CreateTokenFeeOptions,
-    maxData?: bigint,
-    expiry?: bigint
+    config: GasConfig,
+    options?: PlanAndSignOptions
   ): Uint8Array {
-    const tx = this.buildTx(tokenInfo, new Bytes32(signer.publicKey), feeOptions, maxData, expiry);
-    return TxMsgSigner.signAndSerialize(tx, signer);
+    const tx = this.buildTx(tokenInfo, new Bytes32(signer.publicKey), options);
+    return planAndSignWithKeys(tx, [signer], config, options);
   }
 
   static buildTxAndSignHex(
     tokenInfo: TokenInfo,
     signer: PhantasmaKeys,
-    feeOptions?: CreateTokenFeeOptions,
-    maxData?: bigint,
-    expiry?: bigint
+    config: GasConfig,
+    options?: PlanAndSignOptions
   ): string {
-    const bytes = this.buildTxAndSign(tokenInfo, signer, feeOptions, maxData, expiry);
-    return bytesToHex(bytes);
+    return bytesToHex(this.buildTxAndSign(tokenInfo, signer, config, options));
   }
 
   /**

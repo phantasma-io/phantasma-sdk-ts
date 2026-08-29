@@ -4,14 +4,15 @@ import { PhantasmaKeys } from '../../../phantasma-keys.js';
 import { Bytes32 } from '../../bytes32.js';
 import { SmallString } from '../../small-string.js';
 import { TxTypes } from '../../tx-types.js';
-import { TxMsgSigner } from '../extensions/tx-msg-signer.js';
+import { GasConfig } from '../gas-config.js';
 import { TokenHelper } from '../modules/token-helper.js';
 import { TxMsg } from '../tx-msg.js';
 import { TxMsgMintNonFungible } from '../tx-msg-mint-non-fungible.js';
-import { MintNftFeeOptions } from './fee-options.js';
+import { PlanAndSignOptions, planAndSignWithKeys } from './plan-and-sign.js';
+import { applyTxLimits, TxLimits } from './tx-limits.js';
 
 export class MintNonFungibleTxHelper {
-  // Build a Tx without signing
+  /** Builds the native MintNonFungible transaction. Fees are planned from the message afterwards. */
   static buildTx(
     carbonTokenId: bigint,
     carbonSeriesId: number,
@@ -19,18 +20,10 @@ export class MintNonFungibleTxHelper {
     receiverPublicKey: Bytes32,
     rom: Uint8Array,
     ram: Uint8Array,
-    feeOptions?: MintNftFeeOptions,
-    maxData?: bigint,
-    expiry?: bigint
+    limits?: TxLimits
   ): TxMsg {
-    const fees = feeOptions ?? new MintNftFeeOptions();
-    const maxGas = fees.calculateMaxGas(1);
-
     const msg = new TxMsg();
     msg.type = TxTypes.MintNonFungible;
-    msg.expiry = expiry ?? BigInt(Date.now() + 60_000);
-    msg.maxGas = maxGas;
-    msg.maxData = maxData ?? 0n;
     msg.gasFrom = senderPublicKey;
     msg.payload = SmallString.empty;
 
@@ -40,13 +33,12 @@ export class MintNonFungibleTxHelper {
     mint.to = receiverPublicKey;
     mint.rom = rom;
     mint.ram = ram;
-
     msg.msg = mint;
 
-    return msg;
+    return applyTxLimits(msg, limits);
   }
 
-  // Build and sign, returning raw bytes
+  /** Builds, plans against `config` and signs with in-memory keys, returning the envelope bytes. */
   static buildTxAndSign(
     tokenId: bigint,
     seriesId: number,
@@ -54,26 +46,21 @@ export class MintNonFungibleTxHelper {
     receiverPublicKey: Bytes32,
     rom: Uint8Array,
     ram: Uint8Array,
-    feeOptions?: MintNftFeeOptions,
-    maxData?: bigint,
-    expiry?: bigint
+    config: GasConfig,
+    options?: PlanAndSignOptions
   ): Uint8Array {
-    const senderPub = new Bytes32(signer.publicKey);
     const tx = this.buildTx(
       tokenId,
       seriesId,
-      senderPub,
+      new Bytes32(signer.publicKey),
       receiverPublicKey,
       rom,
       ram,
-      feeOptions,
-      maxData,
-      expiry
+      options
     );
-    return TxMsgSigner.signAndSerialize(tx, signer);
+    return planAndSignWithKeys(tx, [signer], config, options);
   }
 
-  // Build, sign and return hex string
   static buildTxAndSignHex(
     tokenId: bigint,
     seriesId: number,
@@ -81,22 +68,21 @@ export class MintNonFungibleTxHelper {
     receiverPublicKey: Bytes32,
     rom: Uint8Array,
     ram: Uint8Array | null | undefined,
-    feeOptions?: MintNftFeeOptions,
-    maxData?: bigint,
-    expiry?: bigint
+    config: GasConfig,
+    options?: PlanAndSignOptions
   ): string {
-    const bytes = this.buildTxAndSign(
-      tokenId,
-      seriesId,
-      signer,
-      receiverPublicKey,
-      rom,
-      ram ?? new Uint8Array(),
-      feeOptions,
-      maxData,
-      expiry
+    return bytesToHex(
+      this.buildTxAndSign(
+        tokenId,
+        seriesId,
+        signer,
+        receiverPublicKey,
+        rom,
+        ram ?? new Uint8Array(),
+        config,
+        options
+      )
     );
-    return bytesToHex(bytes);
   }
 
   static parseResult(carbonTokenId: bigint, resultHex: string): Bytes32[] {

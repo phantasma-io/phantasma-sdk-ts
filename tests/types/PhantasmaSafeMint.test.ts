@@ -16,11 +16,11 @@ import {
 } from '../../src/core/types/Carbon/Blockchain/Modules/Builders';
 import { VmDynamicStruct } from '../../src/core/types/Carbon/Blockchain/Vm';
 import { SmallString } from '../../src/core/types/Carbon/SmallString';
-import {
-  MintNftFeeOptions,
-  MintPhantasmaNonFungibleTxHelper,
-} from '../../src/core/types/Carbon/Blockchain/TxHelpers';
+import { MintPhantasmaNonFungibleTxHelper } from '../../src/core/types/Carbon/Blockchain/TxHelpers';
 import { ModuleId } from '../../src/core/types/Carbon/Blockchain/ModuleId';
+import { GasConfig } from '../../src/types/carbon/blockchain/gas-config';
+import { SignedTxMsg } from '../../src/types/carbon/blockchain/signed-tx-msg';
+import { PhantasmaKeys } from '../../src/types/phantasma-keys';
 
 const sender = new Bytes32(new Uint8Array(32).fill(0x11));
 const receiver = new Bytes32(new Uint8Array(32).fill(0x22));
@@ -53,17 +53,20 @@ describe('Phantasma deterministic mint helpers', () => {
     const tokenSchemas = TokenSchemasBuilder.prepareStandard(false);
     const rom = PhantasmaNftRomBuilder.buildAndSerialize(tokenSchemas.rom, buildMetadata());
 
-    const tx = MintPhantasmaNonFungibleTxHelper.buildTx(
-      42n,
-      777n,
+    const tx = MintPhantasmaNonFungibleTxHelper.buildTx({
+      tokenId: 42n,
       sender,
-      receiver,
-      rom,
-      new Uint8Array(),
-      new MintNftFeeOptions(),
-      123n,
-      999n
-    );
+      to: receiver,
+      tokens: [
+        new PhantasmaNftMintInfo({
+          phantasmaSeriesId: IntX.fromBigInt(777n),
+          rom,
+          ram: new Uint8Array(),
+        }),
+      ],
+      maxData: 123n,
+      expiry: 999n,
+    });
 
     expect(tx.type).toBe(TxTypes.Call);
 
@@ -81,10 +84,9 @@ describe('Phantasma deterministic mint helpers', () => {
     expect(decoded.tokens[0].ram).toEqual(new Uint8Array());
   });
 
-  it('MintPhantasmaNonFungibleTxHelper scales maxGas by token count', () => {
+  it('MintPhantasmaNonFungibleTxHelper leaves the offer unplanned unless limits are given', () => {
     const tokenSchemas = TokenSchemasBuilder.prepareStandard(false);
     const rom = PhantasmaNftRomBuilder.buildAndSerialize(tokenSchemas.rom, buildMetadata());
-    const feeOptions = new MintNftFeeOptions(10n, 1000n);
     const tokens = [
       new PhantasmaNftMintInfo({
         phantasmaSeriesId: IntX.fromBigInt(1n),
@@ -98,18 +100,95 @@ describe('Phantasma deterministic mint helpers', () => {
       }),
     ];
 
-    const tx = MintPhantasmaNonFungibleTxHelper.buildTx(
-      42n,
+    const unplanned = MintPhantasmaNonFungibleTxHelper.buildTx({
+      tokenId: 42n,
       sender,
-      receiver,
+      to: receiver,
       tokens,
-      feeOptions,
-      123n,
-      999n
-    );
+    });
+    expect(unplanned.maxGas).toBe(0n);
+    expect(unplanned.maxData).toBe(0n);
 
+    const tx = MintPhantasmaNonFungibleTxHelper.buildTx({
+      tokenId: 42n,
+      sender,
+      to: receiver,
+      tokens,
+      maxGas: 20_000n,
+      maxData: 123n,
+      expiry: 999n,
+    });
     expect(tx.maxGas).toBe(20_000n);
-    expect(tx.maxGas).toBe(feeOptions.calculateMaxGas(tokens));
+    expect(tx.maxData).toBe(123n);
+    expect(tx.expiry).toBe(999n);
+
+    // Both builds carry every instance the caller passed, whatever the limits are: the fee is
+    // planned from these arguments afterwards, so a builder that dropped or merged an instance
+    // would produce an offer for a cheaper transaction than the one being sent.
+    for (const built of [unplanned, tx]) {
+      const decoded = MintPhantasmaNonFungibleArgs.read(
+        new CarbonBinaryReader((built.msg as TxMsgCall).args)
+      );
+      expect(decoded.tokens).toHaveLength(2);
+      expect(decoded.tokens.map((t) => t.phantasmaSeriesId.toBigInt())).toEqual([1n, 2n]);
+      expect(decoded.tokens.map((t) => t.rom.length)).toEqual([rom.length, rom.length]);
+    }
+  });
+
+  // A gas config is data, not an identity: one restored from a wallet's cache has the same fields
+  // and no prototype, and every other entry point in the SDK accepts it. This helper has to as
+  // well, or a wallet that caches prices cannot mint - and it has to produce the SAME plan from
+  // both, which is what the offer written into the envelope is read back to prove.
+  it('MintPhantasmaNonFungibleTxHelper plans with a gas config restored from storage', () => {
+    const tokenSchemas = TokenSchemasBuilder.prepareStandard(false);
+    const rom = PhantasmaNftRomBuilder.buildAndSerialize(tokenSchemas.rom, buildMetadata());
+    const signer = PhantasmaKeys.fromWIF('KwPpBSByydVKqStGHAnZzQofCqhDmD2bfRgc9BmZqM3ZmsdWJw4d');
+    const live = new GasConfig({
+      version: 1,
+      maxNameLength: 255,
+      maxTokenSymbolLength: 255,
+      feeMultiplier: 10_000n,
+      gasTokenId: 1n,
+      dataTokenId: 2n,
+      minimumGasOffer: 10n,
+      dataEscrowPerRow: 200_000n,
+      gasFeeTransfer: 10n,
+      gasFeeQuery: 10n,
+      minimumGasBill: 10_000_000n,
+    });
+    const restored = { ...live };
+    expect(restored instanceof GasConfig).toBe(false);
+
+    const tokens = [
+      new PhantasmaNftMintInfo({
+        phantasmaSeriesId: IntX.fromBigInt(1n),
+        rom,
+        ram: new Uint8Array(),
+      }),
+    ];
+    // A fixed expiry, so the two envelopes differ in nothing but the config object they were
+    // priced with. Every field of the offer is fixed-width, so comparing the envelopes' LENGTHS
+    // would pass whatever either plan produced; the offer itself has to be read back out.
+    const params = {
+      tokenId: 42n,
+      sender: new Bytes32(signer.publicKey),
+      to: receiver,
+      tokens,
+      expiry: 1_787_000_000_000n,
+    };
+    const offerOf = (envelope: Uint8Array) =>
+      SignedTxMsg.read(new CarbonBinaryReader(envelope)).msg;
+
+    const fromRestored = offerOf(
+      MintPhantasmaNonFungibleTxHelper.buildTxAndSign(params, signer, restored)
+    );
+    const fromLive = offerOf(MintPhantasmaNonFungibleTxHelper.buildTxAndSign(params, signer, live));
+
+    expect(fromRestored.maxGas).toBe(fromLive.maxGas);
+    expect(fromRestored.maxData).toBe(fromLive.maxData);
+    // And the plan is a real one, not a zero offer both paths happened to agree on.
+    expect(fromRestored.maxGas).toBeGreaterThan(0n);
+    expect(fromRestored.maxData).toBe(5n * live.dataEscrowPerRow);
   });
 
   it('MintPhantasmaNonFungibleTxHelper.parseResult preserves both ids', () => {
