@@ -59,7 +59,7 @@ export class TokenInfoBuilder {
 
   static maxSymbolLength: number = 255;
   /**
-   * Mirrors carbon::CheckIsValidSymbol from contracts/token.cpp.
+   * Mirrors the chain's own symbol validation, so a symbol this accepts is one CreateToken accepts.
    * Returns true when valid, or false when the symbol must be rejected.
    */
   static checkIsValidSymbol(symbol: string): { ok: boolean; error: string | null } {
