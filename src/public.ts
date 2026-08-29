@@ -296,4 +296,5 @@ export type { KeyPair } from './interfaces/key-pair.js';
 export type { Ledger } from './ledger/interfaces/ledger.js';
 export type { Serializable } from './interfaces/serializable.js';
 export type { StackLike } from './interfaces/stack.js';
+export type { TxSigner } from './types/carbon/blockchain/extensions/tx-signer.js';
 export type { TokenDescriptor } from './interfaces/token.js';
