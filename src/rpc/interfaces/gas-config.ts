@@ -1,4 +1,5 @@
 import { GasConfig } from '../../types/carbon/blockchain/gas-config.js';
+import { GAS_MODEL_V2_UNITS_PER_BLOCK_DATA_BYTE } from '../../types/carbon/blockchain/tx-helpers/native-fee-estimator.js';
 
 /**
  * Response of the getGasConfig RPC method: the current on-chain gas configuration plus the
@@ -58,8 +59,9 @@ export interface GasConfigData {
 
 /**
  * Converts the getGasConfig JSON response to the wire-format GasConfig consumed by the Tier-1
- * fee estimator. Throws on malformed numeric strings and on a v2 response missing tail fields:
- * estimating fees from silently zeroed v2 prices would produce rejected transactions.
+ * fee estimator. Throws on malformed numeric strings, on a v2 response missing tail fields, and on
+ * a byte price this SDK does not implement: estimating fees from silently zeroed or silently stale
+ * v2 prices would produce rejected transactions.
  */
 export function gasConfigFromRpc(result: GasConfigResult): GasConfig {
   const c = result.gasConfig;
@@ -107,6 +109,18 @@ export function gasConfigFromRpc(result: GasConfigResult): GasConfig {
     );
     config.policyFeeRegisterName = parseU64(c.policyFeeRegisterName, 'policyFeeRegisterName');
     config.legacyDataEscrowPerRow = parseU64(c.legacyDataEscrowPerRow, 'legacyDataEscrowPerRow');
+    // The v2 byte price is a versioned consensus constant rather than a config field, so the
+    // calculator holds it as a constant - but the node reports it in this very response. A node
+    // quoting a different price is running a gas model this SDK does not implement, and every
+    // offer it computed would be wrong on the largest term of the bill. Say so instead of
+    // quietly under-offering every transaction until someone notices.
+    const reported = result.unitsPerBlockDataByte;
+    if (reported !== undefined && BigInt(reported) !== GAS_MODEL_V2_UNITS_PER_BLOCK_DATA_BYTE) {
+      throw new Error(
+        `this node prices block data at ${reported} gas units per byte, ` +
+          `this SDK implements ${GAS_MODEL_V2_UNITS_PER_BLOCK_DATA_BYTE}: upgrade the SDK`
+      );
+    }
   }
   return config;
 }

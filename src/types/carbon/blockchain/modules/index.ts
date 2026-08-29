@@ -1,4 +1,5 @@
 export * from './builders/index.js';
+export * from './governance-contract-methods.js';
 export * from './mint-phantasma-non-fungible-args.js';
 export * from './phantasma-nft-mint-info.js';
 export * from './phantasma-nft-mint-result.js';

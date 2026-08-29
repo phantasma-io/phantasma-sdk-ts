@@ -9,6 +9,7 @@ import { Leaderboard } from './interfaces/leaderboard.js';
 import { Chain } from './interfaces/chain.js';
 import { GasConfigResult } from './interfaces/gas-config.js';
 import { EstimateTransactionResult } from './interfaces/estimate-transaction.js';
+import { FeePlanner } from './fee-planner.js';
 import { Contract } from './interfaces/contract.js';
 import { TransactionData } from './interfaces/transaction-data.js';
 import { AccountTransactions } from './interfaces/account-transactions.js';
@@ -617,6 +618,17 @@ export class PhantasmaAPI {
   async estimateTransaction(txData: string): Promise<EstimateTransactionResult> {
     const params: JsonRpcParam[] = [txData];
     return (await this.JSONRPC('estimateTransaction', params)) as EstimateTransactionResult;
+  }
+
+  private feePlanner?: FeePlanner;
+
+  /**
+   * The fee planner of the chain this client talks to: reads the chain's gas config through
+   * this client, caches it briefly, and prices messages with it (`api.fees.plan(msg)`).
+   */
+  get fees(): FeePlanner {
+    this.feePlanner ??= new FeePlanner(this);
+    return this.feePlanner;
   }
 
   //Returns info about the nexus.
