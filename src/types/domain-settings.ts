@@ -110,7 +110,6 @@ export class DomainSettings {
 
   public static PhantomForceOrganizationName = 'phantom_force';
 
-  //public static PlatformSupply = UnitConversion.ToBigInteger(100000000, FuelTokenDecimals);
   public static PlatformName = 'phantasma';
 
   public static ArchiveMinSize = 64;

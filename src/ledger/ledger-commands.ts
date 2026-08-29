@@ -49,10 +49,13 @@ export const leftPad = (number: string | number, length: number): string => {
 export const LeftPad = leftPad;
 
 /**
+ * Renders an atom balance for display on a Ledger device: always `decimals` places, so amounts line
+ * up in a column and a zero fraction is still shown. That fixed width is the difference from
+ * `formatUnits`, which trims trailing zeros and is the general-purpose conversion; use that one
+ * outside device output.
  *
- * @param balance
- * @param decimals
- * @returns
+ * @param balance - the amount in the token's atoms.
+ * @param decimals - how many decimal places the token has.
  */
 export const toWholeNumber = (balance: string | number, decimals: number): string => {
   if (balance === undefined) {
