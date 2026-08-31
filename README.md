@@ -113,15 +113,24 @@ console.log(summarizeFeePlan(plan)); // { gasBill: '0.00426', gasOffer: '0.00426
 const hash = await api.sendTransaction(transfer, keys);
 ```
 
+Under gas model v2 there are two things to know, and `sendTransaction` handles both for you:
+
+1. **Plan before you sign.** The chain bills every byte the transaction puts in the block and
+   escrows every storage row it creates, so a message carries a gas offer and a storage ceiling that
+   have to be set before signing - a message signed with a zero offer is never admitted.
+2. **What the plan cannot know, it assumes expensive.** Some of the price depends on chain state the
+   message does not carry: whether the recipient already holds the token, which mode a series mints
+   in. Each is taken at the value that costs MORE, because unused gas is refunded while a short
+   offer is rejected. The plan is therefore a ceiling, not a prediction.
+
 - `api.fees` is the fee planner of the chain the client talks to. It reads `getGasConfig` once,
   keeps it for a minute, and prices every message from the message itself: the signed size is
   computed without a key, and the storage rows, call result bytes and gas sites of each native
-  operation are priced with the chain's own formula (`planFees`). `plan.kind`
-  says which operation was priced; the one kind that is a budget rather than a formula is
-  `NativeFeeKind.Script` - VM scripts and unmodelled calls, whose work depends on execution.
-- A fact the message does not carry - whether the recipient already holds the token, which mode a
-  series mints in - is assumed in the direction that costs MORE, because unused gas is refunded
-  while a short offer is rejected. Pass what you know (`FeePlanOptions`) and the plan tightens.
+  operation are priced with the chain's own formula (`planFees`). `plan.kind` says which operation
+  was priced; the one kind that is a budget rather than a formula is `NativeFeeKind.Script` - VM
+  scripts and unmodelled calls, whose work depends on execution.
+- `FeePlanOptions` is where you tighten point 2 by telling the planner a fact it would otherwise
+  assume. Every field is optional and most callers pass none.
 - A message the caller has already planned (`maxGas > 0`) is sent as it is. Signing an unplanned
   message is refused, because a zero offer is never admitted.
 - `sendTransaction` runs a pre-flight before signing a **token creation**. `Token.CreateToken` is
