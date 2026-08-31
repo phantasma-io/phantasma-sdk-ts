@@ -33,11 +33,28 @@ import {
 } from './native-fee-estimator.js';
 
 /**
- * Facts about chain state and signing that a message does not carry but the fee depends on.
- * Every state fact defaults to the case that costs more, so an unspecified plan is an upper
- * bound the settlement can only undercut.
+ * Facts about chain state and signing that a message does not carry but the fee depends on. Every
+ * state fact defaults to the case that costs more, so an unspecified plan is an upper bound the
+ * settlement can only undercut; the defaults themselves belong to {@link NativeFeeParams}, which
+ * documents each one, and are not restated here so the two cannot drift apart.
  */
-export interface FeePlanOptions {
+export interface FeePlanOptions extends Pick<
+  NativeFeeParams,
+  // Taken from NativeFeeParams rather than re-declared, so each fact keeps one definition, one
+  // default and one doc comment. The facts the message itself carries - counts, sizes, token ids,
+  // `nonFungible`, `pre_burn` - are deliberately absent: `planFees` reads those out of the message,
+  // and a caller-supplied value could only contradict it.
+  | 'recipientHoldsToken'
+  | 'toIsNftAddress'
+  | 'bigFungible'
+  | 'tokenBurnedBefore'
+  | 'romHasMetaId'
+  | 'duplicatedSeries'
+  | 'seriesHasMetaId'
+  | 'scriptUnitsAllowance'
+  | 'scriptEventBytes'
+  | 'scriptStorageQuanta'
+> {
   /**
    * How many witnesses will sign a Call / Call_Multi / Trade / Phantasma message. Required for
    * those types and for them only: their witness set is chosen by the caller, nothing in the
@@ -46,32 +63,6 @@ export interface FeePlanOptions {
    * `PhantasmaAPI.sendTransaction` fills it in from the signers it was given.
    */
   witnessCount?: number;
-  /** The recipient already holds the token (its balance row exists). Default false. */
-  recipientHoldsToken?: boolean;
-  /** The recipient is an NFT-derived address (an infusion). Default false. */
-  toIsNftAddress?: boolean;
-  /** The token is big-fungible (int256 balances). Default false. */
-  bigFungible?: boolean;
-  /** The token has been burned before (its burnt counter row exists). Default false. */
-  tokenBurnedBefore?: boolean;
-  /**
-   * A raw ROM carries a `_i` id, which adds the meta-id row. The ROM is schema-encoded and
-   * cannot be inspected without the token's schema, so the default is true.
-   */
-  romHasMetaId?: boolean;
-  /** The series mints duplicated NFTs (one more query fee per instance). Default false. */
-  duplicatedSeries?: boolean;
-  /**
-   * The series metadata carries a `_i` id, which adds the meta-id lookup row. Schema-encoded like
-   * the ROM, so the default is true.
-   */
-  seriesHasMetaId?: boolean;
-  /** VM work-unit allowance for scripts and unmodelled calls. Default 5000. */
-  scriptUnitsAllowance?: bigint;
-  /** Event-bytes allowance for scripts and unmodelled calls. Default 512. */
-  scriptEventBytes?: number;
-  /** New-storage-quanta allowance for scripts and unmodelled calls. Default 4. */
-  scriptStorageQuanta?: number;
 }
 
 /** A fee plan for one message: the estimate, what it was computed from, and how to apply it. */
@@ -81,6 +72,9 @@ export interface FeePlan extends NativeFeeEstimate {
    * Every kind but {@link NativeFeeKind.Script} is priced with the chain's own formula for that
    * operation; `Script` covers VM scripts and unmodelled calls, whose work depends on execution and
    * can only be budgeted (see `scriptUnitsAllowance` and its neighbours).
+   *
+   * A formula-priced bill is exact for the facts it was given and an upper bound for the ones it
+   * had to assume: a state fact left unspecified is filled with its costlier default.
    */
   kind: NativeFeeKind;
   /** The signed size the plan was computed for - the bytes the block will carry. */
@@ -132,13 +126,15 @@ interface Description {
 }
 
 function describe(msg: TxMsg, options: FeePlanOptions): Description {
+  // Passed through undefined and all: the calculator owns every default, so no default is decided
+  // in two places.
   const stateFacts: NativeFeeParams = {
     recipientHoldsToken: options.recipientHoldsToken,
     toIsNftAddress: options.toIsNftAddress,
     bigFungible: options.bigFungible,
     tokenBurnedBefore: options.tokenBurnedBefore,
+    romHasMetaId: options.romHasMetaId,
   };
-  const romHasMetaId = options.romHasMetaId ?? true;
 
   switch (msg.type) {
     case TxTypes.TransferFungible:
@@ -184,19 +180,18 @@ function describe(msg: TxMsg, options: FeePlanOptions): Description {
         tokenId: inner.tokenId,
         romBytes: inner.rom.length,
         ramBytes: inner.ram.length,
-        romHasMetaId,
       });
     }
     case TxTypes.BurnNonFungible:
     case TxTypes.BurnNonFungible_GasPayer: {
       const inner = msg.msg as TxMsgBurnNonFungible | TxMsgBurnNonFungibleGasPayer;
-      // The stored ROM is chain state the message does not carry; the deleted quanta are then
-      // a lower bound, which does not touch the bill (deleted rows are refunded, not billed).
+      // The stored ROM is chain state the message does not carry, so the deleted quanta are a lower
+      // bound. That does not touch the offer: a burn deletes more than it creates, and only the
+      // rows it creates are escrowed.
       return describeAs(NativeFeeKind.BurnNonFungible, {
         ...stateFacts,
         tokenId: inner.tokenId,
         count: 1,
-        romHasMetaId,
       });
     }
     case TxTypes.Call:
@@ -239,7 +234,7 @@ function describeCall(
         // The arguments are the u64 token id followed by the SeriesInfo, which becomes the row.
         return describeAs(NativeFeeKind.CreateTokenSeries, {
           seriesInfoBytes: Math.max(call.args.length - 8, 0),
-          seriesHasMetaId: options.seriesHasMetaId ?? true,
+          seriesHasMetaId: options.seriesHasMetaId,
         });
       case TokenContractMethods.MintPhantasmaNonFungible: {
         const args = MintPhantasmaNonFungibleArgs.read(new CarbonBinaryReader(call.args));

@@ -225,9 +225,12 @@ describe('planFees on token calls', () => {
     );
   });
 
+  // `duplicatedSeries: false` is stated because the bill below is the unique-series one: the mode
+  // is chain state no message carries, so an unspecified plan takes the costlier duplicated
+  // reading. The default itself is pinned in the test after next.
   it('reads every minted instance out of a Phantasma mint call', () => {
     const msg = phantasmaMintCall([phantasmaMint(7n, 182)]);
-    const plan = planFees(msg, config, oneWitness);
+    const plan = planFees(msg, config, { ...oneWitness, duplicatedSeries: false });
     expect(plan.kind).toBe(NativeFeeKind.MintPhantasmaNonFungible);
     expect(plan.newStorageQuanta).toBe(5);
     expect(plan.expectedGasBill).toBe(bill(30n, plan.envelopeBytes + 5 + 44));
@@ -241,7 +244,7 @@ describe('planFees on token calls', () => {
   it('prices every instance of a multi-instance Phantasma mint', () => {
     const tokens = [7n, 7n, 7n].map((series) => phantasmaMint(series, 182));
     const msg = phantasmaMintCall(tokens);
-    const plan = planFees(msg, config, oneWitness);
+    const plan = planFees(msg, config, { ...oneWitness, duplicatedSeries: false });
 
     expect(plan.kind).toBe(NativeFeeKind.MintPhantasmaNonFungible);
     // One balance row plus, per instance, its ROM row and the three fixed rows a deterministic
@@ -266,6 +269,19 @@ describe('planFees on token calls', () => {
     const spread = phantasmaMintCall([7n, 8n, 9n].map((series) => phantasmaMint(series, 182)));
     const spreadPlan = planFees(spread, config, { ...oneWitness, duplicatedSeries: true });
     expect(spreadPlan.expectedGasBill - plan.expectedGasBill).toBe(20n * 10_000n);
+  });
+
+  // The series mode is not in the message and the planner offers the bill with no headroom, so an
+  // unspecified plan has to assume the mode that costs more. Assuming "unique" made a duplicated
+  // mint short by exactly those query fees, and the chain aborts a short offer.
+  it('plans a Phantasma mint as duplicated when the series mode is not stated', () => {
+    const msg = phantasmaMintCall([7n, 7n, 7n].map((series) => phantasmaMint(series, 182)));
+    const assumed = planFees(msg, config, oneWitness);
+    const duplicated = planFees(msg, config, { ...oneWitness, duplicatedSeries: true });
+    const unique = planFees(msg, config, { ...oneWitness, duplicatedSeries: false });
+
+    expect(assumed.expectedGasBill).toBe(duplicated.expectedGasBill);
+    expect(assumed.expectedGasBill).toBeGreaterThan(unique.expectedGasBill);
   });
 
   // The multi-instance NFT transfer is the mirror case: each instance deletes the sender's lookup
