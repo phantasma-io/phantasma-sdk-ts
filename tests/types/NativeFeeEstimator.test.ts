@@ -144,6 +144,20 @@ describe('estimateNativeFee against settled v2 transactions', () => {
       toIsNftAddress: true,
     });
     expect(estimate.expectedGasBill).toBe(42_950_000n);
+
+    // Minting into an NFT address pays the same owner lookup, once per call, on all three mint
+    // kinds - the chain checks the recipient the same way it does for a transfer.
+    const mints = [
+      NativeFeeKind.MintFungible,
+      NativeFeeKind.MintNonFungible,
+      NativeFeeKind.MintPhantasmaNonFungible,
+    ] as const;
+    for (const kind of mints) {
+      const params = { envelopeBytes: 200, tokenId: 7n, romBytes: 10 };
+      const plain = estimateNativeFee(kind, v2Config(), params);
+      const infused = estimateNativeFee(kind, v2Config(), { ...params, toIsNftAddress: true });
+      expect(infused.expectedGasBill - plain.expectedGasBill).toBe(100_000n);
+    }
   });
 
   // A native NFT burn of 138 bytes; the mint's ten quanta are deleted and refunded,
