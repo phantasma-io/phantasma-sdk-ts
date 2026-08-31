@@ -44,13 +44,20 @@ export interface FeePlanOptions extends Pick<
   // default and one doc comment. The facts the message itself carries - counts, sizes, token ids,
   // `nonFungible`, `pre_burn` - are deliberately absent: `planFees` reads those out of the message,
   // and a caller-supplied value could only contradict it.
+  //
+  // Every one of these is optional and most callers pass none. Roughly in order of how likely a
+  // caller is to know the answer:
+  //
+  // an ordinary wallet may well know these:
   | 'recipientHoldsToken'
-  | 'toIsNftAddress'
   | 'bigFungible'
   | 'tokenBurnedBefore'
-  | 'romHasMetaId'
+  | 'toIsNftAddress'
+  // these need the token's schema or the series' metadata, so pass them only if you read them:
   | 'duplicatedSeries'
+  | 'romHasMetaId'
   | 'seriesHasMetaId'
+  // and these three size the allowance for a VM script, whose cost no formula can predict:
   | 'scriptUnitsAllowance'
   | 'scriptEventBytes'
   | 'scriptStorageQuanta'
