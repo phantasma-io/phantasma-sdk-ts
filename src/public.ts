@@ -316,7 +316,6 @@ export type {
 } from './rpc/fee-planner.js';
 export {
   DEFAULT_TX_EXPIRY_MS,
-  estimateNativeFee,
   expiryWithin,
   NativeFeeKind,
   planFees,
@@ -332,7 +331,6 @@ export type {
   FeeQuote,
   MintFungibleParams,
   NativeFeeEstimate,
-  NativeFeeParams,
   NativeTxParties,
   PhantasmaNftMintParams,
   PlanAndSignOptions,
