@@ -40,9 +40,17 @@ export enum NativeFeeKind {
  * Inputs of {@link estimateNativeFee}. Under gas model v2 every byte the transaction puts in the
  * block is billed and every new storage row is escrowed, so the inputs are the sizes the chain
  * will see: the signed envelope, the serialized structures the operation stores, and the facts
- * about existing state that decide whether a row is new. Facts about state default to the
- * costlier case (a fresh recipient row, a first burn), so an estimate built from defaults is an
- * upper bound that the settlement can only undercut - never a short offer.
+ * about existing state that decide whether a row is new.
+ *
+ * The inputs are of two kinds, and they are defaulted differently:
+ *
+ * - Facts the CALLER CANNOT KNOW without reading chain state - whether the recipient already holds
+ *   the token, whether a ROM carries an `_i` id, which mode a series mints in. Each defaults to the
+ *   case that costs MORE, so an estimate built from defaults is an upper bound the settlement can
+ *   only undercut, never a short offer.
+ * - Facts carried by the MESSAGE ITSELF - the instance count, the serialized sizes, whether the
+ *   token being created is non-fungible or carries `pre_burn`. These have no safe default because
+ *   they are not guesses: pass them. `planFees` reads every one of them out of the message.
  */
 export interface NativeFeeParams {
   /**
@@ -78,7 +86,10 @@ export interface NativeFeeParams {
   hasInflationSchedule?: boolean;
   /** Serialized `SeriesInfo` length (CreateTokenSeries) - the Call arguments after the token id. */
   seriesInfoBytes?: number;
-  /** The series metadata carries a `_i` id (CreateTokenSeries): the meta-id lookup row is created. */
+  /**
+   * The series metadata carries a `_i` id (CreateTokenSeries): the meta-id lookup row is created.
+   * Schema-encoded like the ROM, so the default is true - the row that may be billed.
+   */
   seriesHasMetaId?: boolean;
   /** Registered name length in characters (RegisterName). Required for that kind. */
   nameLength?: number;
@@ -86,14 +97,25 @@ export interface NativeFeeParams {
   romBytes?: number | readonly number[];
   /** RAM bytes per instance. Default 0 (no RAM row). */
   ramBytes?: number | readonly number[];
-  /** The raw ROM carries a `_i` id (MintNonFungible / BurnNonFungible): the meta-id row exists. Phantasma mints always have one. */
+  /**
+   * The raw ROM carries a `_i` id, which the chain indexes in one more row (MintNonFungible /
+   * BurnNonFungible). The ROM is schema-encoded, so a caller holding only the bytes cannot tell, and
+   * the default is true - on a mint that is the reading which escrows for the row, and on a burn it
+   * is the reading that mirrors what the mint created. The burn does not PRICE on it either way
+   * (see {@link NativeFeeEstimate.deletedStorageQuanta}); a Phantasma mint always has one and
+   * ignores this input.
+   */
   romHasMetaId?: boolean;
   /**
    * The series mints duplicated NFTs (MintPhantasmaNonFungible). A duplicated series costs one more
    * query fee per instance than a unique one, plus one per distinct series (see
    * {@link distinctSeriesCount}). A call whose instances mix duplicated and unique series is priced
-   * as if every instance were duplicated: a series' mode is chain state the message does not carry,
-   * so the costlier reading is the only safe one.
+   * as if every instance were duplicated.
+   *
+   * Default true. A series' mode is chain state the message does not carry, so the costlier reading
+   * is the only safe one: a duplicated mint priced as unique is short by exactly those query fees,
+   * and the planner offers the bill with no headroom, so it aborts. Pass `false` only when the
+   * series is known to be unique - the saving is a few query fees.
    */
   duplicatedSeries?: boolean;
   /**
@@ -148,7 +170,14 @@ export interface FeeQuote {
 export interface NativeFeeEstimate extends FeeQuote {
   /** Storage quanta the operation creates (1024-byte units per new paid row). */
   newStorageQuanta: number;
-  /** Storage quanta the operation deletes; their escrow is refunded at each row's own price. */
+  /**
+   * Storage quanta the operation deletes; their escrow is refunded at each row's own price.
+   *
+   * Informational. It does not enter the bill: `maxData` covers the rows an operation CREATES, and
+   * the block-data term uses the net growth, which an operation that deletes more than it creates
+   * floors at zero either way. A burn's figure is therefore a lower bound - the stored ROM is chain
+   * state the message does not carry - and nothing depends on tightening it.
+   */
   deletedStorageQuanta: number;
 }
 
@@ -372,11 +401,12 @@ function operationModel(
       const rams = perInstance(params.ramBytes, count, 'ramBytes');
       // Per instance: the instance row (ROM), the owner row, the lookup row, the RAM row when
       // RAM is given, the meta-id row when the ROM carries `_i`; plus the recipient's balance row.
+      const romHasMetaId = params.romHasMetaId ?? true;
       let quanta = recipientRow;
       for (let i = 0; i < count; i++) {
         quanta += storageQuantaFor(NFT_INSTANCE_ROW_OVERHEAD + roms[i]) + 2;
         if (rams[i] > 0) quanta += storageQuantaFor(NFT_RAM_ROW_OVERHEAD + rams[i]);
-        if (params.romHasMetaId) quanta += 1;
+        if (romHasMetaId) quanta += 1;
       }
       return {
         workUnits: clampU64(config.gasFeeTransfer * countU),
@@ -401,10 +431,9 @@ function operationModel(
       // instance, to pick up the series' shared ROM, and reads that series' supply once per
       // distinct series in the call - the chain remembers the supply it already read, so the
       // supply fee does not scale with the instance count the way the other three do.
-      const queriesPerInstance = params.duplicatedSeries ? 3n : 2n;
-      const seriesSupplyQueries = params.duplicatedSeries
-        ? BigInt(distinctSeries(params, count))
-        : 0n;
+      const duplicatedSeries = params.duplicatedSeries ?? true;
+      const queriesPerInstance = duplicatedSeries ? 3n : 2n;
+      const seriesSupplyQueries = duplicatedSeries ? BigInt(distinctSeries(params, count)) : 0n;
       return {
         workUnits: clampU64(
           (config.gasFeeTransfer + config.gasFeeQuery * queriesPerInstance) * countU +
@@ -420,13 +449,16 @@ function operationModel(
       const roms = perInstance(params.romBytes, count, 'romBytes');
       const rams = perInstance(params.ramBytes, count, 'ramBytes');
       // The instance, owner, lookup (and RAM, meta-id) rows are deleted and refunded; the burnt
-      // counter row is created on the token's first burn. Each instance's infusion sweep reads
-      // the NFT address balances twice.
+      // counter row is created on the token's first burn. Each instance's infusion sweep reads the
+      // NFT address balances twice. The deleted rows mirror what the mint created, which is why the
+      // meta-id row is counted the same way here - but see `deletedStorageQuanta`: on a burn this
+      // total is reported, never billed.
+      const romHasMetaId = params.romHasMetaId ?? true;
       let deleted = 0;
       for (let i = 0; i < count; i++) {
         deleted += storageQuantaFor(NFT_INSTANCE_ROW_OVERHEAD + roms[i]) + 2;
         if (rams[i] > 0) deleted += storageQuantaFor(NFT_RAM_ROW_OVERHEAD + rams[i]);
-        if (params.romHasMetaId) deleted += 1;
+        if (romHasMetaId) deleted += 1;
       }
       return {
         workUnits: clampU64((config.gasFeeTransfer + config.gasFeeQuery * 2n) * countU),
@@ -467,8 +499,9 @@ function operationModel(
       const infoBytes = params.seriesInfoBytes ?? 0;
       assertNonNegativeInteger(infoBytes, 'seriesInfoBytes');
       // Rows: the series info, the series supply, the meta-id lookup when the metadata has `_i`.
+      const seriesHasMetaId = params.seriesHasMetaId ?? true;
       const quanta =
-        storageQuantaFor(SERIES_INFO_KEY_BYTES + infoBytes) + 1 + (params.seriesHasMetaId ? 1 : 0);
+        storageQuantaFor(SERIES_INFO_KEY_BYTES + infoBytes) + 1 + (seriesHasMetaId ? 1 : 0);
       return {
         workUnits: v2 ? 0n : config.gasFeeCreateTokenSeries,
         policyFee: v2 ? config.policyFeeCreateTokenSeries : 0n,

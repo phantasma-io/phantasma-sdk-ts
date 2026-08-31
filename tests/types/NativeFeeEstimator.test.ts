@@ -205,11 +205,17 @@ describe('estimateNativeFee against settled v2 transactions', () => {
   // first mint to that owner (fresh balance row, 5 quanta); the 3,083-byte one found the balance
   // row in place and its canonical ROM alone took seven quanta (10 in total). Each instance pays the
   // mint plus two query fees and returns 40 bytes after the 4-byte count.
+  //
+  // Both were minted into a UNIQUE series, and every settled-bill case below says so explicitly:
+  // the series mode is chain state the message does not carry, so the calculator assumes the
+  // costlier duplicated reading when nobody tells it. Leaving it out here would compare the chain's
+  // receipt against a deliberate over-estimate.
   it('reproduces the two localnet Phantasma NFT mint bills', () => {
     const small = estimateNativeFee(NativeFeeKind.MintPhantasmaNonFungible, localnetConfig(), {
       envelopeBytes: 413,
       tokenId: 9n,
       romBytes: 182,
+      duplicatedSeries: false,
     });
     expect(small.expectedGasBill).toBe(115_800_000n);
     expect(small.newStorageQuanta).toBe(5);
@@ -220,6 +226,7 @@ describe('estimateNativeFee against settled v2 transactions', () => {
       tokenId: 9n,
       romBytes: 3083,
       recipientHoldsToken: true,
+      duplicatedSeries: false,
     });
     expect(large.expectedGasBill).toBe(842_300_000n);
     expect(large.newStorageQuanta).toBe(10);
@@ -241,6 +248,7 @@ describe('estimateNativeFee against settled v2 transactions', () => {
         tokenId: 9n,
         romBytes,
         recipientHoldsToken,
+        duplicatedSeries: false,
       });
       expect(estimate.expectedGasBill).toBe(bill);
       expect(estimate.newStorageQuanta).toBe(quanta);
@@ -278,6 +286,7 @@ describe('estimateNativeFee against settled v2 transactions', () => {
       envelopeBytes: 490,
       count: 3,
       romBytes: 75,
+      duplicatedSeries: false,
     });
     expect(estimate.expectedGasBill).toBe(157_650_000n);
     expect(estimate.newStorageQuanta).toBe(13);
@@ -289,6 +298,7 @@ describe('estimateNativeFee against settled v2 transactions', () => {
       envelopeBytes: 490,
       count: 1,
       romBytes: 75,
+      duplicatedSeries: false,
     });
     expect(single.newStorageQuanta).toBe(5);
   });
@@ -312,6 +322,7 @@ describe('estimateNativeFee against settled v2 transactions', () => {
       envelopeBytes: 490,
       count: 3,
       romBytes: 75,
+      duplicatedSeries: false,
     });
     // Three extra instance queries and one supply query over the unique-series bill.
     expect(oneSeries.expectedGasBill - unique.expectedGasBill).toBe(40n * 10_000n);
@@ -372,6 +383,83 @@ describe('estimateNativeFee against settled v2 transactions', () => {
     });
     expect(estimate.expectedGasBill).toBe(10_000_000_000n);
     expect(estimate.maxGas).toBe(10_000_000_000n);
+  });
+
+  // Facts about chain state that the message cannot carry are defaulted to the case that COSTS
+  // MORE, because the offer is spent against the real bill and a short one aborts the transaction
+  // while an over-offer is refunded. These three pin that direction for the facts where the cheap
+  // reading used to be the default; each case fails if a default flips back.
+  describe('unspecified state facts default to the costlier reading', () => {
+    it('assumes a Phantasma series is duplicated until told otherwise', () => {
+      const shared = { envelopeBytes: 490, count: 3, romBytes: 75 } as const;
+      const assumed = estimateNativeFee(
+        NativeFeeKind.MintPhantasmaNonFungible,
+        localnetConfig(),
+        shared
+      );
+      const duplicated = estimateNativeFee(
+        NativeFeeKind.MintPhantasmaNonFungible,
+        localnetConfig(),
+        {
+          ...shared,
+          duplicatedSeries: true,
+        }
+      );
+      const unique = estimateNativeFee(NativeFeeKind.MintPhantasmaNonFungible, localnetConfig(), {
+        ...shared,
+        duplicatedSeries: false,
+      });
+      // Three extra instance queries plus one supply query: 40 units at this config's multiplier.
+      expect(duplicated.expectedGasBill - unique.expectedGasBill).toBe(40n * 10_000n);
+      expect(assumed.expectedGasBill).toBe(duplicated.expectedGasBill);
+    });
+
+    it('assumes a minted ROM carries a meta id, which is a row it must escrow for', () => {
+      const shared = { envelopeBytes: 300, tokenId: 97n, romBytes: 64 } as const;
+      const assumed = estimateNativeFee(NativeFeeKind.MintNonFungible, v2Config(), shared);
+      const withMetaId = estimateNativeFee(NativeFeeKind.MintNonFungible, v2Config(), {
+        ...shared,
+        romHasMetaId: true,
+      });
+      const without = estimateNativeFee(NativeFeeKind.MintNonFungible, v2Config(), {
+        ...shared,
+        romHasMetaId: false,
+      });
+      expect(withMetaId.newStorageQuanta).toBe(without.newStorageQuanta + 1);
+      expect(assumed.newStorageQuanta).toBe(withMetaId.newStorageQuanta);
+      // maxData is the one that has to be right: the chain aborts a transaction whose escrow
+      // exceeds it, so a row assumed away is not an under-offer but a failed transaction.
+      expect(assumed.maxData).toBe(withMetaId.maxData);
+      expect(assumed.maxData - without.maxData).toBe(v2Config().dataEscrowPerRow);
+    });
+
+    // Same flag, same default on a burn - it keeps the deleted rows mirroring what the mint wrote -
+    // but there it moves a reported number and nothing else. Deleted rows are refunded, `maxData`
+    // covers only the rows an operation CREATES, and a burn always deletes more than it creates, so
+    // the block-data term floors at zero whichever way the flag goes. This pins both halves: the
+    // count follows the flag, the price does not.
+    it('counts a burned meta-id row but does not price on it', () => {
+      const shared = { envelopeBytes: 300, tokenId: 97n, romBytes: 64 } as const;
+      const assumed = estimateNativeFee(NativeFeeKind.BurnNonFungible, v2Config(), shared);
+      const without = estimateNativeFee(NativeFeeKind.BurnNonFungible, v2Config(), {
+        ...shared,
+        romHasMetaId: false,
+      });
+      expect(assumed.deletedStorageQuanta).toBe(without.deletedStorageQuanta + 1);
+      expect(assumed.expectedGasBill).toBe(without.expectedGasBill);
+      expect(assumed.maxGas).toBe(without.maxGas);
+      expect(assumed.maxData).toBe(without.maxData);
+    });
+
+    it('assumes a created series carries a meta id, which is one more row', () => {
+      const shared = { envelopeBytes: 300, seriesInfoBytes: 100 } as const;
+      const assumed = estimateNativeFee(NativeFeeKind.CreateTokenSeries, v2Config(), shared);
+      const without = estimateNativeFee(NativeFeeKind.CreateTokenSeries, v2Config(), {
+        ...shared,
+        seriesHasMetaId: false,
+      });
+      expect(assumed.newStorageQuanta).toBe(without.newStorageQuanta + 1);
+    });
   });
 
   // A wallet that caches prices gets its config back as plain data - a spread, a structured clone,

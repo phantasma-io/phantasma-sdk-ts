@@ -119,6 +119,9 @@ const hash = await api.sendTransaction(transfer, keys);
   operation are priced with the chain's own formula (`planFees`, `estimateNativeFee`). `plan.kind`
   says which operation was priced; the one kind that is a budget rather than a formula is
   `NativeFeeKind.Script` - VM scripts and unmodelled calls, whose work depends on execution.
+- A fact the message does not carry - whether the recipient already holds the token, which mode a
+  series mints in - is assumed in the direction that costs MORE, because unused gas is refunded
+  while a short offer is rejected. Pass what you know (`FeePlanOptions`) and the plan tightens.
 - A message the caller has already planned (`maxGas > 0`) is sent as it is. Signing an unplanned
   message is refused, because a zero offer is never admitted.
 - `sendTransaction` runs a pre-flight first. Creating a token and registering a name are charged
