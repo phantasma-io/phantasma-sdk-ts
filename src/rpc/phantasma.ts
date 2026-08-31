@@ -10,7 +10,7 @@ import { Chain } from './interfaces/chain.js';
 import { GasConfigResult } from './interfaces/gas-config.js';
 import { EstimateTransactionResult } from './interfaces/estimate-transaction.js';
 import { FeePlanner, PlanRequestOptions } from './fee-planner.js';
-import { preflightTransaction } from './transaction-preflight.js';
+import { preflightTransaction, TransactionPreflightError } from './transaction-preflight.js';
 import { unwrapRpcResult } from './rpc-result.js';
 import { bytesToHex } from '../utils/index.js';
 import { SignedTxMsg } from '../types/carbon/blockchain/signed-tx-msg.js';
@@ -43,7 +43,15 @@ import {
   RpcResult,
 } from './rpc-result.js';
 export interface SendTransactionOptions extends PlanRequestOptions {
-  /** Check the chain state the message depends on before signing (see `preflightTransaction`). Default true. */
+  /**
+   * For a token creation, ask the chain whether the symbol is already taken and refuse unless the
+   * chain answered that it is free (see `preflightTransaction`). Every other message is unaffected.
+   * Default true; `false` skips the lookup.
+   *
+   * It refuses a lookup that did not answer, not only one that answered "taken": the policy fee is
+   * spent before the contract looks at the symbol, so sending on an unestablished state is exactly
+   * the outcome worth paying a round trip to avoid.
+   */
   preflight?: boolean;
 }
 
@@ -679,10 +687,27 @@ export class PhantasmaAPI {
   }
 
   /**
+   * The gas token's id, which the pre-flight uses as its control lookup: it certainly exists on any
+   * live chain. It comes from the same cached gas config the planner reads, so asking costs a round
+   * trip only once a minute. Undefined when this client cannot read that config - the pre-flight
+   * then reports `unknown` rather than guessing.
+   */
+  async controlTokenId(): Promise<bigint | undefined> {
+    try {
+      return (await this.fees.config()).gasTokenId;
+    } catch {
+      return undefined;
+    }
+  }
+
+  /**
    * Sends a message in one step: pre-flight, fee plan, signatures, broadcast. A message whose
    * `maxGas` is still zero is planned against this chain's prices (`fees.plan`); one the caller
    * already planned is sent as it is. Every witness signs through its {@link TxSigner} - keys,
    * hardware, or a remote service. Returns the transaction hash.
+   *
+   * The pre-flight refuses a token creation whose symbol the chain says is taken, and one it could
+   * not establish anything about; see the `preflight` option.
    */
   async sendTransaction(
     msg: TxMsg,
@@ -691,7 +716,17 @@ export class PhantasmaAPI {
   ): Promise<string> {
     const witnesses = Array.isArray(signers) ? signers : [signers];
     const { preflight = true, ...planOptions } = options;
-    if (preflight) await preflightTransaction(this, msg);
+    if (preflight) {
+      const check = await preflightTransaction(this, msg);
+      if (check.verdict === 'taken') {
+        throw new TransactionPreflightError(`${check.subject} is already taken`);
+      }
+      if (check.verdict === 'unknown') {
+        throw new TransactionPreflightError(
+          `Could not establish whether ${check.subject} is taken: ${check.reason}`
+        );
+      }
+    }
     // Only the witness-array types take their witness count from the caller; for every other type
     // the message itself fixes the slots, and one signer may legitimately fill two of them.
     const openWitnessSet = SignedTxMsg.requiredWitnesses(msg) === undefined;

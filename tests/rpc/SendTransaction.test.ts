@@ -17,7 +17,10 @@ import { hexToBytes } from '../../src/utils/index';
 import { GasConfigResult } from '../../src/rpc/interfaces/gas-config';
 import { Token } from '../../src/rpc/interfaces/token';
 import { PhantasmaAPI } from '../../src/rpc/phantasma';
-import { TransactionPreflightError } from '../../src/rpc/transaction-preflight';
+import {
+  preflightTransaction,
+  TransactionPreflightError,
+} from '../../src/rpc/transaction-preflight';
 
 const mainnetResult: GasConfigResult = {
   gasModelVersion: 2,
@@ -57,12 +60,11 @@ const mainnetResult: GasConfigResult = {
   },
 };
 
-// A client whose network calls are canned: the gas config, the token and name lookups a
-// pre-flight makes, and the broadcast, which records what it was given.
+// A client whose network calls are canned: the gas config, the token lookups a pre-flight makes,
+// and the broadcast, which records what it was given.
 class StubApi extends PhantasmaAPI {
   sent: string[] = [];
   tokens = new Map<string, Token>();
-  names = new Map<string, string>();
   sendResult: unknown = 'HASH';
   lookups = 0;
   /** What the node answers for something that is not there; overridden to simulate a broken node. */
@@ -74,13 +76,19 @@ class StubApi extends PhantasmaAPI {
   override async getGasConfig(): Promise<GasConfigResult> {
     return mainnetResult;
   }
-  override async getToken(symbol: string): Promise<Token> {
+  /** True when the node answers at all; false simulates one that cannot serve `getToken`. */
+  reachable = true;
+  override async getToken(
+    symbol: string,
+    _extended?: boolean,
+    carbonTokenId: bigint = 0n
+  ): Promise<Token> {
     this.lookups += 1;
+    if (!this.reachable) return { error: this.lookupError } as unknown as Token;
+    // A live node resolves by id without looking at the symbol; that path is the pre-flight's
+    // control, and it answers for the gas token whatever the caller's symbol turns out to be.
+    if (carbonTokenId !== 0n) return { symbol: 'KCAL' } as Token;
     return this.tokens.get(symbol) ?? ({ error: this.lookupError } as unknown as Token);
-  }
-  override async lookUpName(name: string): Promise<string> {
-    this.lookups += 1;
-    return this.names.get(name) ?? ({ error: this.lookupError } as unknown as string);
   }
   override async sendCarbonTransaction(txData: string): Promise<string> {
     this.sent.push(txData);
@@ -182,38 +190,70 @@ describe('PhantasmaAPI.sendTransaction', () => {
     expect(api.sent).toHaveLength(1);
   });
 
-  it('refuses to register a name that is taken, and skips the check when told to', async () => {
+  // The pre-flight covers token creation and nothing else. A name registration is sent without a
+  // lookup: the node reports a free name as an error and a taken one as an address, so there is no
+  // answer that means "free" to check against, and new names cannot be registered on this chain
+  // anyway.
+  it('sends a name registration without looking anything up', async () => {
     const api = new StubApi();
-    api.names.set('alice', 'P2K...');
 
-    await expect(api.sendTransaction(registerName('alice'), OWNER)).rejects.toThrow(
-      'already registered'
-    );
-    expect(api.sent).toHaveLength(0);
-
-    await api.sendTransaction(registerName('alice'), OWNER, { preflight: false });
+    await api.sendTransaction(registerName('alice'), OWNER);
     expect(api.sent).toHaveLength(1);
-    expect(api.lookups).toBe(1);
+    expect(api.lookups).toBe(0);
   });
 
-  // The pre-flight exists to refuse a transaction the chain will refuse. An RPC error that is not
-  // the chain saying "there is nothing here" means the check did not happen, and signing on an
-  // unknown chain state is the one outcome it must never produce.
-  it('refuses to sign when the lookup itself fails', async () => {
+  // A free symbol is established, not inferred from the error text: the node refuses to answer
+  // about FRESH, so the check asks it for a token that certainly exists. That answer proves the
+  // lookup works and is being truthful, which is what makes the refusal about FRESH mean "absent".
+  // Whatever the error says is irrelevant - including "Method not found", the JSON-RPC name of
+  // error -32601, which contains the words "not found" and means the question was never asked.
+  it('establishes a free symbol from a control lookup, not from the error text', async () => {
     const api = new StubApi();
-    api.lookupError = 'backend unavailable';
 
-    await expect(api.sendTransaction(createToken('FRESH'), OWNER)).rejects.toThrow(
-      /Could not check whether the token symbol FRESH is taken/
-    );
-    await expect(api.sendTransaction(registerName('bob'), OWNER)).rejects.toThrow(
-      /Could not check whether the name bob is registered/
-    );
+    for (const error of ['Method not found', 'backend unavailable', 'Token symbol not found']) {
+      api.lookupError = error;
+      await api.sendTransaction(createToken('FRESH'), OWNER);
+    }
+    expect(api.sent).toHaveLength(3);
+  });
+
+  // And the case the whole check exists for: a node that cannot answer at all. Nothing is
+  // established, so nothing is signed - the policy fee is not spent on a guess.
+  it('refuses when the lookup cannot answer even about a token that exists', async () => {
+    const api = new StubApi();
+    api.reachable = false;
+
+    for (const error of ['Method not found', 'backend unavailable', 'Token symbol not found']) {
+      api.lookupError = error;
+      await expect(api.sendTransaction(createToken('FRESH'), OWNER)).rejects.toThrow(
+        /Could not establish whether token symbol FRESH is taken/
+      );
+    }
     expect(api.sent).toHaveLength(0);
+  });
 
-    // The same transactions go through once the node answers the way it does for a free name.
-    api.lookupError = 'name not registered';
-    await api.sendTransaction(registerName('bob'), OWNER);
+  // `sendTransaction` acts on one verdict only. A caller who wants to stop on the others reads the
+  // verdict itself and sends separately - which is the whole reason the check reports one instead
+  // of deciding. This is that path, and it is the one a wallet uses to warn before spending the fee.
+  it('hands the verdict to a caller who wants to decide for itself', async () => {
+    const api = new StubApi();
+    api.lookupError = 'Method not found';
+
+    expect(await preflightTransaction(api, createToken('FRESH'))).toEqual({
+      verdict: 'free',
+      subject: 'token symbol FRESH',
+    });
+
+    // A source that cannot offer a control token has nothing to check the refusal against, so it
+    // says so rather than picking a side. `controlTokenId` is optional for exactly this reason.
+    const noControl = { getToken: (symbol: string) => api.getToken(symbol) };
+    expect(await preflightTransaction(noControl, createToken('FRESH'))).toEqual({
+      verdict: 'unknown',
+      subject: 'token symbol FRESH',
+      reason: 'Method not found',
+    });
+
+    await api.sendTransaction(createToken('FRESH'), OWNER, { preflight: false });
     expect(api.sent).toHaveLength(1);
   });
 

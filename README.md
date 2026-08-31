@@ -124,13 +124,19 @@ const hash = await api.sendTransaction(transfer, keys);
   while a short offer is rejected. Pass what you know (`FeePlanOptions`) and the plan tightens.
 - A message the caller has already planned (`maxGas > 0`) is sent as it is. Signing an unplanned
   message is refused, because a zero offer is never admitted.
-- `sendTransaction` runs a pre-flight first. Creating a token and registering a name are charged
-  their policy fee - the largest single price in the protocol, set by governance and readable from
-  `getGasConfig` - **before** the contract checks whether the symbol or the name is free, so sending
-  one that is already taken costs that fee and gets nothing back. The pre-flight asks the chain
-  first, so the transaction is never signed (`preflightTransaction`). It fails closed: if the lookup
-  itself fails, the transaction is refused rather than signed on an unknown chain state.
-  `{ preflight: false }` skips the check, at the cost of the fee if the guess is wrong.
+- `sendTransaction` runs a pre-flight before signing a **token creation**. `Token.CreateToken` is
+  charged its policy fee - the largest single price in the protocol, set by governance and readable
+  from `getGasConfig` - **before** the contract checks whether the symbol is free, so sending one
+  that is already taken costs that fee and gets nothing back. One lookup avoids it
+  (`preflightTransaction`). Every other message goes straight through.
+- The pre-flight never reads a verdict out of an error message. A symbol that resolves is `taken`;
+  one that does not comes back as an ordinary RPC error, which a broken or proxied node produces
+  just as readily, so the check asks a second question it knows the answer to - the gas token, by
+  id, a lookup that does not touch symbols. If that answers, the node is answering and the symbol is
+  `free`; if it does not, the verdict is `unknown` and nothing was established. `sendTransaction`
+  refuses on `taken` and on `unknown`. A caller who would rather decide for itself - warn before
+  spending the fee, retry against another node - calls `preflightTransaction`, reads the verdict and
+  sends with `{ preflight: false }`.
 - Any witness that implements `TxSigner` (`publicKey` + `sign(bytes)`) can sign, and
   `TxMsgSigner.signWith` accepts several - the gas-payer transaction types take two. A wallet
   that signs elsewhere plans with `api.fees.plan` and hands `plan.apply(msg)` over.
