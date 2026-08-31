@@ -53,20 +53,21 @@ describe('Phantasma deterministic mint helpers', () => {
     const tokenSchemas = TokenSchemasBuilder.prepareStandard(false);
     const rom = PhantasmaNftRomBuilder.buildAndSerialize(tokenSchemas.rom, buildMetadata());
 
-    const tx = MintPhantasmaNonFungibleTxHelper.buildTx({
-      tokenId: 42n,
-      sender,
-      to: receiver,
-      tokens: [
-        new PhantasmaNftMintInfo({
-          phantasmaSeriesId: IntX.fromBigInt(777n),
-          rom,
-          ram: new Uint8Array(),
-        }),
-      ],
-      maxData: 123n,
-      expiry: 999n,
-    });
+    const tx = MintPhantasmaNonFungibleTxHelper.buildTx(
+      {
+        tokenId: 42n,
+        sender,
+        to: receiver,
+        tokens: [
+          new PhantasmaNftMintInfo({
+            phantasmaSeriesId: IntX.fromBigInt(777n),
+            rom,
+            ram: new Uint8Array(),
+          }),
+        ],
+      },
+      { maxData: 123n, expiry: 999n }
+    );
 
     expect(tx.type).toBe(TxTypes.Call);
 
@@ -109,15 +110,15 @@ describe('Phantasma deterministic mint helpers', () => {
     expect(unplanned.maxGas).toBe(0n);
     expect(unplanned.maxData).toBe(0n);
 
-    const tx = MintPhantasmaNonFungibleTxHelper.buildTx({
-      tokenId: 42n,
-      sender,
-      to: receiver,
-      tokens,
-      maxGas: 20_000n,
-      maxData: 123n,
-      expiry: 999n,
-    });
+    const tx = MintPhantasmaNonFungibleTxHelper.buildTx(
+      {
+        tokenId: 42n,
+        sender,
+        to: receiver,
+        tokens,
+      },
+      { maxGas: 20_000n, maxData: 123n, expiry: 999n }
+    );
     expect(tx.maxGas).toBe(20_000n);
     expect(tx.maxData).toBe(123n);
     expect(tx.expiry).toBe(999n);

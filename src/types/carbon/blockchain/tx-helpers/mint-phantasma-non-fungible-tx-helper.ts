@@ -18,7 +18,7 @@ import { PlanAndSignOptions, planAndSignWithKeys } from './plan-and-sign.js';
 import { applyTxLimits, TxLimits } from './tx-limits.js';
 
 /** A deterministic Phantasma NFT mint: one call, one recipient, one entry per minted instance. */
-export interface PhantasmaNftMintParams extends TxLimits {
+export interface PhantasmaNftMintParams {
   tokenId: bigint;
   /** The account that pays the gas and signs the mint. */
   sender: Bytes32;
@@ -33,7 +33,7 @@ export interface PhantasmaNftMintParams extends TxLimits {
 
 export class MintPhantasmaNonFungibleTxHelper {
   /** Builds the Token.MintPhantasmaNonFungible call. Fees are planned from the message afterwards. */
-  static buildTx(p: PhantasmaNftMintParams): TxMsg {
+  static buildTx(p: PhantasmaNftMintParams, limits?: TxLimits): TxMsg {
     if (p.tokens.length === 0) throw new Error('tokens must not be empty');
 
     // This helper only packages the Token.Call ABI surface.
@@ -56,20 +56,17 @@ export class MintPhantasmaNonFungibleTxHelper {
     call.args = argsWriter.toUint8Array();
     msg.msg = call;
 
-    return applyTxLimits(msg, p);
+    return applyTxLimits(msg, limits);
   }
 
-  /**
-   * Builds, plans against `config` and signs with in-memory keys, returning the envelope bytes.
-   * The transaction's own limits come from `p`; `options` governs how the fee is planned.
-   */
+  /** Builds, plans against `config` and signs with in-memory keys, returning the envelope bytes. */
   static buildTxAndSign(
     p: PhantasmaNftMintParams,
     signer: PhantasmaKeys,
     config: GasConfig,
     options?: PlanAndSignOptions
   ): Uint8Array {
-    return planAndSignWithKeys(this.buildTx(p), [signer], config, options);
+    return planAndSignWithKeys(this.buildTx(p, options), [signer], config, options);
   }
 
   static buildTxAndSignHex(

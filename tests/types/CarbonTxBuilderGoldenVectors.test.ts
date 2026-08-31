@@ -173,21 +173,21 @@ function carbonTxBuilderVector(caseId: string): string {
       const schemas = TokenSchemasBuilder.prepareStandard(false);
       const publicRom = PhantasmaNftRomBuilder.buildAndSerialize(schemas.rom, nftMetadata(false));
       return serializeTx(
-        MintPhantasmaNonFungibleTxHelper.buildTx({
-          tokenId: 42n,
-          sender: senderBytes,
-          to: receiverBytes,
-          tokens: [
-            new PhantasmaNftMintInfo({
-              phantasmaSeriesId: IntX.fromBigInt((1n << 255n) - 1n),
-              rom: publicRom,
-              ram: new Uint8Array(),
-            }),
-          ],
-          maxGas: MINT_NFT_MAX_GAS,
-          maxData: 123n,
-          expiry: VECTOR_EXPIRY,
-        })
+        MintPhantasmaNonFungibleTxHelper.buildTx(
+          {
+            tokenId: 42n,
+            sender: senderBytes,
+            to: receiverBytes,
+            tokens: [
+              new PhantasmaNftMintInfo({
+                phantasmaSeriesId: IntX.fromBigInt((1n << 255n) - 1n),
+                rom: publicRom,
+                ram: new Uint8Array(),
+              }),
+            ],
+          },
+          { maxGas: MINT_NFT_MAX_GAS, maxData: 123n, expiry: VECTOR_EXPIRY }
+        )
       );
     }
     default:

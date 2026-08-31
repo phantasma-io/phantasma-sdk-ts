@@ -20,7 +20,10 @@ export function planAndSignWithKeys(
   config: GasConfig,
   options: PlanAndSignOptions = {}
 ): Uint8Array {
-  if (options.maxGas !== undefined) return TxMsgSigner.signAndSerializeWithKeys(msg, keys);
+  // Whether the fee is already settled is read from the MESSAGE: the builders are what write the
+  // caller's limits into it, so the message is the one place that is right for every helper. The
+  // same rule as `PhantasmaAPI.sendTransaction`.
+  if (msg.maxGas !== 0n) return TxMsgSigner.signAndSerializeWithKeys(msg, keys);
   // Only the witness-array types take their witness count from the caller, and these keys are that
   // caller's answer; for every other type the message fixes its own slots and one key may fill two
   // of them, so passing a count would contradict the message.
