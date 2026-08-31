@@ -105,9 +105,9 @@ const transfer = NativeTxHelper.transferFungible({
   amount: parseUnits('10', 10), // 10 KCAL in atoms
 });
 
-// 2. Plan: the exact gas bill and storage deposit for this message, from the chain's own prices.
+// 2. Plan: the gas bill and storage deposit for this message, from the chain's own prices.
 const plan = await api.fees.plan(transfer);
-console.log(summarizeFeePlan(plan)); // { gasBill: '0.00426', gasOffer: '0.00426', storageCeiling: '0', exact: true }
+console.log(summarizeFeePlan(plan)); // { gasBill: '0.00426', gasOffer: '0.00426', storageCeiling: '0' }
 
 // 3-4. Sign and send - or let sendTransaction do 2-4 in one call.
 const hash = await api.sendTransaction(transfer, keys);
@@ -116,8 +116,9 @@ const hash = await api.sendTransaction(transfer, keys);
 - `api.fees` is the fee planner of the chain the client talks to. It reads `getGasConfig` once,
   keeps it for a minute, and prices every message from the message itself: the signed size is
   computed without a key, and the storage rows, call result bytes and gas sites of each native
-  operation are modelled exactly (`planFees`, `estimateNativeFee`). Only VM scripts and unmodelled
-  calls get an allowance instead of a prediction (`plan.exact === false`).
+  operation are priced with the chain's own formula (`planFees`, `estimateNativeFee`). `plan.kind`
+  says which operation was priced; the one kind that is a budget rather than a formula is
+  `NativeFeeKind.Script` - VM scripts and unmodelled calls, whose work depends on execution.
 - A message the caller has already planned (`maxGas > 0`) is sent as it is. Signing an unplanned
   message is refused, because a zero offer is never admitted.
 - `sendTransaction` runs a pre-flight first. Creating a token and registering a name are charged

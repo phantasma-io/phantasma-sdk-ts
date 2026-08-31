@@ -14,8 +14,6 @@ export interface FeePlanSummary {
    * separately from the fee, as a refundable deposit.
    */
   storageCeiling: string;
-  /** False when the bill is an allowance rather than the exact chain formula (scripts). */
-  exact: boolean;
 }
 
 export interface FeePlanSummaryDecimals {
@@ -36,6 +34,5 @@ export function summarizeFeePlan(
     gasBill: formatUnits(plan.expectedGasBill, gas),
     gasOffer: formatUnits(plan.maxGas, gas),
     storageCeiling: formatUnits(plan.maxData, data),
-    exact: plan.exact,
   };
 }

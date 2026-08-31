@@ -130,7 +130,6 @@ describe('planFees on native transfers', () => {
     const plan = planFees(msg, config);
 
     expect(plan.kind).toBe(NativeFeeKind.TransferFungible);
-    expect(plan.exact).toBe(true);
     expect(plan.envelopeBytes).toBe(170);
     expect(plan.expectedGasBill).toBe(42_600_000n);
     expect(plan.maxGas).toBe(42_600_000n);
@@ -344,7 +343,6 @@ describe('planFees on token calls', () => {
     });
     const scriptPlan = planFees(script, config, oneWitness);
     expect(scriptPlan.kind).toBe(NativeFeeKind.Script);
-    expect(scriptPlan.exact).toBe(false);
 
     const query = new TxMsg(TxTypes.Call, 1_787_000_000_000n, 0n, 0n, payerPub, SmallString.empty);
     const call = new TxMsgCall();
@@ -353,7 +351,7 @@ describe('planFees on token calls', () => {
     call.args = new Uint8Array(40);
     query.msg = call;
     const queryPlan = planFees(query, config, { ...oneWitness, scriptUnitsAllowance: 100n });
-    expect(queryPlan.exact).toBe(false);
+    expect(queryPlan.kind).toBe(NativeFeeKind.Script);
     expect(queryPlan.expectedGasBill).toBe(bill(100n, queryPlan.envelopeBytes + 4 + 512));
   });
 

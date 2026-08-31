@@ -33,7 +33,6 @@ describe('summarizeFeePlan', () => {
       gasBill: '0.004285',
       gasOffer: '0.004285',
       storageCeiling: '0.002',
-      exact: true,
     });
   });
 

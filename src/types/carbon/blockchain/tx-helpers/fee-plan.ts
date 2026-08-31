@@ -76,14 +76,13 @@ export interface FeePlanOptions {
 
 /** A fee plan for one message: the estimate, what it was computed from, and how to apply it. */
 export interface FeePlan extends NativeFeeEstimate {
-  /** The operation the message was recognised as. */
-  kind: NativeFeeKind;
   /**
-   * True when the bill is the exact chain formula for the message and the given state facts.
-   * False for VM scripts and unmodelled calls, whose work depends on execution: there the plan
-   * is the allowance the caller budgeted, not a prediction.
+   * The operation the message was recognised as, which is also what the bill was computed from.
+   * Every kind but {@link NativeFeeKind.Script} is priced with the chain's own formula for that
+   * operation; `Script` covers VM scripts and unmodelled calls, whose work depends on execution and
+   * can only be budgeted (see `scriptUnitsAllowance` and its neighbours).
    */
-  exact: boolean;
+  kind: NativeFeeKind;
   /** The signed size the plan was computed for - the bytes the block will carry. */
   envelopeBytes: number;
   /** A copy of `msg` with `maxGas` and `maxData` set to the plan. The input is left untouched. */
@@ -106,13 +105,12 @@ export function planFees(msg: TxMsg, config: GasConfig, options: FeePlanOptions 
       `${TxTypes[msg.type]} transactions choose their own witnesses: pass witnessCount to plan one`
     );
   }
-  const { kind, params, exact } = describe(msg, options);
+  const { kind, params } = describe(msg, options);
   const envelopeBytes = SignedTxMsg.envelopeBytes(msg, options.witnessCount);
   const estimate = estimateNativeFee(kind, config, { ...params, envelopeBytes });
   return {
     ...estimate,
     kind,
-    exact,
     envelopeBytes,
     apply(target: TxMsg): TxMsg {
       return new TxMsg(
@@ -131,7 +129,6 @@ export function planFees(msg: TxMsg, config: GasConfig, options: FeePlanOptions 
 interface Description {
   kind: NativeFeeKind;
   params: NativeFeeParams;
-  exact: boolean;
 }
 
 function describe(msg: TxMsg, options: FeePlanOptions): Description {
@@ -147,14 +144,14 @@ function describe(msg: TxMsg, options: FeePlanOptions): Description {
     case TxTypes.TransferFungible:
     case TxTypes.TransferFungible_GasPayer: {
       const inner = msg.msg as TxMsgTransferFungible | TxMsgTransferFungibleGasPayer;
-      return exactPlan(NativeFeeKind.TransferFungible, { ...stateFacts, tokenId: inner.tokenId });
+      return describeAs(NativeFeeKind.TransferFungible, { ...stateFacts, tokenId: inner.tokenId });
     }
     case TxTypes.TransferNonFungible_Single:
     case TxTypes.TransferNonFungible_Single_GasPayer: {
       const inner = msg.msg as
         | TxMsgTransferNonFungibleSingle
         | TxMsgTransferNonFungibleSingleGasPayer;
-      return exactPlan(NativeFeeKind.TransferNonFungible, {
+      return describeAs(NativeFeeKind.TransferNonFungible, {
         ...stateFacts,
         tokenId: inner.tokenId,
         count: 1,
@@ -165,7 +162,7 @@ function describe(msg: TxMsg, options: FeePlanOptions): Description {
       const inner = msg.msg as
         | TxMsgTransferNonFungibleMulti
         | TxMsgTransferNonFungibleMultiGasPayer;
-      return exactPlan(NativeFeeKind.TransferNonFungible, {
+      return describeAs(NativeFeeKind.TransferNonFungible, {
         ...stateFacts,
         tokenId: inner.tokenId,
         count: inner.instanceIds.length,
@@ -173,16 +170,16 @@ function describe(msg: TxMsg, options: FeePlanOptions): Description {
     }
     case TxTypes.MintFungible: {
       const inner = msg.msg as TxMsgMintFungible;
-      return exactPlan(NativeFeeKind.MintFungible, { ...stateFacts, tokenId: inner.tokenId });
+      return describeAs(NativeFeeKind.MintFungible, { ...stateFacts, tokenId: inner.tokenId });
     }
     case TxTypes.BurnFungible:
     case TxTypes.BurnFungible_GasPayer: {
       const inner = msg.msg as TxMsgBurnFungible | TxMsgBurnFungibleGasPayer;
-      return exactPlan(NativeFeeKind.BurnFungible, { ...stateFacts, tokenId: inner.tokenId });
+      return describeAs(NativeFeeKind.BurnFungible, { ...stateFacts, tokenId: inner.tokenId });
     }
     case TxTypes.MintNonFungible: {
       const inner = msg.msg as TxMsgMintNonFungible;
-      return exactPlan(NativeFeeKind.MintNonFungible, {
+      return describeAs(NativeFeeKind.MintNonFungible, {
         ...stateFacts,
         tokenId: inner.tokenId,
         romBytes: inner.rom.length,
@@ -195,7 +192,7 @@ function describe(msg: TxMsg, options: FeePlanOptions): Description {
       const inner = msg.msg as TxMsgBurnNonFungible | TxMsgBurnNonFungibleGasPayer;
       // The stored ROM is chain state the message does not carry; the deleted quanta are then
       // a lower bound, which does not touch the bill (deleted rows are refunded, not billed).
-      return exactPlan(NativeFeeKind.BurnNonFungible, {
+      return describeAs(NativeFeeKind.BurnNonFungible, {
         ...stateFacts,
         tokenId: inner.tokenId,
         count: 1,
@@ -229,7 +226,7 @@ function describeCall(
         // was given, metadata included, and measured bills confirm the row equals the arguments.
         // Which extra rows the creation writes is decided by the metadata, which is a named struct
         // the plan can read.
-        return exactPlan(NativeFeeKind.CreateToken, {
+        return describeAs(NativeFeeKind.CreateToken, {
           symbolLength: info.symbol.data.length,
           tokenInfoBytes: call.args.length,
           nonFungible: (info.flags & CarbonTokenFlags.NonFungible) !== 0,
@@ -240,7 +237,7 @@ function describeCall(
       }
       case TokenContractMethods.CreateTokenSeries:
         // The arguments are the u64 token id followed by the SeriesInfo, which becomes the row.
-        return exactPlan(NativeFeeKind.CreateTokenSeries, {
+        return describeAs(NativeFeeKind.CreateTokenSeries, {
           seriesInfoBytes: Math.max(call.args.length - 8, 0),
           seriesHasMetaId: options.seriesHasMetaId ?? true,
         });
@@ -250,7 +247,7 @@ function describeCall(
         // duplicated mint touches - which is what the chain's per-series supply read costs follow -
         // is readable from the call and never has to be supplied by the caller.
         const seriesIds = new Set(args.tokens.map((t) => t.phantasmaSeriesId.toBigInt()));
-        return exactPlan(NativeFeeKind.MintPhantasmaNonFungible, {
+        return describeAs(NativeFeeKind.MintPhantasmaNonFungible, {
           ...stateFacts,
           tokenId: args.tokenId,
           count: args.tokens.length,
@@ -272,13 +269,13 @@ function describeCall(
     const reader = new CarbonBinaryReader(call.args);
     reader.read32();
     const name = SmallString.read(reader);
-    return exactPlan(NativeFeeKind.RegisterName, { nameLength: name.data.length });
+    return describeAs(NativeFeeKind.RegisterName, { nameLength: name.data.length });
   }
   return scriptPlan(options);
 }
 
-function exactPlan(kind: NativeFeeKind, params: NativeFeeParams): Description {
-  return { kind, params, exact: true };
+function describeAs(kind: NativeFeeKind, params: NativeFeeParams): Description {
+  return { kind, params };
 }
 
 function scriptPlan(options: FeePlanOptions): Description {
@@ -289,6 +286,5 @@ function scriptPlan(options: FeePlanOptions): Description {
       scriptEventBytes: options.scriptEventBytes,
       scriptStorageQuanta: options.scriptStorageQuanta,
     },
-    exact: false,
   };
 }
