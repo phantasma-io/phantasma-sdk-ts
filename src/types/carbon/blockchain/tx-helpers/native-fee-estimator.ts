@@ -68,7 +68,10 @@ export interface NativeFeeParams {
   tokenId?: bigint;
   /** The recipient already holds this token, so its balance row exists and costs nothing. Default false. */
   recipientHoldsToken?: boolean;
-  /** The recipient is an NFT-derived address (an infusion): the transfer pays one extra query fee. */
+  /**
+   * The recipient is an NFT-derived address (an infusion): the chain reads that NFT's owner - one
+   * extra query fee. Transfers and every mint kind pay it; a burn has no recipient.
+   */
   toIsNftAddress?: boolean;
   /** Big-fungible token (int256 balances): the Call result of a fungible mint / burn is up to 33 bytes instead of 9. */
   bigFungible?: boolean;
@@ -382,7 +385,7 @@ function operationModel(
       };
     case NativeFeeKind.MintFungible:
       return {
-        workUnits: config.gasFeeTransfer,
+        workUnits: clampU64(config.gasFeeTransfer + infusionQuery),
         policyFee: 0n,
         resultBytes: balanceResultBytes,
         newQuanta: recipientRow,
@@ -409,7 +412,7 @@ function operationModel(
         if (romHasMetaId) quanta += 1;
       }
       return {
-        workUnits: clampU64(config.gasFeeTransfer * countU),
+        workUnits: clampU64(config.gasFeeTransfer * countU + infusionQuery),
         policyFee: 0n,
         resultBytes: 4 + 8 * count, // instance count + one u64 instance id each
         newQuanta: quanta,
@@ -437,7 +440,8 @@ function operationModel(
       return {
         workUnits: clampU64(
           (config.gasFeeTransfer + config.gasFeeQuery * queriesPerInstance) * countU +
-            config.gasFeeQuery * seriesSupplyQueries
+            config.gasFeeQuery * seriesSupplyQueries +
+            infusionQuery
         ),
         policyFee: 0n,
         resultBytes: 4 + 40 * count, // instance count + (32-byte Phantasma id + u64 instance id) each
