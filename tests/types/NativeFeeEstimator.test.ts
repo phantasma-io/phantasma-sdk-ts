@@ -569,6 +569,28 @@ describe('estimateNativeFee guard rails', () => {
     expect(phantasmaCanonicalRomBytes(182)).toBe(400);
   });
 
+  // The chain's length-halved fee is defined up to 64 characters, and the calculator refuses to
+  // price anything longer. A 64-character name is the longest priceable one and must still price.
+  it('refuses to price a name or symbol past the length the chain can shift', () => {
+    const config = v2Config();
+    const longest = estimateNativeFee(NativeFeeKind.RegisterName, config, {
+      envelopeBytes: 300,
+      nameLength: 64,
+    });
+    expect(longest.expectedGasBill).toBeGreaterThan(0n);
+
+    expect(() =>
+      estimateNativeFee(NativeFeeKind.RegisterName, config, { envelopeBytes: 300, nameLength: 65 })
+    ).toThrow(/cannot be priced offline/);
+    expect(() =>
+      estimateNativeFee(NativeFeeKind.CreateToken, config, {
+        envelopeBytes: 300,
+        symbolLength: 65,
+        tokenInfoBytes: 100,
+      })
+    ).toThrow(/cannot be priced offline/);
+  });
+
   // Impossible inputs are rejected instead of quoting fees for txs the chain would never admit.
   it('rejects invalid inputs', () => {
     expect(() =>

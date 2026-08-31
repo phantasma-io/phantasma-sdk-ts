@@ -579,6 +579,13 @@ function mulShift(value: bigint, multiplier: bigint, shift: number): bigint {
   return clampU64((value * multiplier) >> BigInt(shift));
 }
 
+/**
+ * Longest name or symbol this calculator will price. The chain's length-halved policy fee is
+ * defined up to here; past it no offline price exists, so the calculator refuses rather than
+ * quote a number the chain may not agree with.
+ */
+const MAX_PRICEABLE_LENGTH = 64;
+
 function symbolShift(length: number, maxLength: number, paramName: string): bigint {
   assertNonNegativeInteger(length, paramName);
   if (length === 0) return 0n;
@@ -587,6 +594,13 @@ function symbolShift(length: number, maxLength: number, paramName: string): bigi
   // be admitted, so reject it here instead of quoting a fee for an impossible tx.
   if (maxLength !== 0 && shift >= maxLength) {
     throw new RangeError(`${paramName} ${length} exceeds the chain maximum ${maxLength}`);
+  }
+  // Refusing beats guessing: see MAX_PRICEABLE_LENGTH. The transaction may well be admitted - this
+  // says only that no honest price can be quoted for it offline.
+  if (length > MAX_PRICEABLE_LENGTH) {
+    throw new RangeError(
+      `${paramName} ${length} is longer than ${MAX_PRICEABLE_LENGTH} and cannot be priced offline`
+    );
   }
   return BigInt(shift);
 }
