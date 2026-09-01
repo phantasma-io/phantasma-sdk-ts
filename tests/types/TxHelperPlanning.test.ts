@@ -11,14 +11,13 @@ import { TokenSchemasBuilder } from '../../src/types/carbon/blockchain/modules/b
 import { PhantasmaNftMintInfo } from '../../src/types/carbon/blockchain/modules/phantasma-nft-mint-info';
 import { CreateTokenSeriesTxHelper } from '../../src/types/carbon/blockchain/tx-helpers/create-token-series-tx-helper';
 import { CreateTokenTxHelper } from '../../src/types/carbon/blockchain/tx-helpers/create-token-tx-helper';
-import { MintNonFungibleTxHelper } from '../../src/types/carbon/blockchain/tx-helpers/mint-non-fungible-tx-helper';
 import { MintPhantasmaNonFungibleTxHelper } from '../../src/types/carbon/blockchain/tx-helpers/mint-phantasma-non-fungible-tx-helper';
 import { PhantasmaKeys } from '../../src/types/phantasma-keys';
 
 // Every `buildTxAndSign` helper follows one rule: a message whose `maxGas` the caller already set
 // is signed as it stands, and only an unplanned one is priced. The rule is read from the MESSAGE,
 // not from the options argument, because the builders are what write the caller's limits into the
-// message; this file holds all four helpers to that one rule.
+// message. This file holds every buildTxAndSign helper to that one rule.
 
 function mainnetConfig(): GasConfig {
   return new GasConfig({
@@ -119,33 +118,6 @@ const helpers: Array<{
         maxData: FIXED_MAX_DATA,
       }),
     unplanned: () => CreateTokenSeriesTxHelper.buildTxAndSign(9n, seriesInfo(), KEYS, config),
-  },
-  {
-    name: 'MintNonFungibleTxHelper',
-    withLimits: () =>
-      MintNonFungibleTxHelper.buildTxAndSign(
-        9n,
-        1,
-        KEYS,
-        receiver,
-        new Uint8Array(64),
-        new Uint8Array(),
-        config,
-        {
-          maxGas: FIXED_MAX_GAS,
-          maxData: FIXED_MAX_DATA,
-        }
-      ),
-    unplanned: () =>
-      MintNonFungibleTxHelper.buildTxAndSign(
-        9n,
-        1,
-        KEYS,
-        receiver,
-        new Uint8Array(64),
-        new Uint8Array(),
-        config
-      ),
   },
   {
     name: 'MintPhantasmaNonFungibleTxHelper',

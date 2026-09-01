@@ -169,7 +169,6 @@ export {
   FieldType,
   IntX,
   MetadataField,
-  MintNonFungibleTxHelper,
   MintPhantasmaNonFungibleTxHelper,
   ModuleId,
   NativeTxHelper,

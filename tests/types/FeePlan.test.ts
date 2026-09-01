@@ -7,6 +7,7 @@ import { GasConfig } from '../../src/types/carbon/blockchain/gas-config';
 import { ModuleId } from '../../src/types/carbon/blockchain/module-id';
 import { TxMsg } from '../../src/types/carbon/blockchain/tx-msg';
 import { TxMsgCall } from '../../src/types/carbon/blockchain/tx-msg-call';
+import { TxMsgMintNonFungible } from '../../src/types/carbon/blockchain/tx-msg-mint-non-fungible';
 import { TxMsgPhantasma } from '../../src/types/carbon/blockchain/tx-msg-phantasma';
 import { TxMsgTransferFungible } from '../../src/types/carbon/blockchain/tx-msg-transfer-fungible';
 import { TxMsgTransferFungibleGasPayer } from '../../src/types/carbon/blockchain/tx-msg-transfer-fungible-gas-payer';
@@ -21,7 +22,6 @@ import { CreateTokenSeriesTxHelper } from '../../src/types/carbon/blockchain/tx-
 import { CreateTokenTxHelper } from '../../src/types/carbon/blockchain/tx-helpers/create-token-tx-helper';
 import { PhantasmaNftMintInfo } from '../../src/types/carbon/blockchain/modules/phantasma-nft-mint-info';
 import { TxMsgTransferNonFungibleMulti } from '../../src/types/carbon/blockchain/tx-msg-transfer-non-fungible-multi';
-import { MintNonFungibleTxHelper } from '../../src/types/carbon/blockchain/tx-helpers/mint-non-fungible-tx-helper';
 import { MintPhantasmaNonFungibleArgs } from '../../src/types/carbon/blockchain/modules/mint-phantasma-non-fungible-args';
 import { planFees } from '../../src/types/carbon/blockchain/tx-helpers/fee-plan';
 import { NativeFeeKind } from '../../src/types/carbon/blockchain/tx-helpers/native-fee-estimator';
@@ -311,13 +311,22 @@ describe('planFees on token calls', () => {
   });
 
   it('plans a raw NFT mint with its ROM as stored', () => {
-    const msg = MintNonFungibleTxHelper.buildTx(
-      9n,
-      1,
+    // Built as the raw wire message: the chain still admits the type where its token config
+    // allows it, but the SDK no longer ships a builder for it.
+    const msg = new TxMsg(
+      TxTypes.MintNonFungible,
+      0n,
+      0n,
+      0n,
       payerPub,
-      ownerPub,
-      new Uint8Array(100),
-      new Uint8Array()
+      SmallString.empty,
+      new TxMsgMintNonFungible({
+        tokenId: 9n,
+        seriesId: 1,
+        to: ownerPub,
+        rom: new Uint8Array(100),
+        ram: new Uint8Array(),
+      })
     );
     const plan = planFees(msg, config);
     expect(plan.kind).toBe(NativeFeeKind.MintNonFungible);
