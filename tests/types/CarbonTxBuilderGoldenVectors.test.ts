@@ -11,6 +11,7 @@ import {
   TxMsg,
   TxMsgBurnFungibleGasPayer,
   TxMsgMintFungible,
+  TxMsgMintNonFungible,
   TxMsgTransferFungible,
   TxMsgTransferFungibleGasPayer,
 } from '../../src/core/types/Carbon/Blockchain';
@@ -18,7 +19,6 @@ import { TxMsgSigner } from '../../src/core/types/Carbon/Blockchain/Extensions/T
 import {
   CreateTokenSeriesTxHelper,
   CreateTokenTxHelper,
-  MintNonFungibleTxHelper,
   MintPhantasmaNonFungibleTxHelper,
 } from '../../src/core/types/Carbon/Blockchain/TxHelpers';
 import {
@@ -157,15 +157,23 @@ function carbonTxBuilderVector(caseId: string): string {
     case 'mint_non_fungible_u256_nft_id': {
       const schemas = TokenSchemasBuilder.prepareStandard(false);
       const rom = NftRomBuilder.buildAndSerialize(schemas.rom, (1n << 256n) - 1n, nftMetadata());
+      // The native-mint builder is gone from the SDK; the wire type stays, and so do its pinned
+      // bytes - the message is assembled directly.
       return serializeTx(
-        MintNonFungibleTxHelper.buildTx(
-          (1n << 64n) - 1n,
-          0xffffffff,
+        new TxMsg(
+          TxTypes.MintNonFungible,
+          VECTOR_EXPIRY,
+          MINT_NFT_MAX_GAS,
+          VECTOR_MAX_DATA,
           senderBytes,
-          senderBytes,
-          rom,
-          new Uint8Array(),
-          { maxGas: MINT_NFT_MAX_GAS, maxData: VECTOR_MAX_DATA, expiry: VECTOR_EXPIRY }
+          SmallString.empty,
+          new TxMsgMintNonFungible({
+            tokenId: (1n << 64n) - 1n,
+            seriesId: 0xffffffff,
+            to: senderBytes,
+            rom,
+            ram: new Uint8Array(),
+          })
         )
       );
     }

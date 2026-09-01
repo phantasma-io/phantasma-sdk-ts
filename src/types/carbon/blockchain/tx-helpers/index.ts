@@ -6,5 +6,4 @@ export { DEFAULT_TX_EXPIRY_MS, expiryWithin, type TxLimits } from './tx-limits.j
 export * from './fee-plan.js';
 export * from './fee-plan-summary.js';
 export * from './mint-phantasma-non-fungible-tx-helper.js';
-export * from './mint-non-fungible-tx-helper.js';
 export * from './native-fee-estimator.js';

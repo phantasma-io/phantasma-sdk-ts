@@ -38,7 +38,6 @@ import {
 import {
   CreateTokenSeriesTxHelper,
   CreateTokenTxHelper,
-  MintNonFungibleTxHelper,
 } from '../../src/core/types/Carbon/Blockchain/TxHelpers';
 import {
   VmDynamicStruct,
@@ -343,14 +342,21 @@ const carbonVectorTx = (kind: Kind): TxMsg => {
         (1n << 256n) - 1n,
         standardNftMetadata()
       );
-      return MintNonFungibleTxHelper.buildTx(
-        (1n << 64n) - 1n,
-        0xffffffff,
+      // The raw wire message: the native-mint builder is gone from the SDK, the type is not.
+      return new TxMsg(
+        TxTypes.MintNonFungible,
+        1759711416000n,
+        10000n * 1000n,
+        100000000n,
         senderPub,
-        senderPub,
-        rom,
-        new Uint8Array(),
-        { maxGas: 10000n * 1000n, maxData: 100000000n, expiry: 1759711416000n }
+        SmallString.empty,
+        new TxMsgMintNonFungible({
+          tokenId: (1n << 64n) - 1n,
+          seriesId: 0xffffffff,
+          to: senderPub,
+          rom,
+          ram: new Uint8Array(),
+        })
       );
     }
     default:
