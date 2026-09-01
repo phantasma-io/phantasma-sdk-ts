@@ -73,7 +73,13 @@ export interface NativeFeeParams {
    * extra query fee. Transfers and every mint kind pay it; a burn has no recipient.
    */
   toIsNftAddress?: boolean;
-  /** Big-fungible token (int256 balances): the Call result of a fungible mint / burn is up to 33 bytes instead of 9. */
+  /**
+   * The token's balances can exceed int64 (a big-fungible token). A fungible mint or burn answers
+   * with the RESULTING balance as a variable-length integer - 9 bytes while it fits int64, up to
+   * 33 for an int256 balance - and the resulting balance is chain state, so the default prices the
+   * 33-byte maximum: a covering bound, refunded down. Pass `false` for an ordinary int64 token and
+   * the estimate is exact.
+   */
   bigFungible?: boolean;
   /** The token has been burned before, so its burnt counter row exists. Default false (first burn creates it). */
   tokenBurnedBefore?: boolean;
@@ -361,7 +367,8 @@ function operationModel(
     (params.tokenId === config.gasTokenId || params.tokenId === config.dataTokenId);
   const recipientRow = params.recipientHoldsToken || freeBalanceRows ? 0 : 1;
   const burntRow = params.tokenBurnedBefore || freeBalanceRows ? 0 : 1;
-  const balanceResultBytes = params.bigFungible ? INTX_BIG_RESULT_BYTES : INTX_SMALL_RESULT_BYTES;
+  const balanceResultBytes =
+    (params.bigFungible ?? true) ? INTX_BIG_RESULT_BYTES : INTX_SMALL_RESULT_BYTES;
   const infusionQuery = params.toIsNftAddress ? config.gasFeeQuery : 0n;
 
   switch (kind) {

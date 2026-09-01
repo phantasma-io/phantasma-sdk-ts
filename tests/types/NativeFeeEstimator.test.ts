@@ -110,15 +110,25 @@ describe('estimateNativeFee against settled v2 transactions', () => {
     expect(estimate.expectedGasBill).toBe(44_600_000n);
   });
 
-  // A native MintFungible of 171 bytes into a fresh holder. The call returns the new balance as a
-  // 9-byte IntX, and a call result is block data exactly like the envelope.
-  it('bills a fungible mint with its 9-byte result', () => {
+  // A native MintFungible of 171 bytes into a fresh holder. The call returns the new balance, and
+  // a call result is block data exactly like the envelope. The result's size depends on the
+  // balance it reports: 9 bytes while it fits int64, up to 33 beyond - so stating `bigFungible:
+  // false` prices the 9-byte result exactly, and leaving it unstated prices the 33-byte maximum,
+  // 24 bytes of block data more.
+  it('bills a fungible mint with its 9-byte result when the token is declared small', () => {
     const estimate = estimateNativeFee(NativeFeeKind.MintFungible, v2Config(), {
       envelopeBytes: 171,
       tokenId: 97n,
+      bigFungible: false,
     });
     expect(estimate.expectedGasBill).toBe(45_350_000n);
     expect(estimate.maxData).toBe(200_000n);
+
+    const defaulted = estimateNativeFee(NativeFeeKind.MintFungible, v2Config(), {
+      envelopeBytes: 171,
+      tokenId: 97n,
+    });
+    expect(defaulted.expectedGasBill - estimate.expectedGasBill).toBe(24n * 25n * 10_000n);
   });
 
   // An NFT transfer of 170 bytes into a fresh holder. The owner's lookup row is
