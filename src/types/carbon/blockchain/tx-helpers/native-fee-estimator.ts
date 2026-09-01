@@ -70,7 +70,9 @@ export interface NativeFeeParams {
   recipientHoldsToken?: boolean;
   /**
    * The recipient is an NFT-derived address (an infusion): the chain reads that NFT's owner - one
-   * extra query fee. Transfers and every mint kind pay it; a burn has no recipient.
+   * extra query fee. Transfers and every mint kind pay it; a burn has no recipient. This is a fact
+   * of the recipient's address form, not of chain state - `planFees` derives it from the message's
+   * own recipient (`TokenHelper.isNftAddress`) - so only direct callers of this calculator pass it.
    */
   toIsNftAddress?: boolean;
   /**

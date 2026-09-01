@@ -14,6 +14,7 @@ import { TxMsgTransferFungibleGasPayer } from '../../src/types/carbon/blockchain
 import { TxMsgSigner } from '../../src/types/carbon/blockchain/extensions/tx-msg-signer';
 import { StandardMeta } from '../../src/types/carbon/blockchain/modules/standard-meta';
 import { TokenContractMethods } from '../../src/types/carbon/blockchain/modules/token-contract-methods';
+import { TokenHelper } from '../../src/types/carbon/blockchain/modules/token-helper';
 import { SeriesInfoBuilder } from '../../src/types/carbon/blockchain/modules/builders/series-info-builder';
 import { TokenInfoBuilder } from '../../src/types/carbon/blockchain/modules/builders/token-info-builder';
 import { TokenMetadataBuilder } from '../../src/types/carbon/blockchain/modules/builders/token-metadata-builder';
@@ -112,13 +113,13 @@ const phantasmaMint = (seriesId: bigint, romBytes: number) =>
 // assembled directly instead of through the builder: the two are exercised together in the
 // builder's own tests, and a planner test that went through a builder would not say which of them
 // broke.
-const phantasmaMintCall = (tokens: PhantasmaNftMintInfo[]) => {
+const phantasmaMintCall = (tokens: PhantasmaNftMintInfo[], recipient: Bytes32 = ownerPub) => {
   const msg = new TxMsg(TxTypes.Call, 1_787_000_000_000n, 0n, 0n, payerPub, SmallString.empty);
   const call = new TxMsgCall();
   call.moduleId = ModuleId.Token;
   call.methodId = TokenContractMethods.MintPhantasmaNonFungible;
   const w = new CarbonBinaryWriter();
-  new MintPhantasmaNonFungibleArgs({ tokenId: 9n, address: ownerPub, tokens }).write(w);
+  new MintPhantasmaNonFungibleArgs({ tokenId: 9n, address: recipient, tokens }).write(w);
   call.args = w.toUint8Array();
   msg.msg = call;
   return msg;
@@ -282,6 +283,37 @@ describe('planFees on token calls', () => {
 
     expect(assumed.expectedGasBill).toBe(duplicated.expectedGasBill);
     expect(assumed.expectedGasBill).toBeGreaterThan(unique.expectedGasBill);
+  });
+
+  // Whether the recipient is an NFT-derived address decides one query fee, and the address is in
+  // the message, so the planner reads it there instead of asking. A user address adds nothing; the
+  // NFT form does; a zero instance id is not an NFT address, exactly as the chain reads it.
+  it('reads the NFT-address recipient out of the message and prices its owner lookup', () => {
+    const toAddress = (to: Bytes32) => {
+      const msg = new TxMsg(
+        TxTypes.TransferFungible,
+        1_787_000_000_000n,
+        0n,
+        0n,
+        payerPub,
+        SmallString.empty
+      );
+      msg.msg = new TxMsgTransferFungible(to, config.gasTokenId, 10n);
+      return planFees(msg, config).expectedGasBill;
+    };
+    const plain = toAddress(ownerPub);
+    expect(toAddress(TokenHelper.getNftAddress(9n, 1n)) - plain).toBe(100_000n);
+    expect(toAddress(TokenHelper.getNftAddress(9n, 0n))).toBe(plain);
+
+    // Every mint kind pays the same owner lookup once per call; the Phantasma call carries its
+    // recipient in the arguments and the planner reads it out of there just the same.
+    const mint = phantasmaMintCall([phantasmaMint(7n, 182)], TokenHelper.getNftAddress(9n, 1n));
+    const infused = planFees(mint, config, { ...oneWitness, duplicatedSeries: false });
+    const normal = planFees(phantasmaMintCall([phantasmaMint(7n, 182)]), config, {
+      ...oneWitness,
+      duplicatedSeries: false,
+    });
+    expect(infused.expectedGasBill - normal.expectedGasBill).toBe(100_000n);
   });
 
   // The multi-instance NFT transfer is the mirror case: each instance deletes the sender's lookup

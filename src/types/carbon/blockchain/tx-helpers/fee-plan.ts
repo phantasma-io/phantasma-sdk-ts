@@ -8,6 +8,7 @@ import { ModuleId } from '../module-id.js';
 import { MintPhantasmaNonFungibleArgs } from '../modules/mint-phantasma-non-fungible-args.js';
 import { StandardMeta } from '../modules/standard-meta.js';
 import { TokenContractMethods } from '../modules/token-contract-methods.js';
+import { TokenHelper } from '../modules/token-helper.js';
 import { TokenInfo } from '../modules/token-info.js';
 import { SignedTxMsg } from '../signed-tx-msg.js';
 import { TxMsg } from '../tx-msg.js';
@@ -42,8 +43,8 @@ export interface FeePlanOptions extends Pick<
   NativeFeeParams,
   // Taken from NativeFeeParams rather than re-declared, so each fact keeps one definition, one
   // default and one doc comment. The facts the message itself carries - counts, sizes, token ids,
-  // `nonFungible`, `pre_burn` - are deliberately absent: `planFees` reads those out of the message,
-  // and a caller-supplied value could only contradict it.
+  // the NFT-address recipient, `nonFungible`, `pre_burn` - are deliberately absent: `planFees`
+  // reads those out of the message, and a caller-supplied value could only contradict it.
   //
   // Every one of these is optional and most callers pass none. Roughly in order of how likely a
   // caller is to know the answer:
@@ -52,7 +53,6 @@ export interface FeePlanOptions extends Pick<
   | 'recipientHoldsToken'
   | 'bigFungible'
   | 'tokenBurnedBefore'
-  | 'toIsNftAddress'
   // these need the token's schema or the series' metadata, so pass them only if you read them:
   | 'duplicatedSeries'
   | 'romHasMetaId'
@@ -134,10 +134,10 @@ interface Description {
 
 function describe(msg: TxMsg, options: FeePlanOptions): Description {
   // Passed through undefined and all: the calculator owns every default, so no default is decided
-  // in two places.
+  // in two places. Whether the recipient is an NFT-derived address is NOT here: the address form
+  // decides it, and the message carries the address, so each branch below reads it out.
   const stateFacts: NativeFeeParams = {
     recipientHoldsToken: options.recipientHoldsToken,
-    toIsNftAddress: options.toIsNftAddress,
     bigFungible: options.bigFungible,
     tokenBurnedBefore: options.tokenBurnedBefore,
     romHasMetaId: options.romHasMetaId,
@@ -147,7 +147,11 @@ function describe(msg: TxMsg, options: FeePlanOptions): Description {
     case TxTypes.TransferFungible:
     case TxTypes.TransferFungible_GasPayer: {
       const inner = msg.msg as TxMsgTransferFungible | TxMsgTransferFungibleGasPayer;
-      return describeAs(NativeFeeKind.TransferFungible, { ...stateFacts, tokenId: inner.tokenId });
+      return describeAs(NativeFeeKind.TransferFungible, {
+        ...stateFacts,
+        tokenId: inner.tokenId,
+        toIsNftAddress: TokenHelper.isNftAddress(inner.to),
+      });
     }
     case TxTypes.TransferNonFungible_Single:
     case TxTypes.TransferNonFungible_Single_GasPayer: {
@@ -158,6 +162,7 @@ function describe(msg: TxMsg, options: FeePlanOptions): Description {
         ...stateFacts,
         tokenId: inner.tokenId,
         count: 1,
+        toIsNftAddress: TokenHelper.isNftAddress(inner.to),
       });
     }
     case TxTypes.TransferNonFungible_Multi:
@@ -169,11 +174,16 @@ function describe(msg: TxMsg, options: FeePlanOptions): Description {
         ...stateFacts,
         tokenId: inner.tokenId,
         count: inner.instanceIds.length,
+        toIsNftAddress: TokenHelper.isNftAddress(inner.to),
       });
     }
     case TxTypes.MintFungible: {
       const inner = msg.msg as TxMsgMintFungible;
-      return describeAs(NativeFeeKind.MintFungible, { ...stateFacts, tokenId: inner.tokenId });
+      return describeAs(NativeFeeKind.MintFungible, {
+        ...stateFacts,
+        tokenId: inner.tokenId,
+        toIsNftAddress: TokenHelper.isNftAddress(inner.to),
+      });
     }
     case TxTypes.BurnFungible:
     case TxTypes.BurnFungible_GasPayer: {
@@ -187,6 +197,7 @@ function describe(msg: TxMsg, options: FeePlanOptions): Description {
         tokenId: inner.tokenId,
         romBytes: inner.rom.length,
         ramBytes: inner.ram.length,
+        toIsNftAddress: TokenHelper.isNftAddress(inner.to),
       });
     }
     case TxTypes.BurnNonFungible:
@@ -257,6 +268,7 @@ function describeCall(
           ramBytes: args.tokens.map((t) => t.ram.length),
           duplicatedSeries: options.duplicatedSeries,
           distinctSeriesCount: seriesIds.size,
+          toIsNftAddress: TokenHelper.isNftAddress(args.address),
         });
       }
       default:
