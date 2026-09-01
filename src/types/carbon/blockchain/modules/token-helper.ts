@@ -21,6 +21,22 @@ export class TokenHelper {
     return new Bytes32(w.toUint8Array());
   }
 
+  /**
+   * Whether a 32-byte address is an NFT-derived address - the address every minted instance owns,
+   * which assets are sent to when they are infused into that NFT. The form is syntactic, the same
+   * test the chain applies: fifteen zero bytes, a 0x01 marker, then a nonzero token id and a
+   * nonzero instance id. `planFees` uses it to price the recipient's owner lookup.
+   */
+  static isNftAddress(address: Bytes32 | Uint8Array): boolean {
+    const bytes = address instanceof Bytes32 ? address.bytes : address;
+    if (bytes.length !== 32 || bytes[15] !== 1) return false;
+    for (let i = 0; i !== 15; i++) {
+      if (bytes[i] !== 0) return false;
+    }
+    const unpacked = this.unpackNftAddress(bytes);
+    return unpacked.carbonTokenId !== 0n && unpacked.instanceId !== 0n;
+  }
+
   private static readUint64LE(bytes: Uint8Array, offset: number): bigint {
     let result = 0n;
     for (let i = 0; i < 8; i++) {
