@@ -53,6 +53,7 @@ export interface FeePlanOptions extends Pick<
   | 'recipientHoldsToken'
   | 'bigFungible'
   | 'tokenBurnedBefore'
+  | 'supplyRowExists'
   // these need the token's schema or the series' metadata, so pass them only if you read them:
   | 'duplicatedSeries'
   | 'romHasMetaId'
@@ -140,6 +141,7 @@ function describe(msg: TxMsg, options: FeePlanOptions): Description {
     recipientHoldsToken: options.recipientHoldsToken,
     bigFungible: options.bigFungible,
     tokenBurnedBefore: options.tokenBurnedBefore,
+    supplyRowExists: options.supplyRowExists,
     romHasMetaId: options.romHasMetaId,
   };
 

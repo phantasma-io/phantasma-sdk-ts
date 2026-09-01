@@ -187,9 +187,10 @@ describe('Phantasma deterministic mint helpers', () => {
 
     expect(fromRestored.maxGas).toBe(fromLive.maxGas);
     expect(fromRestored.maxData).toBe(fromLive.maxData);
-    // And the plan is a real one, not a zero offer both paths happened to agree on.
+    // And the plan is a real one, not a zero offer both paths happened to agree on: the mint's
+    // five rows plus the supply row an unstated plan covers.
     expect(fromRestored.maxGas).toBeGreaterThan(0n);
-    expect(fromRestored.maxData).toBe(5n * live.dataEscrowPerRow);
+    expect(fromRestored.maxData).toBe(6n * live.dataEscrowPerRow);
   });
 
   it('MintPhantasmaNonFungibleTxHelper.parseResult preserves both ids', () => {

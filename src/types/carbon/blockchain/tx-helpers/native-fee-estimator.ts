@@ -85,6 +85,16 @@ export interface NativeFeeParams {
   bigFungible?: boolean;
   /** The token has been burned before, so its burnt counter row exists. Default false (first burn creates it). */
   tokenBurnedBefore?: boolean;
+  /**
+   * The token's supply-tracking row exists. The chain drops that row when its balance reaches
+   * exactly zero, so this is chain state with two absent-row edges: a limited-supply token whose
+   * entire supply is in circulation (the next burn recreates the row) and an unlimited token with
+   * nothing outstanding (the next mint recreates it). Unstated, every mint and burn prices the
+   * recreation - one more storage quantum in the bill and the escrow ceiling - so the default
+   * covers both edges; pass `true` for the exact quote whenever the token is not at one of them.
+   * Rows of the chain's gas and data tokens are free either way.
+   */
+  supplyRowExists?: boolean;
   /** Token symbol length in characters (CreateToken). 0 = no symbol. */
   symbolLength?: number;
   /** Serialized `TokenInfo` length (CreateToken) - the Call arguments; it becomes the token-info row. */
@@ -369,6 +379,9 @@ function operationModel(
     (params.tokenId === config.gasTokenId || params.tokenId === config.dataTokenId);
   const recipientRow = params.recipientHoldsToken || freeBalanceRows ? 0 : 1;
   const burntRow = params.tokenBurnedBefore || freeBalanceRows ? 0 : 1;
+  // The supply-tracking row a mint or burn may have to recreate (see NativeFeeParams). Transfers
+  // never touch it, and a creation writes it unconditionally, so only mints and burns price it.
+  const supplyRow = params.supplyRowExists || freeBalanceRows ? 0 : 1;
   const balanceResultBytes =
     (params.bigFungible ?? true) ? INTX_BIG_RESULT_BYTES : INTX_SMALL_RESULT_BYTES;
   const infusionQuery = params.toIsNftAddress ? config.gasFeeQuery : 0n;
@@ -397,7 +410,7 @@ function operationModel(
         workUnits: clampU64(config.gasFeeTransfer + infusionQuery),
         policyFee: 0n,
         resultBytes: balanceResultBytes,
-        newQuanta: recipientRow,
+        newQuanta: recipientRow + supplyRow,
         deletedQuanta: 0,
       };
     case NativeFeeKind.BurnFungible:
@@ -405,16 +418,17 @@ function operationModel(
         workUnits: config.gasFeeTransfer,
         policyFee: 0n,
         resultBytes: balanceResultBytes,
-        newQuanta: burntRow,
+        newQuanta: burntRow + supplyRow,
         deletedQuanta: 0,
       };
     case NativeFeeKind.MintNonFungible: {
       const roms = perInstance(params.romBytes, count, 'romBytes');
       const rams = perInstance(params.ramBytes, count, 'ramBytes');
       // Per instance: the instance row (ROM), the owner row, the lookup row, the RAM row when
-      // RAM is given, the meta-id row when the ROM carries `_i`; plus the recipient's balance row.
+      // RAM is given, the meta-id row when the ROM carries `_i`; plus the recipient's balance row
+      // and the supply row when it must be recreated.
       const romHasMetaId = params.romHasMetaId ?? true;
-      let quanta = recipientRow;
+      let quanta = recipientRow + supplyRow;
       for (let i = 0; i < count; i++) {
         quanta += storageQuantaFor(NFT_INSTANCE_ROW_OVERHEAD + roms[i]) + 2;
         if (rams[i] > 0) quanta += storageQuantaFor(NFT_RAM_ROW_OVERHEAD + rams[i]);
@@ -432,7 +446,7 @@ function operationModel(
       const roms = perInstance(params.romBytes, count, 'romBytes');
       const rams = perInstance(params.ramBytes, count, 'ramBytes');
       // As MintNonFungible, with the canonical ROM stored and the meta-id row always present.
-      let quanta = recipientRow;
+      let quanta = recipientRow + supplyRow;
       for (let i = 0; i < count; i++) {
         quanta +=
           storageQuantaFor(NFT_INSTANCE_ROW_OVERHEAD + phantasmaCanonicalRomBytes(roms[i])) + 3;
@@ -462,10 +476,11 @@ function operationModel(
       const roms = perInstance(params.romBytes, count, 'romBytes');
       const rams = perInstance(params.ramBytes, count, 'ramBytes');
       // The instance, owner, lookup (and RAM, meta-id) rows are deleted and refunded; the burnt
-      // counter row is created on the token's first burn. Each instance's infusion sweep reads the
-      // NFT address balances twice. The deleted rows mirror what the mint created, which is why the
-      // meta-id row is counted the same way here - but see `deletedStorageQuanta`: on a burn this
-      // total is reported, never billed.
+      // counter row is created on the token's first burn, and the supply row when it must be
+      // recreated. Each instance's infusion sweep reads the NFT address balances twice. The
+      // deleted rows mirror what the mint created, which is why the meta-id row is counted the
+      // same way here - but see `deletedStorageQuanta`: on a burn this total is reported, never
+      // billed.
       const romHasMetaId = params.romHasMetaId ?? true;
       let deleted = 0;
       for (let i = 0; i < count; i++) {
@@ -477,7 +492,7 @@ function operationModel(
         workUnits: clampU64((config.gasFeeTransfer + config.gasFeeQuery * 2n) * countU),
         policyFee: 0n,
         resultBytes: 0,
-        newQuanta: burntRow,
+        newQuanta: burntRow + supplyRow,
         deletedQuanta: deleted,
       };
     }

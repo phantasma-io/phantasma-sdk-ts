@@ -7,6 +7,7 @@ import { GasConfig } from '../../src/types/carbon/blockchain/gas-config';
 import { ModuleId } from '../../src/types/carbon/blockchain/module-id';
 import { TxMsg } from '../../src/types/carbon/blockchain/tx-msg';
 import { TxMsgCall } from '../../src/types/carbon/blockchain/tx-msg-call';
+import { TxMsgBurnFungible } from '../../src/types/carbon/blockchain/tx-msg-burn-fungible';
 import { TxMsgMintNonFungible } from '../../src/types/carbon/blockchain/tx-msg-mint-non-fungible';
 import { TxMsgPhantasma } from '../../src/types/carbon/blockchain/tx-msg-phantasma';
 import { TxMsgTransferFungible } from '../../src/types/carbon/blockchain/tx-msg-transfer-fungible';
@@ -231,7 +232,11 @@ describe('planFees on token calls', () => {
   // reading. The default itself is pinned in the test after next.
   it('reads every minted instance out of a Phantasma mint call', () => {
     const msg = phantasmaMintCall([phantasmaMint(7n, 182)]);
-    const plan = planFees(msg, config, { ...oneWitness, duplicatedSeries: false });
+    const plan = planFees(msg, config, {
+      ...oneWitness,
+      duplicatedSeries: false,
+      supplyRowExists: true,
+    });
     expect(plan.kind).toBe(NativeFeeKind.MintPhantasmaNonFungible);
     expect(plan.newStorageQuanta).toBe(5);
     expect(plan.expectedGasBill).toBe(bill(30n, plan.envelopeBytes + 5 + 44));
@@ -245,7 +250,11 @@ describe('planFees on token calls', () => {
   it('prices every instance of a multi-instance Phantasma mint', () => {
     const tokens = [7n, 7n, 7n].map((series) => phantasmaMint(series, 182));
     const msg = phantasmaMintCall(tokens);
-    const plan = planFees(msg, config, { ...oneWitness, duplicatedSeries: false });
+    const plan = planFees(msg, config, {
+      ...oneWitness,
+      duplicatedSeries: false,
+      supplyRowExists: true,
+    });
 
     expect(plan.kind).toBe(NativeFeeKind.MintPhantasmaNonFungible);
     // One balance row plus, per instance, its ROM row and the three fixed rows a deterministic
@@ -262,13 +271,14 @@ describe('planFees on token calls', () => {
   it('prices a duplicated series per instance and its supply once', () => {
     const tokens = [7n, 7n, 7n].map((series) => phantasmaMint(series, 182));
     const msg = phantasmaMintCall(tokens);
-    const plan = planFees(msg, config, { ...oneWitness, duplicatedSeries: true });
+    const facts = { ...oneWitness, duplicatedSeries: true, supplyRowExists: true } as const;
+    const plan = planFees(msg, config, facts);
 
     // (transfer + 3 queries) per instance, plus one query for the single series they share.
     expect(plan.expectedGasBill).toBe(bill(40n * 3n + 10n, plan.envelopeBytes + 13 + 4 + 40 * 3));
     // The same three instances spread over three series pay the supply read three times.
     const spread = phantasmaMintCall([7n, 8n, 9n].map((series) => phantasmaMint(series, 182)));
-    const spreadPlan = planFees(spread, config, { ...oneWitness, duplicatedSeries: true });
+    const spreadPlan = planFees(spread, config, facts);
     expect(spreadPlan.expectedGasBill - plan.expectedGasBill).toBe(20n * 10_000n);
   });
 
@@ -283,6 +293,27 @@ describe('planFees on token calls', () => {
 
     expect(assumed.expectedGasBill).toBe(duplicated.expectedGasBill);
     expect(assumed.expectedGasBill).toBeGreaterThan(unique.expectedGasBill);
+  });
+
+  // The supply row is chain state with two absent-row edges - a limited token fully in circulation
+  // before its first burn, an unlimited one with nothing outstanding before its next mint - and
+  // the transaction that hits an edge recreates the row. An unstated plan covers that quantum in
+  // the offer and the escrow ceiling; saying the row exists gives the exact quote.
+  it('plans a mint or burn to cover the supply row unless it is said to exist', () => {
+    const burn = new TxMsg(
+      TxTypes.BurnFungible,
+      1_787_000_000_000n,
+      0n,
+      0n,
+      payerPub,
+      SmallString.empty
+    );
+    burn.msg = new TxMsgBurnFungible({ tokenId: 97n, amount: IntX.fromI64(5n) });
+
+    const assumed = planFees(burn, config);
+    const inPlace = planFees(burn, config, { supplyRowExists: true });
+    expect(assumed.newStorageQuanta).toBe(inPlace.newStorageQuanta + 1);
+    expect(assumed.maxData - inPlace.maxData).toBe(config.dataEscrowPerRow);
   });
 
   // Whether the recipient is an NFT-derived address decides one query fee, and the address is in
@@ -360,10 +391,12 @@ describe('planFees on token calls', () => {
         ram: new Uint8Array(),
       })
     );
-    const plan = planFees(msg, config);
+    const plan = planFees(msg, config, { supplyRowExists: true });
     expect(plan.kind).toBe(NativeFeeKind.MintNonFungible);
     expect(plan.newStorageQuanta).toBe(5);
-    expect(planFees(msg, config, { romHasMetaId: false }).newStorageQuanta).toBe(4);
+    expect(
+      planFees(msg, config, { supplyRowExists: true, romHasMetaId: false }).newStorageQuanta
+    ).toBe(4);
     expect(plan.expectedGasBill).toBe(bill(10n, plan.envelopeBytes + 5 + 12));
   });
 

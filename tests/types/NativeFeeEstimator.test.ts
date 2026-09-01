@@ -110,16 +110,17 @@ describe('estimateNativeFee against settled v2 transactions', () => {
     expect(estimate.expectedGasBill).toBe(44_600_000n);
   });
 
-  // A native MintFungible of 171 bytes into a fresh holder. The call returns the new balance, and
-  // a call result is block data exactly like the envelope. The result's size depends on the
-  // balance it reports: 9 bytes while it fits int64, up to 33 beyond - so stating `bigFungible:
-  // false` prices the 9-byte result exactly, and leaving it unstated prices the 33-byte maximum,
-  // 24 bytes of block data more.
+  // A native MintFungible of 171 bytes into a fresh holder of a token whose supply row is in
+  // place. The call returns the new balance, and a call result is block data exactly like the
+  // envelope. The result's size depends on the balance it reports: 9 bytes while it fits int64, up
+  // to 33 beyond - so stating `bigFungible: false` prices the 9-byte result exactly, and leaving
+  // it unstated prices the 33-byte maximum, 24 bytes of block data more.
   it('bills a fungible mint with its 9-byte result when the token is declared small', () => {
     const estimate = estimateNativeFee(NativeFeeKind.MintFungible, v2Config(), {
       envelopeBytes: 171,
       tokenId: 97n,
       bigFungible: false,
+      supplyRowExists: true,
     });
     expect(estimate.expectedGasBill).toBe(45_350_000n);
     expect(estimate.maxData).toBe(200_000n);
@@ -127,6 +128,7 @@ describe('estimateNativeFee against settled v2 transactions', () => {
     const defaulted = estimateNativeFee(NativeFeeKind.MintFungible, v2Config(), {
       envelopeBytes: 171,
       tokenId: 97n,
+      supplyRowExists: true,
     });
     expect(defaulted.expectedGasBill - estimate.expectedGasBill).toBe(24n * 25n * 10_000n);
   });
@@ -171,7 +173,7 @@ describe('estimateNativeFee against settled v2 transactions', () => {
   });
 
   // A native NFT burn of 138 bytes; the mint's ten quanta are deleted and refunded,
-  // no net block data, and the token had been burned before.
+  // no net block data, the token had been burned before and its supply row was in place.
   it('bills an NFT burn for its work and envelope only', () => {
     const estimate = estimateNativeFee(NativeFeeKind.BurnNonFungible, v2Config(), {
       envelopeBytes: 138,
@@ -179,6 +181,7 @@ describe('estimateNativeFee against settled v2 transactions', () => {
       romBytes: 3067 * 2 + 36,
       romHasMetaId: true,
       tokenBurnedBefore: true,
+      supplyRowExists: true,
     });
     expect(estimate.expectedGasBill).toBe(34_800_000n);
     expect(estimate.deletedStorageQuanta).toBe(10);
@@ -230,16 +233,18 @@ describe('estimateNativeFee against settled v2 transactions', () => {
   // row in place and its canonical ROM alone took seven quanta (10 in total). Each instance pays the
   // mint plus two query fees and returns 40 bytes after the 4-byte count.
   //
-  // Both were minted into a UNIQUE series, and every settled-bill case below says so explicitly:
-  // the series mode is chain state the message does not carry, so the calculator assumes the
-  // costlier duplicated reading when nobody tells it. Leaving it out here would compare the chain's
-  // receipt against a deliberate over-estimate.
+  // Both were minted into a UNIQUE series of a token whose supply row was in place, and every
+  // settled-bill case below says both explicitly: the series mode and the supply row are chain
+  // state the message does not carry, so the calculator assumes the costlier reading of each when
+  // nobody tells it. Leaving either out here would compare the chain's receipt against a
+  // deliberate over-estimate.
   it('reproduces the two localnet Phantasma NFT mint bills', () => {
     const small = estimateNativeFee(NativeFeeKind.MintPhantasmaNonFungible, localnetConfig(), {
       envelopeBytes: 413,
       tokenId: 9n,
       romBytes: 182,
       duplicatedSeries: false,
+      supplyRowExists: true,
     });
     expect(small.expectedGasBill).toBe(115_800_000n);
     expect(small.newStorageQuanta).toBe(5);
@@ -251,6 +256,7 @@ describe('estimateNativeFee against settled v2 transactions', () => {
       romBytes: 3083,
       recipientHoldsToken: true,
       duplicatedSeries: false,
+      supplyRowExists: true,
     });
     expect(large.expectedGasBill).toBe(842_300_000n);
     expect(large.newStorageQuanta).toBe(10);
@@ -273,6 +279,7 @@ describe('estimateNativeFee against settled v2 transactions', () => {
         romBytes,
         recipientHoldsToken,
         duplicatedSeries: false,
+        supplyRowExists: true,
       });
       expect(estimate.expectedGasBill).toBe(bill);
       expect(estimate.newStorageQuanta).toBe(quanta);
@@ -295,6 +302,7 @@ describe('estimateNativeFee against settled v2 transactions', () => {
         envelopeBytes: 1000,
         romBytes,
         recipientHoldsToken,
+        supplyRowExists: true,
       });
       expect(estimate.newStorageQuanta).toBe(quanta);
     }
@@ -311,6 +319,7 @@ describe('estimateNativeFee against settled v2 transactions', () => {
       count: 3,
       romBytes: 75,
       duplicatedSeries: false,
+      supplyRowExists: true,
     });
     expect(estimate.expectedGasBill).toBe(157_650_000n);
     expect(estimate.newStorageQuanta).toBe(13);
@@ -323,6 +332,7 @@ describe('estimateNativeFee against settled v2 transactions', () => {
       count: 1,
       romBytes: 75,
       duplicatedSeries: false,
+      supplyRowExists: true,
     });
     expect(single.newStorageQuanta).toBe(5);
   });
@@ -483,6 +493,48 @@ describe('estimateNativeFee against settled v2 transactions', () => {
         seriesHasMetaId: false,
       });
       expect(assumed.newStorageQuanta).toBe(without.newStorageQuanta + 1);
+    });
+
+    // The supply row disappears when its balance reaches exactly zero - a limited token fully in
+    // circulation, an unlimited one with nothing outstanding - and the next mint or burn recreates
+    // it. Unstated, every mint and burn prices that recreation: one quantum in the bill and the
+    // escrow ceiling. Transfers never touch the row, and the chain's own gas and data tokens are
+    // free rows, so neither moves with the flag.
+    it('assumes the supply row must be recreated on mints and burns', () => {
+      const kinds = [
+        NativeFeeKind.MintFungible,
+        NativeFeeKind.BurnFungible,
+        NativeFeeKind.MintNonFungible,
+        NativeFeeKind.MintPhantasmaNonFungible,
+        NativeFeeKind.BurnNonFungible,
+      ] as const;
+      for (const kind of kinds) {
+        const shared = { envelopeBytes: 300, tokenId: 97n, romBytes: 64 } as const;
+        const assumed = estimateNativeFee(kind, v2Config(), shared);
+        const inPlace = estimateNativeFee(kind, v2Config(), { ...shared, supplyRowExists: true });
+        expect(assumed.newStorageQuanta).toBe(inPlace.newStorageQuanta + 1);
+        expect(assumed.maxData - inPlace.maxData).toBe(v2Config().dataEscrowPerRow);
+        // An NFT burn deletes more quanta than it creates, so its block-data term floors at zero
+        // either way and only the escrow ceiling moves; everywhere else the bill moves too.
+        expect(assumed.expectedGasBill - inPlace.expectedGasBill).toBe(
+          kind === NativeFeeKind.BurnNonFungible ? 0n : 25n * 10_000n
+        );
+      }
+
+      const transfer = { envelopeBytes: 300, tokenId: 97n } as const;
+      expect(estimateNativeFee(NativeFeeKind.TransferFungible, v2Config(), transfer)).toEqual(
+        estimateNativeFee(NativeFeeKind.TransferFungible, v2Config(), {
+          ...transfer,
+          supplyRowExists: true,
+        })
+      );
+      const gasToken = { envelopeBytes: 300, tokenId: 1n } as const;
+      expect(estimateNativeFee(NativeFeeKind.BurnFungible, v2Config(), gasToken)).toEqual(
+        estimateNativeFee(NativeFeeKind.BurnFungible, v2Config(), {
+          ...gasToken,
+          supplyRowExists: true,
+        })
+      );
     });
   });
 
