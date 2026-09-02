@@ -2,6 +2,7 @@ import { GasConfig } from '../../src/types/carbon/blockchain/gas-config';
 import {
   envelopeBytesFor,
   estimateNativeFee,
+  InfusedAsset,
   NativeFeeKind,
   phantasmaCanonicalRomBytes,
   storageQuantaFor,
@@ -187,6 +188,66 @@ describe('estimateNativeFee against settled v2 transactions', () => {
     expect(estimate.deletedStorageQuanta).toBe(10);
     expect(estimate.newStorageQuanta).toBe(0);
     expect(estimate.maxData).toBe(0n);
+  });
+
+  // Burning an NFT returns whatever its own address holds, and the chain charges for each returned
+  // asset as the transfers it performs: a transfer fee plus the owner lookup of the NFT-address
+  // source per fungible token; an instance query, a transfer per instance and that lookup per NFT
+  // token. The returned rows never add block data - a burn refunds more than the returns create -
+  // so the bill moves by the work alone, while the escrow ceiling covers a balance row the burner
+  // lacks and the moved lookup rows. Measured live 2026-09-02: +200,000 for one infused KCAL atom,
+  // +700,000 for KCAL, a custom token and an NFT together.
+  it('prices the assets a burned NFT returns', () => {
+    const burn = (...infusions: InfusedAsset[]) =>
+      estimateNativeFee(NativeFeeKind.BurnNonFungible, v2Config(), {
+        envelopeBytes: 138,
+        tokenId: 7n,
+        romBytes: 3067 * 2 + 36,
+        romHasMetaId: true,
+        tokenBurnedBefore: true,
+        supplyRowExists: true,
+        infusions,
+      });
+    const empty = burn();
+    expect(empty.expectedGasBill).toBe(34_800_000n);
+
+    // One fungible token: a transfer and a query. The gas token's rows are free, so nothing else.
+    const kcal = burn({ tokenId: 1n });
+    expect(kcal.expectedGasBill - empty.expectedGasBill).toBe(20n * 10_000n);
+    expect(kcal.newStorageQuanta).toBe(empty.newStorageQuanta);
+    expect(kcal.deletedStorageQuanta).toBe(empty.deletedStorageQuanta);
+
+    // A custom token the burner does not hold: the same work, plus the balance row the return
+    // creates - and the NFT address's own row, which the return deletes.
+    const custom = burn({ tokenId: 97n });
+    expect(custom.expectedGasBill - empty.expectedGasBill).toBe(20n * 10_000n);
+    expect(custom.newStorageQuanta).toBe(empty.newStorageQuanta + 1);
+    expect(custom.deletedStorageQuanta).toBe(empty.deletedStorageQuanta + 1);
+    expect(custom.maxData).toBe(empty.maxData + v2Config().dataEscrowPerRow);
+    expect(burn({ tokenId: 97n, burnerHoldsToken: true }).newStorageQuanta).toBe(
+      empty.newStorageQuanta
+    );
+    // An id the reader could not resolve is priced as a paid row: over-covering, never short.
+    expect(burn({}).newStorageQuanta).toBe(empty.newStorageQuanta + 1);
+
+    // Two instances of an NFT token: the instance query, two transfers, the lookup; a balance row
+    // plus two moved lookup rows created, the NFT address's balance row and two lookups deleted.
+    const nft = burn({ tokenId: 9n, nonFungible: true, instanceCount: 2 });
+    expect(nft.expectedGasBill - empty.expectedGasBill).toBe(40n * 10_000n);
+    expect(nft.newStorageQuanta).toBe(empty.newStorageQuanta + 3);
+    expect(nft.deletedStorageQuanta).toBe(empty.deletedStorageQuanta + 3);
+
+    // The live combination: KCAL, a held custom token and one NFT - seventy units.
+    const all = burn(
+      { tokenId: 1n },
+      { tokenId: 97n, burnerHoldsToken: true },
+      { tokenId: 9n, nonFungible: true, instanceCount: 1, burnerHoldsToken: true }
+    );
+    expect(all.expectedGasBill - empty.expectedGasBill).toBe(70n * 10_000n);
+
+    expect(() => burn({ tokenId: 9n, nonFungible: true, instanceCount: 0 })).toThrow(
+      /instanceCount/
+    );
   });
 
   // Two settled CreateToken bills with 7-character symbols. The fungible one is 374 signed bytes and writes the

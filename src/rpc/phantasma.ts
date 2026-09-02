@@ -17,6 +17,8 @@ import { SignedTxMsg } from '../types/carbon/blockchain/signed-tx-msg.js';
 import { TxMsg } from '../types/carbon/blockchain/tx-msg.js';
 import { TxMsgSigner } from '../types/carbon/blockchain/extensions/tx-msg-signer.js';
 import { TxSigner } from '../types/carbon/blockchain/extensions/tx-signer.js';
+import { TokenHelper } from '../types/carbon/blockchain/modules/token-helper.js';
+import { InfusedAsset } from '../types/carbon/blockchain/tx-helpers/native-fee-estimator.js';
 
 import { Contract } from './interfaces/contract.js';
 import { TransactionData } from './interfaces/transaction-data.js';
@@ -701,6 +703,60 @@ export class PhantasmaAPI {
   }
 
   /**
+   * What NFT `instanceId` of token `tokenId` holds at its own address, in the form the fee planner
+   * prices: a burn of that NFT returns every one of these to the burner and pays for each. Read
+   * through the account queries with the address in its Carbon form; fungible balances are resolved
+   * to token ids so the free rows of the gas and data tokens are recognised. Whether the burner
+   * already holds a returned token is left at the costlier reading, which moves only the escrow
+   * ceiling.
+   */
+  async infusedAssets(tokenId: bigint, instanceId: bigint): Promise<InfusedAsset[]> {
+    const address = TokenHelper.getNftAddress(tokenId, instanceId).toHex();
+    const assets: InfusedAsset[] = [];
+    const balances = await this.readAllPages((cursor) =>
+      this.getAccountFungibleTokens(address, '', 0n, 100, cursor, false, 'Carbon')
+    );
+    for (const balance of balances) {
+      const token = unwrapRpcResult(await this.getToken(balance.symbol));
+      assets.push({ tokenId: BigInt(token.carbonId), nonFungible: false });
+    }
+    const owned = await this.readAllPages((cursor) =>
+      this.getAccountOwnedTokens(address, '', 0n, 100, cursor, false, 'Carbon')
+    );
+    for (const token of owned) {
+      const balance = unwrapRpcResult(
+        await this.getTokenBalance(address, token.symbol, 'main', false, 'Carbon')
+      );
+      assets.push({
+        tokenId: BigInt(token.carbonId),
+        nonFungible: true,
+        instanceCount: Number(balance.amount),
+      });
+    }
+    return assets;
+  }
+
+  // Walks a cursor-paginated query to the end. The loop is driven by the cursor the node returns,
+  // never by an item count, and stops on a cursor it has already seen or past a page cap so a
+  // misbehaving node cannot keep it going forever.
+  private async readAllPages<T>(
+    page: (cursor: string) => Promise<CursorPaginatedResult<T[]>>
+  ): Promise<T[]> {
+    const maxPages = 1000;
+    const items: T[] = [];
+    const seen = new Set<string>();
+    let cursor = '';
+    for (let i = 0; i < maxPages; i++) {
+      const result = unwrapRpcResult(await page(cursor));
+      if (result.result) items.push(...result.result);
+      if (!result.cursor || seen.has(result.cursor)) return items;
+      seen.add(result.cursor);
+      cursor = result.cursor;
+    }
+    throw new Error(`the node kept returning pages past ${maxPages}`);
+  }
+
+  /**
    * Sends a message in one step: pre-flight, fee plan, signatures, broadcast. A message whose
    * `maxGas` is still zero is planned against this chain's prices (`fees.plan`); one the caller
    * already planned is sent as it is. Every witness signs through its {@link TxSigner} - keys,
@@ -857,9 +913,13 @@ export class PhantasmaAPI {
     account: string,
     tokenSymbol: string,
     chainInput: string,
-    checkAddressResevedByte: boolean = true
+    checkAddressResevedByte: boolean = true,
+    addressType: RpcAddressType = 'Phantasma'
   ): Promise<Balance> {
     const params: JsonRpcParam[] = [account, tokenSymbol, chainInput, checkAddressResevedByte];
+    // The address type is a later addition to the node's parameter list; the historical wire shape
+    // is kept for the default, so a caller on the Phantasma form sends what it always sent.
+    if (addressType !== 'Phantasma') params.push(addressType);
     return (await this.JSONRPC('getTokenBalance', params)) as Balance;
   }
 
@@ -916,7 +976,8 @@ export class PhantasmaAPI {
     carbonTokenId: bigint = 0n,
     pageSize: number = 10,
     cursor: string = '',
-    checkAddressReservedByte: boolean = true
+    checkAddressReservedByte: boolean = true,
+    addressType: RpcAddressType = 'Phantasma'
   ): Promise<CursorPaginatedResult<Balance[]>> {
     const params: JsonRpcParam[] = [
       account,
@@ -926,6 +987,7 @@ export class PhantasmaAPI {
       cursor,
       checkAddressReservedByte,
     ];
+    if (addressType !== 'Phantasma') params.push(addressType);
     return (await this.JSONRPC('getAccountFungibleTokens', params)) as CursorPaginatedResult<
       Balance[]
     >;
@@ -964,7 +1026,8 @@ export class PhantasmaAPI {
     carbonTokenId: bigint = 0n,
     pageSize: number = 10,
     cursor: string = '',
-    checkAddressReservedByte: boolean = true
+    checkAddressReservedByte: boolean = true,
+    addressType: RpcAddressType = 'Phantasma'
   ): Promise<CursorPaginatedResult<Token[]>> {
     const params: JsonRpcParam[] = [
       account,
@@ -974,6 +1037,7 @@ export class PhantasmaAPI {
       cursor,
       checkAddressReservedByte,
     ];
+    if (addressType !== 'Phantasma') params.push(addressType);
     return (await this.JSONRPC('getAccountOwnedTokens', params)) as CursorPaginatedResult<Token[]>;
   }
 

@@ -15,7 +15,11 @@ import { NativeTxHelper } from '../../src/types/carbon/blockchain/tx-helpers/nat
 import { PhantasmaKeys } from '../../src/types/phantasma-keys';
 import { hexToBytes } from '../../src/utils/index';
 import { GasConfigResult } from '../../src/rpc/interfaces/gas-config';
+import { Balance } from '../../src/rpc/interfaces/balance';
+import { CursorPaginatedResult } from '../../src/rpc/interfaces/cursor-paginated-result';
 import { Token } from '../../src/rpc/interfaces/token';
+import { TokenHelper } from '../../src/types/carbon/blockchain/modules/token-helper';
+import { planFees } from '../../src/types/carbon/blockchain/tx-helpers/fee-plan';
 import { PhantasmaAPI } from '../../src/rpc/phantasma';
 import {
   preflightTransaction,
@@ -93,6 +97,27 @@ class StubApi extends PhantasmaAPI {
   override async sendCarbonTransaction(txData: string): Promise<string> {
     this.sent.push(txData);
     return this.sendResult as string;
+  }
+  /** Fungible balances per Carbon-hex address; an address the stub knows nothing about is empty. */
+  fungible = new Map<string, Balance[]>();
+  /** NFT tokens held per Carbon-hex address, with the instance count each. */
+  ownedNfts = new Map<string, { token: Token; instances: number }[]>();
+  override async getAccountFungibleTokens(
+    account: string
+  ): Promise<CursorPaginatedResult<Balance[]>> {
+    return { result: this.fungible.get(account) ?? [] };
+  }
+  override async getAccountOwnedTokens(account: string): Promise<CursorPaginatedResult<Token[]>> {
+    return { result: (this.ownedNfts.get(account) ?? []).map((held) => held.token) };
+  }
+  override async getTokenBalance(account: string, tokenSymbol: string): Promise<Balance> {
+    const held = (this.ownedNfts.get(account) ?? []).find((h) => h.token.symbol === tokenSymbol);
+    return {
+      chain: 'main',
+      symbol: tokenSymbol,
+      amount: String(held?.instances ?? 0),
+      decimals: 0,
+    };
   }
 }
 
@@ -276,6 +301,48 @@ describe('PhantasmaAPI.sendTransaction', () => {
     expect(sent.witnesses[0].signature.equals(sent.witnesses[1].signature)).toBe(true);
     expect(hexToBytes(api.sent[0]).length).toBe(106 + 32 + 128);
     expect(sent.msg.maxGas).toBe(66_600_000n);
+  });
+
+  // A burn is sent for what the NFT holds: the one-step path reads the NFT address through the
+  // account queries and prices every returned asset, so the burn is not short by them.
+  it('reads what a burned NFT holds and prices its return', async () => {
+    const api = new StubApi();
+    const kcal = { symbol: 'KCAL', carbonId: '1' } as Token;
+    const gpx = { symbol: 'GPX', carbonId: '97' } as Token;
+    const art = { symbol: 'ART', carbonId: '9' } as Token;
+    for (const token of [kcal, gpx, art]) api.tokens.set(token.symbol, token);
+    const nftAddress = TokenHelper.getNftAddress(9n, 5n).toHex();
+    api.fungible.set(nftAddress, [
+      { chain: 'main', symbol: 'KCAL', amount: '1', decimals: 10 },
+      { chain: 'main', symbol: 'GPX', amount: '5', decimals: 8 },
+    ]);
+    api.ownedNfts.set(nftAddress, [{ token: art, instances: 2 }]);
+
+    const burn = NativeTxHelper.burnNonFungible({ from: owner, tokenId: 9n, instanceId: 5n });
+    await api.sendTransaction(burn, OWNER);
+    const sent = decodeSent(api);
+
+    const config = await api.fees.config();
+    const expected = planFees(burn, config, {
+      infusions: [
+        { tokenId: 1n },
+        { tokenId: 97n },
+        { tokenId: 9n, nonFungible: true, instanceCount: 2 },
+      ],
+    });
+    expect(sent.msg.maxGas).toBe(expected.maxGas);
+    expect(sent.msg.maxData).toBe(expected.maxData);
+    // KCAL and GPX: a transfer and a query each; ART: a query, two transfers, a query - 80 units.
+    const empty = planFees(burn, config, { infusions: [] });
+    expect(sent.msg.maxGas - empty.maxGas).toBe(800_000n);
+
+    // An NFT the node knows nothing about holds nothing: the plan is the plain burn.
+    api.sent = [];
+    await api.sendTransaction(
+      NativeTxHelper.burnNonFungible({ from: owner, tokenId: 9n, instanceId: 6n }),
+      OWNER
+    );
+    expect(decodeSent(api).msg.maxGas).toBe(empty.maxGas);
   });
 
   it('surfaces a broadcast rejection as an error', async () => {

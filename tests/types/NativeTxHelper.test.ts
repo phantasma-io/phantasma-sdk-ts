@@ -140,6 +140,7 @@ describe('NativeTxHelper', () => {
     const burnNft = NativeTxHelper.burnNonFungible({ from: owner, tokenId: 7n, instanceId: 42n });
     expect(burnNft.type).toBe(TxTypes.BurnNonFungible);
     expect((burnNft.msg as TxMsgBurnNonFungible).instanceId).toBe(42n);
-    expect(planFees(burnNft, config).kind).toBe(NativeFeeKind.BurnNonFungible);
+    // A burn is planned for what the NFT holds; this one holds nothing.
+    expect(planFees(burnNft, config, { infusions: [] }).kind).toBe(NativeFeeKind.BurnNonFungible);
   });
 });

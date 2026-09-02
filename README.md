@@ -146,6 +146,12 @@ Under gas model v2 there are two things to know, and `sendTransaction` handles b
   refuses on `taken` and on `unknown`. A caller who would rather decide for itself - warn before
   spending the fee, retry against another node - calls `preflightTransaction`, reads the verdict and
   sends with `{ preflight: false }`.
+- A burn returns whatever the NFT holds at its own address, and the chain charges for each
+  returned asset: a transfer fee and an owner lookup per fungible token, an instance query, a
+  transfer per instance and that lookup per NFT token, plus a balance row for a returned token the
+  burner does not hold. That set is chain state with no costlier bound, so `planFees` demands
+  `infusions` for a burn - an empty list says the NFT holds nothing - while `api.fees.plan`, and so
+  `sendTransaction`, reads it from the chain (`api.infusedAssets`).
 - Any witness that implements `TxSigner` (`publicKey` + `sign(bytes)`) can sign, and
   `TxMsgSigner.signWith` accepts several - the gas-payer transaction types take two. A wallet
   that signs elsewhere plans with `api.fees.plan` and hands `plan.apply(msg)` over.
