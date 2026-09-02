@@ -215,6 +215,47 @@ describe('planFees on token calls', () => {
     expect(plan.newStorageQuanta).toBe(5);
   });
 
+  // Staking metadata costs a token creation lookups the plan reads out of the same struct: a
+  // staking organisation is looked up and a reward token is read, one query fee each.
+  it('counts the lookups the staking metadata costs', () => {
+    const metadata = (...extra: VmNamedDynamicVariable[]) => {
+      const struct = new VmDynamicStruct();
+      struct.fields = [
+        VmNamedDynamicVariable.from('name', VmType.String, 'Plan probe'),
+        VmNamedDynamicVariable.from('icon', VmType.String, 'data:image/png;base64,iVBORw0KGgo='),
+        VmNamedDynamicVariable.from('url', VmType.String, 'https://example.invalid/p'),
+        VmNamedDynamicVariable.from('description', VmType.String, 'x'),
+        ...extra,
+      ].sort((a, b) => a.name.data.localeCompare(b.name.data));
+      const w = new CarbonBinaryWriter();
+      struct.write(w);
+      return w.toUint8Array();
+    };
+    const planOf = (bytes: Uint8Array) =>
+      planFees(CreateTokenTxHelper.buildTx(tokenInfo(false, bytes), payerPub), config, oneWitness);
+    const policy = 100_000_000_000_000n + (100_000_000_000_000n >> 2n); // 3-char symbol
+
+    const plain = planOf(metadata());
+    expect(plain.expectedGasBill).toBe(bill(0n, plain.envelopeBytes + 3 + 8, policy));
+    const org = planOf(
+      metadata(VmNamedDynamicVariable.from(StandardMeta.Token.staking_org_id, VmType.Int64, 3n))
+    );
+    expect(org.expectedGasBill).toBe(bill(10n, org.envelopeBytes + 3 + 8, policy));
+    const reward = planOf(
+      metadata(
+        VmNamedDynamicVariable.from(StandardMeta.Token.staking_reward_token, VmType.Int64, 97n)
+      )
+    );
+    expect(reward.expectedGasBill).toBe(bill(10n, reward.envelopeBytes + 3 + 8, policy));
+    const both = planOf(
+      metadata(
+        VmNamedDynamicVariable.from(StandardMeta.Token.staking_org_id, VmType.Int64, 3n),
+        VmNamedDynamicVariable.from(StandardMeta.Token.staking_reward_token, VmType.Int64, 97n)
+      )
+    );
+    expect(both.expectedGasBill).toBe(bill(20n, both.envelopeBytes + 3 + 8, policy));
+  });
+
   it('reads the series being created out of the call', () => {
     const schemas = TokenSchemasBuilder.prepareStandard(false);
     const series = SeriesInfoBuilder.build(schemas.seriesMetadata, 7n, 0, 0, payerPub, []);
