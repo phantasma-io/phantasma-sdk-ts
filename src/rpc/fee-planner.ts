@@ -1,5 +1,9 @@
+import { TxTypes } from '../types/carbon/tx-types.js';
 import { GasConfig } from '../types/carbon/blockchain/gas-config.js';
 import { TxMsg } from '../types/carbon/blockchain/tx-msg.js';
+import { TxMsgBurnNonFungible } from '../types/carbon/blockchain/tx-msg-burn-non-fungible.js';
+import { TxMsgBurnNonFungibleGasPayer } from '../types/carbon/blockchain/tx-msg-burn-non-fungible-gas-payer.js';
+import { InfusedAsset } from '../types/carbon/blockchain/tx-helpers/native-fee-estimator.js';
 import {
   FeePlan,
   FeePlanOptions,
@@ -10,6 +14,11 @@ import { gasConfigFromRpc, GasConfigResult } from './interfaces/gas-config.js';
 /** Where a planner reads the chain's gas config from - a `PhantasmaAPI`, or anything shaped like one. */
 export interface GasConfigSource {
   getGasConfig(): Promise<GasConfigResult>;
+  /**
+   * What an NFT holds at its own address, for planning its burn. Optional: a source without it can
+   * plan every message but a burn, for which the caller must then state `infusions`.
+   */
+  infusedAssets?(tokenId: bigint, instanceId: bigint): Promise<InfusedAsset[]>;
 }
 
 export interface FeePlannerOptions {
@@ -103,7 +112,35 @@ export class FeePlanner {
   async plan(msg: TxMsg, options: PlanRequestOptions = {}): Promise<FeePlan> {
     const { refreshConfig, ...planOptions } = options;
     const config = await this.config({ refresh: refreshConfig });
-    return planFees(msg, config, planOptions);
+    return planFees(msg, config, await this.withInfusions(msg, planOptions));
+  }
+
+  // A burn returns whatever the NFT's own address holds, and the chain charges for each returned
+  // asset. That set is chain state the message does not carry and has no costlier bound, so the
+  // pure planner demands it; here, with a chain to ask, it is read unless the caller stated it (an
+  // empty list states that the NFT holds nothing).
+  private async withInfusions(msg: TxMsg, options: FeePlanOptions): Promise<FeePlanOptions> {
+    if (options.infusions !== undefined) return options;
+    let burn: TxMsgBurnNonFungible | TxMsgBurnNonFungibleGasPayer;
+    switch (msg.type) {
+      case TxTypes.BurnNonFungible:
+        burn = msg.msg as TxMsgBurnNonFungible;
+        break;
+      case TxTypes.BurnNonFungible_GasPayer:
+        burn = msg.msg as TxMsgBurnNonFungibleGasPayer;
+        break;
+      default:
+        return options;
+    }
+    if (!this.source.infusedAssets) {
+      throw new Error(
+        "This planner's source cannot read what a burned NFT holds: pass infusions (empty when it holds nothing) or plan through a PhantasmaAPI"
+      );
+    }
+    return {
+      ...options,
+      infusions: await this.source.infusedAssets(burn.tokenId, burn.instanceId),
+    };
   }
 
   /** Plans a message against a config the caller already holds - no network, no cache. */

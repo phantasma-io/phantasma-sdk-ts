@@ -95,6 +95,17 @@ export interface NativeFeeParams {
    * Rows of the chain's gas and data tokens are free either way.
    */
   supplyRowExists?: boolean;
+  /**
+   * What the burned NFTs hold at their own addresses (BurnNonFungible), one entry per asset per
+   * burned instance. The burn returns every one of them to the burner, and the chain charges for
+   * each: a transfer fee plus the owner-lookup query of the NFT-address source per fungible token,
+   * an instance query plus a transfer per instance plus that lookup per NFT token, and the burner's
+   * balance row of a returned token the burner does not hold. This is chain state the message does
+   * not carry, and it has no costlier bound - an NFT can hold any number of assets - so nothing is
+   * assumed: undefined prices an empty address (direct callers of this calculator state what they
+   * know), while `planFees` demands the list and `api.fees` reads it from the chain.
+   */
+  infusions?: readonly InfusedAsset[];
   /** Token symbol length in characters (CreateToken). 0 = no symbol. */
   symbolLength?: number;
   /** Serialized `TokenInfo` length (CreateToken) - the Call arguments; it becomes the token-info row. */
@@ -157,6 +168,28 @@ export interface NativeFeeParams {
   scriptEventBytes?: number;
   /** New storage quanta allowance for the Script kind. Default 4. */
   scriptStorageQuanta?: number;
+}
+
+/**
+ * An asset held at a burned NFT's own address, which the burn returns to the burner. See
+ * {@link NativeFeeParams.infusions}.
+ */
+export interface InfusedAsset {
+  /**
+   * The token's id. Rows of the chain's gas and data tokens are free, which only the id can tell;
+   * undefined prices the rows as paid, which can only over-cover the escrow ceiling.
+   */
+  tokenId?: bigint;
+  /** An NFT token: the burn returns every instance the address holds (`instanceCount`). */
+  nonFungible?: boolean;
+  /** Instances of an NFT token the address holds; each is a transfer and a moved lookup row. Default 1. */
+  instanceCount?: number;
+  /**
+   * The burner already holds this token, so no balance row is created when it comes back. Default
+   * false - the costlier reading, which moves the escrow ceiling and never the bill: a burn refunds
+   * more rows than the return creates.
+   */
+  burnerHoldsToken?: boolean;
 }
 
 /**
@@ -477,10 +510,11 @@ function operationModel(
       const rams = perInstance(params.ramBytes, count, 'ramBytes');
       // The instance, owner, lookup (and RAM, meta-id) rows are deleted and refunded; the burnt
       // counter row is created on the token's first burn, and the supply row when it must be
-      // recreated. Each instance's infusion sweep reads the NFT address balances twice. The
-      // deleted rows mirror what the mint created, which is why the meta-id row is counted the
-      // same way here - but see `deletedStorageQuanta`: on a burn this total is reported, never
-      // billed.
+      // recreated. Each instance's infusion sweep reads the NFT address balances twice, and
+      // whatever the sweep finds is returned to the burner and charged as the transfers it takes
+      // (see `returnedAssets`). The deleted rows mirror what the mint created, which is why the
+      // meta-id row is counted the same way here - but see `deletedStorageQuanta`: on a burn this
+      // total is reported, never billed.
       const romHasMetaId = params.romHasMetaId ?? true;
       let deleted = 0;
       for (let i = 0; i < count; i++) {
@@ -488,12 +522,15 @@ function operationModel(
         if (rams[i] > 0) deleted += storageQuantaFor(NFT_RAM_ROW_OVERHEAD + rams[i]);
         if (romHasMetaId) deleted += 1;
       }
+      const returned = returnedAssets(params, config);
       return {
-        workUnits: clampU64((config.gasFeeTransfer + config.gasFeeQuery * 2n) * countU),
+        workUnits: clampU64(
+          (config.gasFeeTransfer + config.gasFeeQuery * 2n) * countU + returned.workUnits
+        ),
         policyFee: 0n,
         resultBytes: 0,
-        newQuanta: burntRow + supplyRow,
-        deletedQuanta: deleted,
+        newQuanta: burntRow + supplyRow + returned.newQuanta,
+        deletedQuanta: deleted + returned.deletedQuanta,
       };
     }
     case NativeFeeKind.CreateToken: {
@@ -580,6 +617,46 @@ function distinctSeries(params: NativeFeeParams, count: number): number {
     throw new RangeError(`distinctSeriesCount must be an integer between 1 and ${count}`);
   }
   return distinct;
+}
+
+// What burning the NFTs gives back to the burner, priced as the transfers the chain performs: per
+// fungible token one transfer plus the owner lookup of the NFT-address source; per NFT token one
+// instance query, one transfer per instance and that same lookup. Rows: a balance row of a token
+// the burner does not hold is created (paid unless the token is the gas or data token, which only
+// the id can tell - an unknown id is priced as paid), every returned instance moves its lookup row,
+// and the NFT address's own rows are deleted. The deletions always match or exceed the creations,
+// so the returns never add block data; they add work, and rows to the escrow ceiling.
+function returnedAssets(params: NativeFeeParams, config: GasConfig): OperationModel {
+  let workUnits = 0n;
+  let newQuanta = 0;
+  let deletedQuanta = 0;
+  for (const asset of params.infusions ?? []) {
+    const freeRows =
+      asset.tokenId !== undefined &&
+      (asset.tokenId === config.gasTokenId || asset.tokenId === config.dataTokenId);
+    const balanceRow = asset.burnerHoldsToken || freeRows ? 0 : 1;
+    if (asset.nonFungible) {
+      const instances = asset.instanceCount ?? 1;
+      assertNonNegativeInteger(instances, 'instanceCount');
+      if (instances < 1) {
+        throw new RangeError('instanceCount of a returned NFT token must be a positive integer');
+      }
+      workUnits += config.gasFeeQuery * 2n + config.gasFeeTransfer * BigInt(instances);
+      newQuanta += balanceRow + instances;
+      deletedQuanta += 1 + instances;
+    } else {
+      workUnits += config.gasFeeTransfer + config.gasFeeQuery;
+      newQuanta += balanceRow;
+      deletedQuanta += freeRows ? 0 : 1;
+    }
+  }
+  return {
+    workUnits: clampU64(workUnits),
+    policyFee: 0n,
+    resultBytes: 0,
+    newQuanta,
+    deletedQuanta,
+  };
 }
 
 function perInstance(

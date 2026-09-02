@@ -8,6 +8,7 @@ import { ModuleId } from '../../src/types/carbon/blockchain/module-id';
 import { TxMsg } from '../../src/types/carbon/blockchain/tx-msg';
 import { TxMsgCall } from '../../src/types/carbon/blockchain/tx-msg-call';
 import { TxMsgBurnFungible } from '../../src/types/carbon/blockchain/tx-msg-burn-fungible';
+import { TxMsgBurnNonFungible } from '../../src/types/carbon/blockchain/tx-msg-burn-non-fungible';
 import { TxMsgMintNonFungible } from '../../src/types/carbon/blockchain/tx-msg-mint-non-fungible';
 import { TxMsgPhantasma } from '../../src/types/carbon/blockchain/tx-msg-phantasma';
 import { TxMsgTransferFungible } from '../../src/types/carbon/blockchain/tx-msg-transfer-fungible';
@@ -314,6 +315,40 @@ describe('planFees on token calls', () => {
     const inPlace = planFees(burn, config, { supplyRowExists: true });
     expect(assumed.newStorageQuanta).toBe(inPlace.newStorageQuanta + 1);
     expect(assumed.maxData - inPlace.maxData).toBe(config.dataEscrowPerRow);
+  });
+
+  // What a burned NFT holds is chain state with no costlier reading - it can hold anything - so
+  // the planner demands the list instead of assuming an empty address; an empty list is the
+  // statement that nothing is infused. The RPC-side planner fills it in from the chain.
+  it('demands what a burned NFT holds and prices its return', () => {
+    const burn = new TxMsg(
+      TxTypes.BurnNonFungible,
+      1_787_000_000_000n,
+      0n,
+      0n,
+      payerPub,
+      SmallString.empty
+    );
+    burn.msg = new TxMsgBurnNonFungible({ tokenId: 9n, instanceId: 5n });
+    expect(() => planFees(burn, config)).toThrow(/infusions/);
+
+    const facts = { tokenBurnedBefore: true, supplyRowExists: true };
+    const empty = planFees(burn, config, { ...facts, infusions: [] });
+    expect(empty.kind).toBe(NativeFeeKind.BurnNonFungible);
+    expect(empty.expectedGasBill).toBe(bill(30n, empty.envelopeBytes));
+
+    const returned = planFees(burn, config, {
+      ...facts,
+      infusions: [
+        { tokenId: 1n },
+        { tokenId: 97n },
+        { tokenId: 9n, nonFungible: true, instanceCount: 2 },
+      ],
+    });
+    // KCAL and the custom token: a transfer and a query each; the NFT: a query, two transfers, a query.
+    expect(returned.expectedGasBill - empty.expectedGasBill).toBe(80n * 10_000n);
+    // The custom token's balance row, the NFT token's balance row and its two moved lookups.
+    expect(returned.maxData - empty.maxData).toBe(4n * config.dataEscrowPerRow);
   });
 
   // Whether the recipient is an NFT-derived address decides one query fee, and the address is in

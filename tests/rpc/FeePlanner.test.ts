@@ -6,6 +6,8 @@ import { TxMsg } from '../../src/types/carbon/blockchain/tx-msg';
 import { TxMsgTransferFungible } from '../../src/types/carbon/blockchain/tx-msg-transfer-fungible';
 import { PhantasmaKeys } from '../../src/types/phantasma-keys';
 import { FeePlanner, GasConfigSource } from '../../src/rpc/fee-planner';
+import { InfusedAsset } from '../../src/types/carbon/blockchain/tx-helpers/native-fee-estimator';
+import { NativeTxHelper } from '../../src/types/carbon/blockchain/tx-helpers/native-tx-helper';
 import { GasConfigResult } from '../../src/rpc/interfaces/gas-config';
 import { PhantasmaAPI } from '../../src/rpc/phantasma';
 
@@ -56,7 +58,26 @@ class StubSource implements GasConfigSource {
   }
 }
 
+// A source that also knows what NFTs hold, the way a PhantasmaAPI does.
+class HoldingsSource extends StubSource {
+  infusionReads = 0;
+  holdings: InfusedAsset[] = [{ tokenId: 1n }, { tokenId: 97n }];
+  async infusedAssets(): Promise<InfusedAsset[]> {
+    this.infusionReads += 1;
+    return this.holdings;
+  }
+}
+
 const KEY = PhantasmaKeys.fromWIF('KwPpBSByydVKqStGHAnZzQofCqhDmD2bfRgc9BmZqM3ZmsdWJw4d');
+
+function nftBurn(): TxMsg {
+  return NativeTxHelper.burnNonFungible({
+    from: new Bytes32(KEY.publicKey),
+    tokenId: 9n,
+    instanceId: 5n,
+    expiry: 1_787_000_000_000n,
+  });
+}
 
 function kcalTransfer(): TxMsg {
   const pub = new Bytes32(KEY.publicKey);
@@ -115,6 +136,27 @@ describe('FeePlanner', () => {
     const plan = planner.planWith(config, kcalTransfer());
     expect(plan.expectedGasBill).toBe(42_600_000n);
     expect(source.calls).toBe(1);
+  });
+
+  // A burn is planned for what the NFT holds: read from the source unless the caller stated it.
+  it('reads what a burned NFT holds unless the caller states it', async () => {
+    const source = new HoldingsSource();
+    const planner = new FeePlanner(source);
+    const read = await planner.plan(nftBurn());
+    expect(source.infusionReads).toBe(1);
+    const stated = planner.planWith(await planner.config(), nftBurn(), {
+      infusions: source.holdings,
+    });
+    expect(read.expectedGasBill).toBe(stated.expectedGasBill);
+
+    const empty = await planner.plan(nftBurn(), { infusions: [] });
+    expect(source.infusionReads).toBe(1);
+    expect(read.expectedGasBill - empty.expectedGasBill).toBe(40n * 10_000n);
+
+    // A source that cannot read holdings still plans everything but an unstated burn.
+    const blind = new FeePlanner(new StubSource());
+    expect((await blind.plan(kcalTransfer())).expectedGasBill).toBe(42_600_000n);
+    await expect(blind.plan(nftBurn())).rejects.toThrow(/infusions/);
   });
 
   it('is owned by the RPC client, one per client', () => {

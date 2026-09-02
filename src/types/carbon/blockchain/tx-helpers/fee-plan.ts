@@ -37,7 +37,9 @@ import {
  * Facts about chain state and signing that a message does not carry but the fee depends on. Every
  * state fact defaults to the case that costs more, so an unspecified plan is an upper bound the
  * settlement can only undercut; the defaults themselves belong to {@link NativeFeeParams}, which
- * documents each one, and are not restated here so the two cannot drift apart.
+ * documents each one, and are not restated here so the two cannot drift apart. The one fact
+ * without a costlier reading is `infusions`: a burned NFT can hold any number of assets, so
+ * `planFees` demands it instead of assuming, and `api.fees` reads it from the chain.
  */
 export interface FeePlanOptions extends Pick<
   NativeFeeParams,
@@ -58,6 +60,8 @@ export interface FeePlanOptions extends Pick<
   | 'duplicatedSeries'
   | 'romHasMetaId'
   | 'seriesHasMetaId'
+  // what a burned NFT holds - required to plan a burn here, read from the chain by `api.fees`:
+  | 'infusions'
   // and these three size the allowance for a VM script, whose cost no formula can predict:
   | 'scriptUnitsAllowance'
   | 'scriptEventBytes'
@@ -205,6 +209,14 @@ function describe(msg: TxMsg, options: FeePlanOptions): Description {
     case TxTypes.BurnNonFungible:
     case TxTypes.BurnNonFungible_GasPayer: {
       const inner = msg.msg as TxMsgBurnNonFungible | TxMsgBurnNonFungibleGasPayer;
+      // What the NFT holds is chain state with no costlier bound, so it is demanded, not assumed: a
+      // burn planned as if the address were empty is short by every returned asset and aborts,
+      // billed, on every retry.
+      if (options.infusions === undefined) {
+        throw new Error(
+          'A burn returns whatever the NFT holds: pass infusions (empty when it holds nothing) or plan through api.fees, which reads them from the chain'
+        );
+      }
       // The stored ROM is chain state the message does not carry, so the deleted quanta are a lower
       // bound. That does not touch the offer: a burn deletes more than it creates, and only the
       // rows it creates are escrowed.
@@ -212,6 +224,7 @@ function describe(msg: TxMsg, options: FeePlanOptions): Description {
         ...stateFacts,
         tokenId: inner.tokenId,
         count: 1,
+        infusions: options.infusions,
       });
     }
     case TxTypes.Call:

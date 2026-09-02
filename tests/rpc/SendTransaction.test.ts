@@ -15,7 +15,11 @@ import { NativeTxHelper } from '../../src/types/carbon/blockchain/tx-helpers/nat
 import { PhantasmaKeys } from '../../src/types/phantasma-keys';
 import { hexToBytes } from '../../src/utils/index';
 import { GasConfigResult } from '../../src/rpc/interfaces/gas-config';
+import { Balance } from '../../src/rpc/interfaces/balance';
+import { CursorPaginatedResult } from '../../src/rpc/interfaces/cursor-paginated-result';
 import { Token } from '../../src/rpc/interfaces/token';
+import { TokenHelper } from '../../src/types/carbon/blockchain/modules/token-helper';
+import { planFees } from '../../src/types/carbon/blockchain/tx-helpers/fee-plan';
 import { PhantasmaAPI } from '../../src/rpc/phantasma';
 import {
   preflightTransaction,
@@ -85,7 +89,7 @@ class StubApi extends PhantasmaAPI {
   ): Promise<Token> {
     this.lookups += 1;
     if (!this.reachable) return { error: this.lookupError } as unknown as Token;
-    // A live node resolves by id without looking at the symbol; that path is the pre-flight's
+    // A live node resolves by id without looking at the symbol. That path is the pre-flight's
     // control, and it answers for the gas token whatever the caller's symbol turns out to be.
     if (carbonTokenId !== 0n) return { symbol: 'KCAL' } as Token;
     return this.tokens.get(symbol) ?? ({ error: this.lookupError } as unknown as Token);
@@ -93,6 +97,27 @@ class StubApi extends PhantasmaAPI {
   override async sendCarbonTransaction(txData: string): Promise<string> {
     this.sent.push(txData);
     return this.sendResult as string;
+  }
+  /** Fungible balances per Carbon-hex address; an address the stub knows nothing about is empty. */
+  fungible = new Map<string, Balance[]>();
+  /** NFT tokens held per Carbon-hex address, with the instance count each. */
+  ownedNfts = new Map<string, { token: Token; instances: number }[]>();
+  override async getAccountFungibleTokens(
+    account: string
+  ): Promise<CursorPaginatedResult<Balance[]>> {
+    return { result: this.fungible.get(account) ?? [] };
+  }
+  override async getAccountOwnedTokens(account: string): Promise<CursorPaginatedResult<Token[]>> {
+    return { result: (this.ownedNfts.get(account) ?? []).map((held) => held.token) };
+  }
+  override async getTokenBalance(account: string, tokenSymbol: string): Promise<Balance> {
+    const held = (this.ownedNfts.get(account) ?? []).find((h) => h.token.symbol === tokenSymbol);
+    return {
+      chain: 'main',
+      symbol: tokenSymbol,
+      amount: String(held?.instances ?? 0),
+      decimals: 0,
+    };
   }
 }
 
@@ -205,7 +230,7 @@ describe('PhantasmaAPI.sendTransaction', () => {
   // A free symbol is established, not inferred from the error text: the node refuses to answer
   // about FRESH, so the check asks it for a token that certainly exists. That answer proves the
   // lookup works and is being truthful, which is what makes the refusal about FRESH mean "absent".
-  // Whatever the error says is irrelevant - including "Method not found", the JSON-RPC name of
+  // Whatever the error says is irrelevant. That includes "Method not found", the JSON-RPC name of
   // error -32601, which contains the words "not found" and means the question was never asked.
   it('establishes a free symbol from a control lookup, not from the error text', async () => {
     const api = new StubApi();
@@ -218,7 +243,7 @@ describe('PhantasmaAPI.sendTransaction', () => {
   });
 
   // And the case the whole check exists for: a node that cannot answer at all. Nothing is
-  // established, so nothing is signed - the policy fee is not spent on a guess.
+  // established, so nothing is signed. The policy fee is not spent on a guess.
   it('refuses when the lookup cannot answer even about a token that exists', async () => {
     const api = new StubApi();
     api.reachable = false;
@@ -233,7 +258,8 @@ describe('PhantasmaAPI.sendTransaction', () => {
   });
 
   // `sendTransaction` acts on one verdict only. A caller who wants to stop on the others reads the
-  // verdict itself and sends separately - which is the whole reason the check reports one instead
+  // verdict itself and sends separately. That is the whole reason the check reports a verdict
+  // instead
   // of deciding. This is that path, and it is the one a wallet uses to warn before spending the fee.
   it('hands the verdict to a caller who wants to decide for itself', async () => {
     const api = new StubApi();
@@ -245,7 +271,7 @@ describe('PhantasmaAPI.sendTransaction', () => {
     });
 
     // A source that cannot offer a control token has nothing to check the refusal against, so it
-    // says so rather than picking a side. `controlTokenId` is optional for exactly this reason.
+    // says so and picks no side. `controlTokenId` is optional for exactly this reason.
     const noControl = { getToken: (symbol: string) => api.getToken(symbol) };
     expect(await preflightTransaction(noControl, createToken('FRESH'))).toEqual({
       verdict: 'unknown',
@@ -276,6 +302,49 @@ describe('PhantasmaAPI.sendTransaction', () => {
     expect(sent.witnesses[0].signature.equals(sent.witnesses[1].signature)).toBe(true);
     expect(hexToBytes(api.sent[0]).length).toBe(106 + 32 + 128);
     expect(sent.msg.maxGas).toBe(66_600_000n);
+  });
+
+  // A burn is sent for what the NFT holds: the one-step path reads the NFT address through the
+  // account queries and prices every returned asset, so the burn is not short by them.
+  it('reads what a burned NFT holds and prices its return', async () => {
+    const api = new StubApi();
+    const kcal = { symbol: 'KCAL', carbonId: '1' } as Token;
+    const gpx = { symbol: 'GPX', carbonId: '97' } as Token;
+    const art = { symbol: 'ART', carbonId: '9' } as Token;
+    for (const token of [kcal, gpx, art]) api.tokens.set(token.symbol, token);
+    const nftAddress = TokenHelper.getNftAddress(9n, 5n).toHex();
+    api.fungible.set(nftAddress, [
+      { chain: 'main', symbol: 'KCAL', amount: '1', decimals: 10 },
+      { chain: 'main', symbol: 'GPX', amount: '5', decimals: 8 },
+    ]);
+    api.ownedNfts.set(nftAddress, [{ token: art, instances: 2 }]);
+
+    const burn = NativeTxHelper.burnNonFungible({ from: owner, tokenId: 9n, instanceId: 5n });
+    await api.sendTransaction(burn, OWNER);
+    const sent = decodeSent(api);
+
+    const config = await api.fees.config();
+    const expected = planFees(burn, config, {
+      infusions: [
+        { tokenId: 1n },
+        { tokenId: 97n },
+        { tokenId: 9n, nonFungible: true, instanceCount: 2 },
+      ],
+    });
+    expect(sent.msg.maxGas).toBe(expected.maxGas);
+    expect(sent.msg.maxData).toBe(expected.maxData);
+    // KCAL and GPX cost a transfer and a query each. ART costs a query, two transfers and a query.
+    // That is 80 units.
+    const empty = planFees(burn, config, { infusions: [] });
+    expect(sent.msg.maxGas - empty.maxGas).toBe(800_000n);
+
+    // An NFT the node knows nothing about holds nothing: the plan is the plain burn.
+    api.sent = [];
+    await api.sendTransaction(
+      NativeTxHelper.burnNonFungible({ from: owner, tokenId: 9n, instanceId: 6n }),
+      OWNER
+    );
+    expect(decodeSent(api).msg.maxGas).toBe(empty.maxGas);
   });
 
   it('surfaces a broadcast rejection as an error', async () => {

@@ -328,6 +328,7 @@ export type {
   FeePlanSummary,
   FeePlanSummaryDecimals,
   FeeQuote,
+  InfusedAsset,
   MintFungibleParams,
   NativeFeeEstimate,
   NativeTxParties,
