@@ -278,6 +278,26 @@ describe('estimateNativeFee against settled v2 transactions', () => {
 
   // A settled CreateTokenSeries of 246 bytes with a `_i` in its metadata writes the
   // series info, its supply and the meta-id lookup and returns the u32 series id.
+  // Validating token metadata that names a staking organisation looks the organisation up, and
+  // metadata that names a reward token reads that token: one query fee each, on top of the policy
+  // fee and the rows.
+  it('charges the lookups that staking metadata costs a token creation', () => {
+    const create = (hasStakingOrganisation: boolean, hasStakingRewardToken: boolean) =>
+      estimateNativeFee(NativeFeeKind.CreateToken, localnetConfig(), {
+        envelopeBytes: 374,
+        symbolLength: 7,
+        tokenInfoBytes: 374 - 100 - 58,
+        hasStakingOrganisation,
+        hasStakingRewardToken,
+      });
+    const plain = create(false, false);
+    expect(create(true, false).expectedGasBill - plain.expectedGasBill).toBe(100_000n);
+    expect(create(false, true).expectedGasBill - plain.expectedGasBill).toBe(100_000n);
+    const both = create(true, true);
+    expect(both.expectedGasBill - plain.expectedGasBill).toBe(200_000n);
+    expect(both.newStorageQuanta).toBe(plain.newStorageQuanta);
+  });
+
   it('reproduces the localnet CreateTokenSeries bill', () => {
     const estimate = estimateNativeFee(NativeFeeKind.CreateTokenSeries, localnetConfig(), {
       envelopeBytes: 246,

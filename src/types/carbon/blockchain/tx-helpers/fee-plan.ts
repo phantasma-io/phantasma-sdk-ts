@@ -252,8 +252,8 @@ function describeCall(
           : undefined;
         // The token-info row is the Call arguments as submitted: the chain stores the TokenInfo it
         // was given, metadata included, and measured bills confirm the row equals the arguments.
-        // Which extra rows the creation writes is decided by the metadata, which is a named struct
-        // the plan can read.
+        // Which extra rows the creation writes, and which lookups validating it costs, is decided
+        // by the metadata, which is a named struct the plan can read.
         return describeAs(NativeFeeKind.CreateToken, {
           symbolLength: info.symbol.data.length,
           tokenInfoBytes: call.args.length,
@@ -261,6 +261,10 @@ function describeCall(
           hasPreBurn: metadata?.getValue(StandardMeta.Token.pre_burn) !== undefined,
           hasInflationSchedule:
             metadata?.getValue(StandardMeta.Token.inflation_period) !== undefined,
+          hasStakingOrganisation:
+            metadata?.getValue(StandardMeta.Token.staking_org_id) !== undefined,
+          hasStakingRewardToken:
+            metadata?.getValue(StandardMeta.Token.staking_reward_token) !== undefined,
         });
       }
       case TokenContractMethods.CreateTokenSeries:

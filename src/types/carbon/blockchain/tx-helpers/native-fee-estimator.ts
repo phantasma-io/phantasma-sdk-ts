@@ -116,6 +116,10 @@ export interface NativeFeeParams {
   hasPreBurn?: boolean;
   /** The token metadata carries an inflation schedule (CreateToken): the next-inflation row is created. */
   hasInflationSchedule?: boolean;
+  /** The token metadata names a staking organisation (CreateToken): the creation looks the organisation up, one query fee. */
+  hasStakingOrganisation?: boolean;
+  /** The token metadata names a staking reward token (CreateToken): the creation reads that token's info, one query fee. */
+  hasStakingRewardToken?: boolean;
   /** Serialized `SeriesInfo` length (CreateTokenSeries) - the Call arguments after the token id. */
   seriesInfoBytes?: number;
   /**
@@ -552,8 +556,13 @@ function operationModel(
       const symbol = hasSymbol
         ? (v2 ? config.policyFeeCreateTokenSymbol : config.gasFeeCreateTokenSymbol) >> shift
         : 0n;
+      // Validating the metadata looks up a staking organisation it names and reads a reward token
+      // it names: one query fee each, on top of the policy fee.
+      const metadataQueries =
+        config.gasFeeQuery *
+        BigInt((params.hasStakingOrganisation ? 1 : 0) + (params.hasStakingRewardToken ? 1 : 0));
       return {
-        workUnits: v2 ? 0n : clampU64(base + symbol),
+        workUnits: clampU64((v2 ? 0n : base + symbol) + metadataQueries),
         policyFee: v2 ? clampU64(base + symbol) : 0n,
         resultBytes: 8, // the new token id, u64
         newQuanta: quanta,
