@@ -105,7 +105,7 @@ export class ContractTxHelper {
     interopName: 'Runtime.DeployContract' | 'Runtime.UpgradeContract',
     params: ContractScriptBuildParams
   ): string {
-    // Keep deploy/upgrade on the same legacy VM script path so CLI and wallet flows generate identical transactions.
+    // Keep deploy/upgrade on the same VM script path so CLI and wallet flows generate identical transactions.
     const fromAddress = this.normalizeAddress(params.from);
     const contractName = normalizeContractName(params.contractName);
     const scriptBytes = coerceContractBytes(params.script, 'script');
