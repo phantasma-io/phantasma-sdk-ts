@@ -9,11 +9,20 @@ import { TxMsg } from '../../src/types/carbon/blockchain/tx-msg';
 import { MsgCallArgSections, TxMsgCall } from '../../src/types/carbon/blockchain/tx-msg-call';
 import { TxMsgCallMulti } from '../../src/types/carbon/blockchain/tx-msg-call-multi';
 import { TxMsgBurnFungible } from '../../src/types/carbon/blockchain/tx-msg-burn-fungible';
+import { TxMsgBurnFungibleGasPayer } from '../../src/types/carbon/blockchain/tx-msg-burn-fungible-gas-payer';
 import { TxMsgBurnNonFungible } from '../../src/types/carbon/blockchain/tx-msg-burn-non-fungible';
+import { TxMsgBurnNonFungibleGasPayer } from '../../src/types/carbon/blockchain/tx-msg-burn-non-fungible-gas-payer';
+import { TxMsgMintFungible } from '../../src/types/carbon/blockchain/tx-msg-mint-fungible';
 import { TxMsgMintNonFungible } from '../../src/types/carbon/blockchain/tx-msg-mint-non-fungible';
 import { TxMsgPhantasma } from '../../src/types/carbon/blockchain/tx-msg-phantasma';
+import { TxMsgPhantasmaRaw } from '../../src/types/carbon/blockchain/tx-msg-phantasma-raw';
+import { TxMsgTrade } from '../../src/types/carbon/blockchain/tx-msg-trade';
 import { TxMsgTransferFungible } from '../../src/types/carbon/blockchain/tx-msg-transfer-fungible';
 import { TxMsgTransferFungibleGasPayer } from '../../src/types/carbon/blockchain/tx-msg-transfer-fungible-gas-payer';
+import { TxMsgTransferNonFungibleMultiGasPayer } from '../../src/types/carbon/blockchain/tx-msg-transfer-non-fungible-multi-gas-payer';
+import { TxMsgTransferNonFungibleSingle } from '../../src/types/carbon/blockchain/tx-msg-transfer-non-fungible-single';
+import { TxMsgTransferNonFungibleSingleGasPayer } from '../../src/types/carbon/blockchain/tx-msg-transfer-non-fungible-single-gas-payer';
+import { SignedTxMsg } from '../../src/types/carbon/blockchain/signed-tx-msg';
 import { TxMsgSigner } from '../../src/types/carbon/blockchain/extensions/tx-msg-signer';
 import { StandardMeta } from '../../src/types/carbon/blockchain/modules/standard-meta';
 import { TokenContractMethods } from '../../src/types/carbon/blockchain/modules/token-contract-methods';
@@ -822,5 +831,201 @@ describe('planFees on Call_Multi', () => {
     );
     transfer.msg = new TxMsgTransferFungible(ownerPub, 97n, 1n);
     expect(burnedInstances(transfer)).toEqual([]);
+  });
+});
+
+// The coverage gate this file owes the model: every message type the SDK carries is named here
+// with what the planner makes of it, and the table is asserted to be exhaustive over TxTypes. A new
+// message type therefore cannot be added and quietly fall into the script budget - this test fails
+// until someone states what its fee is. A `Script` entry below is a decision, not an omission.
+describe('planFees over every transaction type', () => {
+  const msgOf = (type: TxTypes, inner: object) => {
+    const msg = new TxMsg(type, 1_787_000_000_000n, 0n, 0n, payerPub, SmallString.empty);
+    msg.msg = inner;
+    return msg;
+  };
+  const tokenCall = (methodId: TokenContractMethods) => {
+    const call = new TxMsgCall();
+    call.moduleId = ModuleId.Token;
+    call.methodId = methodId;
+    const w = new CarbonBinaryWriter();
+    w.write8u(97n);
+    payerPub.write(w);
+    IntX.fromI64(1n).write(w);
+    call.args = w.toUint8Array();
+    return call;
+  };
+  const burnCall = tokenCall(TokenContractMethods.BurnFungible);
+
+  const cases: { type: TxTypes; msg: TxMsg; expected: NativeFeeKind[] | 'refused' }[] = [
+    {
+      type: TxTypes.Call,
+      msg: msgOf(TxTypes.Call, burnCall),
+      expected: [NativeFeeKind.BurnFungible],
+    },
+    {
+      type: TxTypes.Call_Multi,
+      msg: msgOf(TxTypes.Call_Multi, new TxMsgCallMulti([burnCall, burnCall])),
+      expected: [NativeFeeKind.BurnFungible, NativeFeeKind.BurnFungible],
+    },
+    // A Trade packs its operations into named arrays rather than calls; nothing reads them yet, so
+    // it is budgeted. Modelling it is worth doing only when something builds one.
+    {
+      type: TxTypes.Trade,
+      msg: msgOf(TxTypes.Trade, new TxMsgTrade()),
+      expected: [NativeFeeKind.Script],
+    },
+    {
+      type: TxTypes.TransferFungible,
+      msg: msgOf(TxTypes.TransferFungible, new TxMsgTransferFungible(ownerPub, 97n, 1n)),
+      expected: [NativeFeeKind.TransferFungible],
+    },
+    {
+      type: TxTypes.TransferFungible_GasPayer,
+      msg: msgOf(
+        TxTypes.TransferFungible_GasPayer,
+        new TxMsgTransferFungibleGasPayer({
+          to: ownerPub,
+          from: payerPub,
+          tokenId: 97n,
+          amount: 1n,
+        })
+      ),
+      expected: [NativeFeeKind.TransferFungible],
+    },
+    {
+      type: TxTypes.TransferNonFungible_Single,
+      msg: msgOf(
+        TxTypes.TransferNonFungible_Single,
+        new TxMsgTransferNonFungibleSingle({ to: ownerPub, tokenId: 9n, instanceId: 5n })
+      ),
+      expected: [NativeFeeKind.TransferNonFungible],
+    },
+    {
+      type: TxTypes.TransferNonFungible_Single_GasPayer,
+      msg: msgOf(
+        TxTypes.TransferNonFungible_Single_GasPayer,
+        new TxMsgTransferNonFungibleSingleGasPayer({
+          to: ownerPub,
+          from: payerPub,
+          tokenId: 9n,
+          instanceId: 5n,
+        })
+      ),
+      expected: [NativeFeeKind.TransferNonFungible],
+    },
+    {
+      type: TxTypes.TransferNonFungible_Multi,
+      msg: msgOf(
+        TxTypes.TransferNonFungible_Multi,
+        new TxMsgTransferNonFungibleMulti({ to: ownerPub, tokenId: 9n, instanceIds: [5n, 6n] })
+      ),
+      expected: [NativeFeeKind.TransferNonFungible],
+    },
+    {
+      type: TxTypes.TransferNonFungible_Multi_GasPayer,
+      msg: msgOf(
+        TxTypes.TransferNonFungible_Multi_GasPayer,
+        new TxMsgTransferNonFungibleMultiGasPayer({
+          to: ownerPub,
+          from: payerPub,
+          tokenId: 9n,
+          instanceIds: [5n, 6n],
+        })
+      ),
+      expected: [NativeFeeKind.TransferNonFungible],
+    },
+    {
+      type: TxTypes.MintFungible,
+      msg: msgOf(
+        TxTypes.MintFungible,
+        new TxMsgMintFungible({ tokenId: 97n, to: ownerPub, amount: IntX.fromI64(1n) })
+      ),
+      expected: [NativeFeeKind.MintFungible],
+    },
+    {
+      type: TxTypes.BurnFungible,
+      msg: msgOf(
+        TxTypes.BurnFungible,
+        new TxMsgBurnFungible({ tokenId: 97n, amount: IntX.fromI64(1n) })
+      ),
+      expected: [NativeFeeKind.BurnFungible],
+    },
+    {
+      type: TxTypes.BurnFungible_GasPayer,
+      msg: msgOf(
+        TxTypes.BurnFungible_GasPayer,
+        new TxMsgBurnFungibleGasPayer({ tokenId: 97n, from: payerPub, amount: IntX.fromI64(1n) })
+      ),
+      expected: [NativeFeeKind.BurnFungible],
+    },
+    {
+      type: TxTypes.MintNonFungible,
+      msg: msgOf(
+        TxTypes.MintNonFungible,
+        new TxMsgMintNonFungible({
+          tokenId: 9n,
+          to: ownerPub,
+          seriesId: 1,
+          rom: new Uint8Array(8),
+          ram: new Uint8Array(),
+        })
+      ),
+      expected: [NativeFeeKind.MintNonFungible],
+    },
+    {
+      type: TxTypes.BurnNonFungible,
+      msg: msgOf(
+        TxTypes.BurnNonFungible,
+        new TxMsgBurnNonFungible({ tokenId: 9n, instanceId: 5n })
+      ),
+      expected: [NativeFeeKind.BurnNonFungible],
+    },
+    {
+      type: TxTypes.BurnNonFungible_GasPayer,
+      msg: msgOf(
+        TxTypes.BurnNonFungible_GasPayer,
+        new TxMsgBurnNonFungibleGasPayer({ tokenId: 9n, from: payerPub, instanceId: 5n })
+      ),
+      expected: [NativeFeeKind.BurnNonFungible],
+    },
+    {
+      type: TxTypes.Phantasma,
+      msg: msgOf(
+        TxTypes.Phantasma,
+        new TxMsgPhantasma({
+          nexus: new SmallString('simnet'),
+          chain: new SmallString('main'),
+          script: new Uint8Array(8),
+        })
+      ),
+      expected: [NativeFeeKind.Script],
+    },
+    // A raw Gen2 envelope carries its own fee fields and its own signatures; this planner prices
+    // Carbon messages, so it refuses rather than quoting a number for a transaction it cannot size.
+    {
+      type: TxTypes.Phantasma_Raw,
+      msg: msgOf(TxTypes.Phantasma_Raw, new TxMsgPhantasmaRaw(new Uint8Array(8))),
+      expected: 'refused',
+    },
+  ];
+
+  it('names every transaction type the SDK carries', () => {
+    const named = cases.map((c) => c.type).sort((a, b) => a - b);
+    const all = Object.values(TxTypes)
+      .filter((v): v is TxTypes => typeof v === 'number')
+      .sort((a, b) => a - b);
+    expect(named).toEqual(all);
+  });
+
+  it.each(cases)('plans $type as declared', ({ msg, expected }) => {
+    // Only the witness-array types take a count; the rest fix their own witness set and refuse one.
+    const open = SignedTxMsg.requiredWitnesses(msg) === undefined;
+    const options = { ...(open ? { witnessCount: 1 } : {}), infusions: [] };
+    if (expected === 'refused') {
+      expect(() => planFees(msg, config, options)).toThrow(/Cannot plan fees/);
+      return;
+    }
+    expect(planFees(msg, config, options).kinds).toEqual(expected);
   });
 });
