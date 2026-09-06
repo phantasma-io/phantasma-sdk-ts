@@ -7,6 +7,7 @@ import { GovernanceContractMethods } from '../modules/governance-contract-method
 import { ModuleId } from '../module-id.js';
 import { MintPhantasmaNonFungibleArgs } from '../modules/mint-phantasma-non-fungible-args.js';
 import { StandardMeta } from '../modules/standard-meta.js';
+import { TokenCallArgs } from '../modules/token-call-args.js';
 import { TokenContractMethods } from '../modules/token-contract-methods.js';
 import { TokenHelper } from '../modules/token-helper.js';
 import { TokenInfo } from '../modules/token-info.js';
@@ -17,6 +18,7 @@ import { TxMsgBurnFungibleGasPayer } from '../tx-msg-burn-fungible-gas-payer.js'
 import { TxMsgBurnNonFungible } from '../tx-msg-burn-non-fungible.js';
 import { TxMsgBurnNonFungibleGasPayer } from '../tx-msg-burn-non-fungible-gas-payer.js';
 import { TxMsgCall } from '../tx-msg-call.js';
+import { TxMsgCallMulti } from '../tx-msg-call-multi.js';
 import { TxMsgMintFungible } from '../tx-msg-mint-fungible.js';
 import { TxMsgMintNonFungible } from '../tx-msg-mint-non-fungible.js';
 import { TxMsgTransferFungible } from '../tx-msg-transfer-fungible.js';
@@ -27,10 +29,12 @@ import { TxMsgTransferNonFungibleSingle } from '../tx-msg-transfer-non-fungible-
 import { TxMsgTransferNonFungibleSingleGasPayer } from '../tx-msg-transfer-non-fungible-single-gas-payer.js';
 import { VmDynamicStruct } from '../vm/vm-dynamic-struct.js';
 import {
-  estimateNativeFee,
+  estimateNativeFeeBatch,
+  InfusedAsset,
   NativeFeeEstimate,
   NativeFeeKind,
   NativeFeeParams,
+  NativeFeePart,
 } from './native-fee-estimator.js';
 
 /**
@@ -40,6 +44,9 @@ import {
  * documents each one, and are not restated here so the two cannot drift apart. The one fact
  * without a costlier reading is `infusions`: a burned NFT can hold any number of assets, so
  * `planFees` demands it instead of assuming, and `api.fees` reads it from the chain.
+ *
+ * A `Call_Multi` performs several operations under one set of options: the state facts describe
+ * every call in the batch, and `infusions` lists what ALL of its burns give back.
  */
 export interface FeePlanOptions extends Pick<
   NativeFeeParams,
@@ -80,15 +87,18 @@ export interface FeePlanOptions extends Pick<
 /** A fee plan for one message: the estimate, what it was computed from, and how to apply it. */
 export interface FeePlan extends NativeFeeEstimate {
   /**
-   * The operation the message was recognised as, which is also what the bill was computed from.
+   * The operations the message was recognised as, in call order, which is also what the bill was
+   * computed from: one entry for an ordinary message, one per inner call for a `Call_Multi`.
+   *
    * Every kind but {@link NativeFeeKind.Script} is priced with the chain's own formula for that
    * operation; `Script` covers VM scripts and unmodelled calls, whose work depends on execution and
-   * can only be budgeted (see `scriptUnitsAllowance` and its neighbours).
+   * can only be budgeted (see `scriptUnitsAllowance` and its neighbours). So a plan is a prediction
+   * when no entry is `Script`, and a budget in the part that is.
    *
    * A formula-priced bill is exact for the facts it was given and an upper bound for the ones it
    * had to assume: a state fact left unspecified is filled with its costlier default.
    */
-  kind: NativeFeeKind;
+  kinds: readonly NativeFeeKind[];
   /** The signed size the plan was computed for - the bytes the block will carry. */
   envelopeBytes: number;
   /** A copy of `msg` with `maxGas` and `maxData` set to the plan. The input is left untouched. */
@@ -111,12 +121,12 @@ export function planFees(msg: TxMsg, config: GasConfig, options: FeePlanOptions 
       `${TxTypes[msg.type]} transactions choose their own witnesses: pass witnessCount to plan one`
     );
   }
-  const { kind, params } = describe(msg, options);
+  const parts = describe(msg, options);
   const envelopeBytes = SignedTxMsg.envelopeBytes(msg, options.witnessCount);
-  const estimate = estimateNativeFee(kind, config, { ...params, envelopeBytes });
+  const estimate = estimateNativeFeeBatch(parts, config, { envelopeBytes });
   return {
     ...estimate,
-    kind,
+    kinds: parts.map((part) => part.kind),
     envelopeBytes,
     apply(target: TxMsg): TxMsg {
       return new TxMsg(
@@ -132,12 +142,44 @@ export function planFees(msg: TxMsg, config: GasConfig, options: FeePlanOptions 
   };
 }
 
-interface Description {
-  kind: NativeFeeKind;
-  params: NativeFeeParams;
+/**
+ * The NFT instances a message burns: the native burn types, a `Token.BurnNonFungible` call, and
+ * every such call inside a `Call_Multi`. A burn returns whatever the instance's own address holds
+ * and pays for each returned asset, so a planner with a chain to ask reads them per instance and
+ * hands the union to {@link FeePlanOptions.infusions}. It lives beside the decomposition that
+ * decides which calls are burns so the two cannot come to disagree.
+ */
+export function burnedInstances(msg: TxMsg): { tokenId: bigint; instanceId: bigint }[] {
+  switch (msg.type) {
+    case TxTypes.BurnNonFungible:
+    case TxTypes.BurnNonFungible_GasPayer: {
+      const inner = msg.msg as TxMsgBurnNonFungible | TxMsgBurnNonFungibleGasPayer;
+      return [{ tokenId: inner.tokenId, instanceId: inner.instanceId }];
+    }
+    case TxTypes.Call:
+      return burnedByCall(msg.msg as TxMsgCall);
+    case TxTypes.Call_Multi:
+      return (msg.msg as TxMsgCallMulti).calls.flatMap(burnedByCall);
+    default:
+      return [];
+  }
 }
 
-function describe(msg: TxMsg, options: FeePlanOptions): Description {
+function burnedByCall(call: TxMsgCall): { tokenId: bigint; instanceId: bigint }[] {
+  if (
+    call.sections?.hasSections() ||
+    call.moduleId !== ModuleId.Token ||
+    call.methodId !== TokenContractMethods.BurnNonFungible
+  ) {
+    return [];
+  }
+  const { tokenId, instanceIds } = TokenCallArgs.burnNonFungible(call.args);
+  return instanceIds.map((instanceId) => ({ tokenId, instanceId }));
+}
+
+// What a message does, as the calculator's operations. One entry for an ordinary message; a
+// `Call_Multi` yields one per inner call, which is what lets a batch be priced instead of budgeted.
+function describe(msg: TxMsg, options: FeePlanOptions): NativeFeePart[] {
   // Passed through undefined and all: the calculator owns every default, so no default is decided
   // in two places. Whether the recipient is an NFT-derived address is NOT here: the address form
   // decides it, and the message carries the address, so each branch below reads it out.
@@ -153,86 +195,100 @@ function describe(msg: TxMsg, options: FeePlanOptions): Description {
     case TxTypes.TransferFungible:
     case TxTypes.TransferFungible_GasPayer: {
       const inner = msg.msg as TxMsgTransferFungible | TxMsgTransferFungibleGasPayer;
-      return describeAs(NativeFeeKind.TransferFungible, {
-        ...stateFacts,
-        tokenId: inner.tokenId,
-        toIsNftAddress: TokenHelper.isNftAddress(inner.to),
-      });
+      return [
+        describeAs(NativeFeeKind.TransferFungible, {
+          ...stateFacts,
+          tokenId: inner.tokenId,
+          toIsNftAddress: TokenHelper.isNftAddress(inner.to),
+        }),
+      ];
     }
     case TxTypes.TransferNonFungible_Single:
     case TxTypes.TransferNonFungible_Single_GasPayer: {
       const inner = msg.msg as
         | TxMsgTransferNonFungibleSingle
         | TxMsgTransferNonFungibleSingleGasPayer;
-      return describeAs(NativeFeeKind.TransferNonFungible, {
-        ...stateFacts,
-        tokenId: inner.tokenId,
-        count: 1,
-        toIsNftAddress: TokenHelper.isNftAddress(inner.to),
-      });
+      return [
+        describeAs(NativeFeeKind.TransferNonFungible, {
+          ...stateFacts,
+          tokenId: inner.tokenId,
+          count: 1,
+          toIsNftAddress: TokenHelper.isNftAddress(inner.to),
+        }),
+      ];
     }
     case TxTypes.TransferNonFungible_Multi:
     case TxTypes.TransferNonFungible_Multi_GasPayer: {
       const inner = msg.msg as
         | TxMsgTransferNonFungibleMulti
         | TxMsgTransferNonFungibleMultiGasPayer;
-      return describeAs(NativeFeeKind.TransferNonFungible, {
-        ...stateFacts,
-        tokenId: inner.tokenId,
-        count: inner.instanceIds.length,
-        toIsNftAddress: TokenHelper.isNftAddress(inner.to),
-      });
+      return [
+        describeAs(NativeFeeKind.TransferNonFungible, {
+          ...stateFacts,
+          tokenId: inner.tokenId,
+          count: inner.instanceIds.length,
+          toIsNftAddress: TokenHelper.isNftAddress(inner.to),
+        }),
+      ];
     }
     case TxTypes.MintFungible: {
       const inner = msg.msg as TxMsgMintFungible;
-      return describeAs(NativeFeeKind.MintFungible, {
-        ...stateFacts,
-        tokenId: inner.tokenId,
-        toIsNftAddress: TokenHelper.isNftAddress(inner.to),
-      });
+      return [
+        describeAs(NativeFeeKind.MintFungible, {
+          ...stateFacts,
+          tokenId: inner.tokenId,
+          toIsNftAddress: TokenHelper.isNftAddress(inner.to),
+        }),
+      ];
     }
     case TxTypes.BurnFungible:
     case TxTypes.BurnFungible_GasPayer: {
       const inner = msg.msg as TxMsgBurnFungible | TxMsgBurnFungibleGasPayer;
-      return describeAs(NativeFeeKind.BurnFungible, { ...stateFacts, tokenId: inner.tokenId });
+      return [describeAs(NativeFeeKind.BurnFungible, { ...stateFacts, tokenId: inner.tokenId })];
     }
     case TxTypes.MintNonFungible: {
       const inner = msg.msg as TxMsgMintNonFungible;
-      return describeAs(NativeFeeKind.MintNonFungible, {
-        ...stateFacts,
-        tokenId: inner.tokenId,
-        romBytes: inner.rom.length,
-        ramBytes: inner.ram.length,
-        toIsNftAddress: TokenHelper.isNftAddress(inner.to),
-      });
+      return [
+        describeAs(NativeFeeKind.MintNonFungible, {
+          ...stateFacts,
+          tokenId: inner.tokenId,
+          romBytes: inner.rom.length,
+          ramBytes: inner.ram.length,
+          toIsNftAddress: TokenHelper.isNftAddress(inner.to),
+        }),
+      ];
     }
     case TxTypes.BurnNonFungible:
     case TxTypes.BurnNonFungible_GasPayer: {
       const inner = msg.msg as TxMsgBurnNonFungible | TxMsgBurnNonFungibleGasPayer;
-      // What the NFT holds is chain state with no costlier bound, so it is demanded, not assumed: a
-      // burn planned as if the address were empty is short by every returned asset and aborts,
-      // billed, on every retry.
-      if (options.infusions === undefined) {
-        throw new Error(
-          'A burn returns whatever the NFT holds: pass infusions (empty when it holds nothing) or plan through api.fees, which reads them from the chain'
-        );
-      }
       // The stored ROM is chain state the message does not carry, so the deleted quanta are a lower
       // bound. That does not touch the offer: a burn deletes more than it creates, and only the
       // rows it creates are escrowed.
-      return describeAs(NativeFeeKind.BurnNonFungible, {
-        ...stateFacts,
-        tokenId: inner.tokenId,
-        count: 1,
-        infusions: options.infusions,
-      });
+      return [
+        describeAs(NativeFeeKind.BurnNonFungible, {
+          ...stateFacts,
+          tokenId: inner.tokenId,
+          count: 1,
+          infusions: requireInfusions(options.infusions),
+        }),
+      ];
     }
     case TxTypes.Call:
-      return describeCall(msg.msg as TxMsgCall, stateFacts, options);
-    case TxTypes.Call_Multi:
+      return [describeCall(msg.msg as TxMsgCall, stateFacts, options, options.infusions)];
+    case TxTypes.Call_Multi: {
+      // The chain runs the calls in a loop and bills their sum, so the plan is the sum of their
+      // models. `infusions` covers every burn in the batch and the returns cost the same wherever
+      // they are counted, so the first burn takes the whole list and the burns after it take none.
+      let returns = options.infusions;
+      return (msg.msg as TxMsgCallMulti).calls.map((call) => {
+        const part = describeCall(call, stateFacts, options, returns);
+        if (part.kind === NativeFeeKind.BurnNonFungible) returns = [];
+        return part;
+      });
+    }
     case TxTypes.Trade:
     case TxTypes.Phantasma:
-      return scriptPlan(options);
+      return [scriptPlan(options)];
     default:
       throw new Error(`Cannot plan fees for transaction type ${TxTypes[msg.type] ?? msg.type}`);
   }
@@ -241,10 +297,59 @@ function describe(msg: TxMsg, options: FeePlanOptions): Description {
 function describeCall(
   call: TxMsgCall,
   stateFacts: NativeFeeParams,
-  options: FeePlanOptions
-): Description {
+  options: FeePlanOptions,
+  infusions: readonly InfusedAsset[] | undefined
+): NativeFeePart {
+  // A call whose arguments are assembled at execution out of earlier calls' results carries none of
+  // them yet. There is nothing to read a price from, so it is budgeted like any unmodelled call.
+  if (call.sections?.hasSections()) {
+    return scriptPlan(options);
+  }
   if (call.moduleId === ModuleId.Token) {
     switch (call.methodId) {
+      // The five token movements below cost exactly what they cost as native transaction types:
+      // both paths enter the same contract method, and a batched wallet operation is the reason
+      // they arrive as module calls at all. `Token.MintNonFungible` is deliberately absent - the
+      // chain refuses it under mainnet SR 50 whichever way it arrives, so there is nothing to price.
+      case TokenContractMethods.TransferFungible: {
+        const args = TokenCallArgs.transferFungible(call.args);
+        return describeAs(NativeFeeKind.TransferFungible, {
+          ...stateFacts,
+          tokenId: args.tokenId,
+          toIsNftAddress: TokenHelper.isNftAddress(args.to),
+        });
+      }
+      case TokenContractMethods.TransferNonFungible: {
+        const args = TokenCallArgs.transferNonFungible(call.args);
+        return describeAs(NativeFeeKind.TransferNonFungible, {
+          ...stateFacts,
+          tokenId: args.tokenId,
+          count: args.instanceCount,
+          toIsNftAddress: TokenHelper.isNftAddress(args.to),
+        });
+      }
+      case TokenContractMethods.MintFungible: {
+        const args = TokenCallArgs.mintFungible(call.args);
+        return describeAs(NativeFeeKind.MintFungible, {
+          ...stateFacts,
+          tokenId: args.tokenId,
+          toIsNftAddress: TokenHelper.isNftAddress(args.to),
+        });
+      }
+      case TokenContractMethods.BurnFungible:
+        return describeAs(NativeFeeKind.BurnFungible, {
+          ...stateFacts,
+          tokenId: TokenCallArgs.burnFungible(call.args).tokenId,
+        });
+      case TokenContractMethods.BurnNonFungible: {
+        const args = TokenCallArgs.burnNonFungible(call.args);
+        return describeAs(NativeFeeKind.BurnNonFungible, {
+          ...stateFacts,
+          tokenId: args.tokenId,
+          count: args.instanceIds.length,
+          infusions: requireInfusions(infusions),
+        });
+      }
       case TokenContractMethods.CreateToken: {
         const info = TokenInfo.read(new CarbonBinaryReader(call.args));
         const metadata = info.metadata.length
@@ -307,11 +412,23 @@ function describeCall(
   return scriptPlan(options);
 }
 
-function describeAs(kind: NativeFeeKind, params: NativeFeeParams): Description {
+// What the NFTs hold is chain state with no costlier bound, so it is demanded, not assumed: a burn
+// planned as if the addresses were empty is short by every returned asset and aborts, billed, on
+// every retry.
+function requireInfusions(infusions: readonly InfusedAsset[] | undefined): readonly InfusedAsset[] {
+  if (infusions === undefined) {
+    throw new Error(
+      'A burn returns whatever the NFT holds: pass infusions (empty when it holds nothing) or plan through api.fees, which reads them from the chain'
+    );
+  }
+  return infusions;
+}
+
+function describeAs(kind: NativeFeeKind, params: NativeFeeParams): NativeFeePart {
   return { kind, params };
 }
 
-function scriptPlan(options: FeePlanOptions): Description {
+function scriptPlan(options: FeePlanOptions): NativeFeePart {
   return {
     kind: NativeFeeKind.Script,
     params: {

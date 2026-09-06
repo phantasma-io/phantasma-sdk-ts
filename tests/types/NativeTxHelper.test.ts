@@ -79,7 +79,7 @@ describe('NativeTxHelper', () => {
     // Both sign: the payer first, the owner second, as the node reads them.
     const signed = TxMsgSigner.signWithKeys(msg, [OWNER, PAYER]);
     expect(signed.witnesses.map((w) => w.address.toHex())).toEqual([payer.toHex(), owner.toHex()]);
-    expect(planFees(msg, config).kind).toBe(NativeFeeKind.TransferFungible);
+    expect(planFees(msg, config).kinds).toEqual([NativeFeeKind.TransferFungible]);
   });
 
   it('picks the single- or multi-instance NFT transfer by the instance count', () => {
@@ -141,6 +141,8 @@ describe('NativeTxHelper', () => {
     expect(burnNft.type).toBe(TxTypes.BurnNonFungible);
     expect((burnNft.msg as TxMsgBurnNonFungible).instanceId).toBe(42n);
     // A burn is planned for what the NFT holds; this one holds nothing.
-    expect(planFees(burnNft, config, { infusions: [] }).kind).toBe(NativeFeeKind.BurnNonFungible);
+    expect(planFees(burnNft, config, { infusions: [] }).kinds).toEqual([
+      NativeFeeKind.BurnNonFungible,
+    ]);
   });
 });

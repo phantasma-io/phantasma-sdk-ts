@@ -1,22 +1,22 @@
-import { TxTypes } from '../types/carbon/tx-types.js';
 import { GasConfig } from '../types/carbon/blockchain/gas-config.js';
 import { TxMsg } from '../types/carbon/blockchain/tx-msg.js';
-import { TxMsgBurnNonFungible } from '../types/carbon/blockchain/tx-msg-burn-non-fungible.js';
-import { TxMsgBurnNonFungibleGasPayer } from '../types/carbon/blockchain/tx-msg-burn-non-fungible-gas-payer.js';
 import { InfusedAsset } from '../types/carbon/blockchain/tx-helpers/native-fee-estimator.js';
 import {
+  burnedInstances,
   FeePlan,
   FeePlanOptions,
   planFees,
 } from '../types/carbon/blockchain/tx-helpers/fee-plan.js';
 import { gasConfigFromRpc, GasConfigResult } from './interfaces/gas-config.js';
 
-/** Where a planner reads the chain's gas config from - a `PhantasmaAPI`, or anything shaped like one. */
+/** Where a planner reads the chain's gas config from. A `PhantasmaAPI` is one, and so is anything
+ * shaped like one. */
 export interface GasConfigSource {
   getGasConfig(): Promise<GasConfigResult>;
   /**
-   * What an NFT holds at its own address, for planning its burn. Optional: a source without it can
-   * plan every message but a burn, for which the caller must then state `infusions`.
+   * What an NFT holds at its own address, needed to plan its burn. The method is optional. A source
+   * without it can plan every message except a burn, and for a burn the caller must then state
+   * `infusions`.
    */
   infusedAssets?(tokenId: bigint, instanceId: bigint): Promise<InfusedAsset[]>;
 }
@@ -24,8 +24,8 @@ export interface GasConfigSource {
 export interface FeePlannerOptions {
   /**
    * How long a fetched gas config is reused before it is read again. Prices change only by
-   * governance resolution, but a stale price under-offers every transaction until it is noticed,
-   * so the default is short: 60 seconds.
+   * governance resolution. A stale price under-offers every transaction until someone notices, so
+   * the default is short, 60 seconds.
    */
   configTtlMs?: number;
 }
@@ -36,14 +36,14 @@ export interface PlanRequestOptions extends FeePlanOptions {
 }
 
 /**
- * Chain parameters the fee flow needs that are not part of the on-chain `GasConfig`: they describe
- * the node's admission rules rather than its prices, and arrive in the same `getGasConfig` answer.
+ * Chain parameters the fee flow needs that are not part of the on-chain `GasConfig`. They describe
+ * the node's admission rules, and they arrive in the same `getGasConfig` answer as the prices.
  */
 export interface ChainFeeParams {
   /**
-   * The longest lifetime the chain admits for a transaction, in milliseconds - it refuses an expiry
-   * at or beyond `now + expiryWindow`. Feed it to `expiryWithin` when a person sits between building
-   * a transaction and signing it.
+   * The longest lifetime the chain admits for a transaction, in milliseconds. The chain refuses an
+   * expiry at or beyond `now + expiryWindow`. Pass this value to `expiryWithin` when a person sits
+   * between building a transaction and signing it.
    */
   expiryWindow: number;
   /** Target time between blocks, in milliseconds. */
@@ -53,10 +53,10 @@ export interface ChainFeeParams {
 }
 
 /**
- * Plans transaction fees against one chain: reads that chain's gas config from its RPC client,
- * keeps it for a short while, and prices messages with it. A `PhantasmaAPI` owns one as
- * `api.fees`, so a process talking to several chains has one planner per chain and no shared
- * state.
+ * Plans transaction fees against one chain. It reads that chain's gas config from its RPC client,
+ * keeps the config for a short while, and prices messages with it. A `PhantasmaAPI` owns one as
+ * `api.fees`. A process talking to several chains therefore has one planner per chain and shares no
+ * state between them.
  */
 export class FeePlanner {
   private readonly ttlMs: number;
@@ -116,34 +116,31 @@ export class FeePlanner {
   }
 
   // A burn returns whatever the NFT's own address holds, and the chain charges for each returned
-  // asset. That set is chain state the message does not carry and has no costlier bound, so the
-  // pure planner demands it; here, with a chain to ask, it is read unless the caller stated it (an
-  // empty list states that the NFT holds nothing).
+  // asset. That set is chain state the message does not carry, and it has no costlier bound, so the
+  // pure planner demands it. Here there is a chain to ask, so it is read unless the caller stated
+  // it. An empty list states that the NFTs hold nothing.
+  //
+  // A message may burn several instances. A wallet burning a selection sends a `Call_Multi` of
+  // burns. Each instance is read at its own address, because the fee follows every returned asset
+  // separately.
   private async withInfusions(msg: TxMsg, options: FeePlanOptions): Promise<FeePlanOptions> {
     if (options.infusions !== undefined) return options;
-    let burn: TxMsgBurnNonFungible | TxMsgBurnNonFungibleGasPayer;
-    switch (msg.type) {
-      case TxTypes.BurnNonFungible:
-        burn = msg.msg as TxMsgBurnNonFungible;
-        break;
-      case TxTypes.BurnNonFungible_GasPayer:
-        burn = msg.msg as TxMsgBurnNonFungibleGasPayer;
-        break;
-      default:
-        return options;
-    }
-    if (!this.source.infusedAssets) {
+    const burned = burnedInstances(msg);
+    if (burned.length === 0) return options;
+    const read = this.source.infusedAssets;
+    if (!read) {
       throw new Error(
         "This planner's source cannot read what a burned NFT holds: pass infusions (empty when it holds nothing) or plan through a PhantasmaAPI"
       );
     }
-    return {
-      ...options,
-      infusions: await this.source.infusedAssets(burn.tokenId, burn.instanceId),
-    };
+    const infusions: InfusedAsset[] = [];
+    for (const instance of burned) {
+      infusions.push(...(await read.call(this.source, instance.tokenId, instance.instanceId)));
+    }
+    return { ...options, infusions };
   }
 
-  /** Plans a message against a config the caller already holds - no network, no cache. */
+  /** Plans a message against a config the caller already holds. It touches no network and no cache. */
   planWith(config: GasConfig, msg: TxMsg, options: FeePlanOptions = {}): FeePlan {
     return planFees(msg, config, options);
   }

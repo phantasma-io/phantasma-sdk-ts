@@ -5,6 +5,7 @@ export * from './phantasma-nft-mint-info.js';
 export * from './phantasma-nft-mint-result.js';
 export * from './series-info.js';
 export * from './standard-meta.js';
+export * from './token-call-args.js';
 export * from './token-contract-methods.js';
 export * from './token-helper.js';
 export * from './token-info.js';

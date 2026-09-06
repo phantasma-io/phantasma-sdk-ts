@@ -126,9 +126,11 @@ Under gas model v2 there are two things to know, and `sendTransaction` handles b
 - `api.fees` is the fee planner of the chain the client talks to. It reads `getGasConfig` once,
   keeps it for a minute, and prices every message from the message itself: the signed size is
   computed without a key, and the storage rows, call result bytes and gas sites of each native
-  operation are priced with the chain's own formula (`planFees`). `plan.kind` says which operation
-  was priced; the one kind that is a budget rather than a formula is `NativeFeeKind.Script` - VM
-  scripts and unmodelled calls, whose work depends on execution.
+  operation are priced with the chain's own formula (`planFees`). `plan.kinds` says which operations
+  were priced - a `Call_Multi` performs several, and each is priced and then summed, because the
+  chain bills a batch as the sum of its calls with the envelope counted once. The one kind that is a
+  budget rather than a formula is `NativeFeeKind.Script` - VM scripts and unmodelled calls, whose
+  work depends on execution.
 - `FeePlanOptions` is where you tighten point 2 by telling the planner a fact it would otherwise
   assume. Every field is optional and most callers pass none.
 - A message the caller has already planned (`maxGas > 0`) is sent as it is. Signing an unplanned
