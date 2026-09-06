@@ -166,11 +166,22 @@ export interface NativeFeeParams {
   /**
    * VM work-unit allowance for the Script kind. The default (5000) exceeds every script seen in
    * mainnet history (max 3392 units) with margin.
+   *
+   * In a `Call_Multi` the allowance is per unmodelled call, not per message, because each of them
+   * can do that much work. A batch of calls the model does not price therefore offers several
+   * times what it will spend - measured on the localnet at 4.2x for one such call and 10.1x for ten
+   * - which is refunded, and which a caller who knows the calls can bring down with this field.
    */
   scriptUnitsAllowance?: bigint;
-  /** Event bytes allowance for the Script kind (Notify payloads count as block data). Default 512. */
+  /**
+   * Event bytes allowance for the Script kind (Notify payloads count as block data). Default 512,
+   * per unmodelled call like {@link scriptUnitsAllowance}.
+   */
   scriptEventBytes?: number;
-  /** New storage quanta allowance for the Script kind. Default 4. */
+  /**
+   * New storage quanta allowance for the Script kind. Default 4, per unmodelled call like
+   * {@link scriptUnitsAllowance}.
+   */
   scriptStorageQuanta?: number;
 }
 
