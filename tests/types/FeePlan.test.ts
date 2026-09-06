@@ -6,7 +6,8 @@ import { TxTypes } from '../../src/types/carbon/tx-types';
 import { GasConfig } from '../../src/types/carbon/blockchain/gas-config';
 import { ModuleId } from '../../src/types/carbon/blockchain/module-id';
 import { TxMsg } from '../../src/types/carbon/blockchain/tx-msg';
-import { TxMsgCall } from '../../src/types/carbon/blockchain/tx-msg-call';
+import { MsgCallArgSections, TxMsgCall } from '../../src/types/carbon/blockchain/tx-msg-call';
+import { TxMsgCallMulti } from '../../src/types/carbon/blockchain/tx-msg-call-multi';
 import { TxMsgBurnFungible } from '../../src/types/carbon/blockchain/tx-msg-burn-fungible';
 import { TxMsgBurnNonFungible } from '../../src/types/carbon/blockchain/tx-msg-burn-non-fungible';
 import { TxMsgMintNonFungible } from '../../src/types/carbon/blockchain/tx-msg-mint-non-fungible';
@@ -26,7 +27,7 @@ import { CreateTokenTxHelper } from '../../src/types/carbon/blockchain/tx-helper
 import { PhantasmaNftMintInfo } from '../../src/types/carbon/blockchain/modules/phantasma-nft-mint-info';
 import { TxMsgTransferNonFungibleMulti } from '../../src/types/carbon/blockchain/tx-msg-transfer-non-fungible-multi';
 import { MintPhantasmaNonFungibleArgs } from '../../src/types/carbon/blockchain/modules/mint-phantasma-non-fungible-args';
-import { planFees } from '../../src/types/carbon/blockchain/tx-helpers/fee-plan';
+import { burnedInstances, planFees } from '../../src/types/carbon/blockchain/tx-helpers/fee-plan';
 import { NativeFeeKind } from '../../src/types/carbon/blockchain/tx-helpers/native-fee-estimator';
 import {
   VmDynamicStruct,
@@ -132,7 +133,7 @@ describe('planFees on native transfers', () => {
     const msg = transfer(config.gasTokenId);
     const plan = planFees(msg, config);
 
-    expect(plan.kind).toBe(NativeFeeKind.TransferFungible);
+    expect(plan.kinds).toEqual([NativeFeeKind.TransferFungible]);
     expect(plan.envelopeBytes).toBe(170);
     expect(plan.expectedGasBill).toBe(42_600_000n);
     expect(plan.maxGas).toBe(42_600_000n);
@@ -182,7 +183,7 @@ describe('planFees on token calls', () => {
       oneWitness
     );
     const policy = 100_000_000_000_000n + (100_000_000_000_000n >> 2n);
-    expect(fungible.kind).toBe(NativeFeeKind.CreateToken);
+    expect(fungible.kinds).toEqual([NativeFeeKind.CreateToken]);
     expect(fungible.newStorageQuanta).toBe(3);
     expect(fungible.expectedGasBill).toBe(bill(0n, fungible.envelopeBytes + 3 + 8, policy));
     expect(fungible.maxData).toBe(600_000n);
@@ -261,7 +262,7 @@ describe('planFees on token calls', () => {
     const series = SeriesInfoBuilder.build(schemas.seriesMetadata, 7n, 0, 0, payerPub, []);
     const msg = CreateTokenSeriesTxHelper.buildTx(9n, series, payerPub);
     const plan = planFees(msg, config, oneWitness);
-    expect(plan.kind).toBe(NativeFeeKind.CreateTokenSeries);
+    expect(plan.kinds).toEqual([NativeFeeKind.CreateTokenSeries]);
     expect(plan.newStorageQuanta).toBe(3);
     expect(plan.expectedGasBill).toBe(bill(0n, plan.envelopeBytes + 3 + 4, 25_000_000_000_000n));
     expect(planFees(msg, config, { ...oneWitness, seriesHasMetaId: false }).newStorageQuanta).toBe(
@@ -279,7 +280,7 @@ describe('planFees on token calls', () => {
       duplicatedSeries: false,
       supplyRowExists: true,
     });
-    expect(plan.kind).toBe(NativeFeeKind.MintPhantasmaNonFungible);
+    expect(plan.kinds).toEqual([NativeFeeKind.MintPhantasmaNonFungible]);
     expect(plan.newStorageQuanta).toBe(5);
     expect(plan.expectedGasBill).toBe(bill(30n, plan.envelopeBytes + 5 + 44));
     expect(plan.maxData).toBe(1_000_000n);
@@ -298,7 +299,7 @@ describe('planFees on token calls', () => {
       supplyRowExists: true,
     });
 
-    expect(plan.kind).toBe(NativeFeeKind.MintPhantasmaNonFungible);
+    expect(plan.kinds).toEqual([NativeFeeKind.MintPhantasmaNonFungible]);
     // One balance row plus, per instance, its ROM row and the three fixed rows a deterministic
     // mint writes; the single-instance plan above needs five of those same quanta.
     expect(plan.newStorageQuanta).toBe(1 + 3 * 4);
@@ -375,7 +376,7 @@ describe('planFees on token calls', () => {
 
     const facts = { tokenBurnedBefore: true, supplyRowExists: true };
     const empty = planFees(burn, config, { ...facts, infusions: [] });
-    expect(empty.kind).toBe(NativeFeeKind.BurnNonFungible);
+    expect(empty.kinds).toEqual([NativeFeeKind.BurnNonFungible]);
     expect(empty.expectedGasBill).toBe(bill(30n, empty.envelopeBytes));
 
     const returned = planFees(burn, config, {
@@ -442,7 +443,7 @@ describe('planFees on token calls', () => {
     });
     const plan = planFees(msg, config);
 
-    expect(plan.kind).toBe(NativeFeeKind.TransferNonFungible);
+    expect(plan.kinds).toEqual([NativeFeeKind.TransferNonFungible]);
     expect(plan.newStorageQuanta).toBe(3);
     expect(plan.deletedStorageQuanta).toBe(2);
     expect(plan.expectedGasBill).toBe(bill(20n, plan.envelopeBytes + 1));
@@ -468,7 +469,7 @@ describe('planFees on token calls', () => {
       })
     );
     const plan = planFees(msg, config, { supplyRowExists: true });
-    expect(plan.kind).toBe(NativeFeeKind.MintNonFungible);
+    expect(plan.kinds).toEqual([NativeFeeKind.MintNonFungible]);
     expect(plan.newStorageQuanta).toBe(5);
     expect(
       planFees(msg, config, { supplyRowExists: true, romHasMetaId: false }).newStorageQuanta
@@ -488,7 +489,7 @@ describe('planFees on token calls', () => {
     msg.msg = call;
 
     const plan = planFees(msg, config, oneWitness);
-    expect(plan.kind).toBe(NativeFeeKind.RegisterName);
+    expect(plan.kinds).toEqual([NativeFeeKind.RegisterName]);
     expect(plan.expectedGasBill).toBe(bill(0n, plan.envelopeBytes, 100_000_000_000_000_000n >> 4n));
     expect(plan.maxData).toBe(0n);
   });
@@ -508,7 +509,7 @@ describe('planFees on token calls', () => {
       script: new Uint8Array(40),
     });
     const scriptPlan = planFees(script, config, oneWitness);
-    expect(scriptPlan.kind).toBe(NativeFeeKind.Script);
+    expect(scriptPlan.kinds).toEqual([NativeFeeKind.Script]);
 
     const query = new TxMsg(TxTypes.Call, 1_787_000_000_000n, 0n, 0n, payerPub, SmallString.empty);
     const call = new TxMsgCall();
@@ -517,7 +518,7 @@ describe('planFees on token calls', () => {
     call.args = new Uint8Array(40);
     query.msg = call;
     const queryPlan = planFees(query, config, { ...oneWitness, scriptUnitsAllowance: 100n });
-    expect(queryPlan.kind).toBe(NativeFeeKind.Script);
+    expect(queryPlan.kinds).toEqual([NativeFeeKind.Script]);
     expect(queryPlan.expectedGasBill).toBe(bill(100n, queryPlan.envelopeBytes + 4 + 512));
   });
 
@@ -526,5 +527,300 @@ describe('planFees on token calls', () => {
     const one = planFees(msg, config, oneWitness);
     const two = planFees(msg, config, { witnessCount: 2 });
     expect(two.envelopeBytes).toBe(one.envelopeBytes + 96);
+  });
+});
+
+// A wallet that performs several token operations at once sends them as module calls: one
+// `Token.*` call, or a `Call_Multi` of them. The chain runs those through the very same contract
+// methods the native transaction types run, in a plain loop, with no per-call surcharge - so the
+// planner has to price them like the native operations they are instead of budgeting them as if
+// they were VM scripts.
+describe('planFees on token-module calls', () => {
+  const oneWitness = { witnessCount: 1 };
+
+  const tokenCall = (
+    methodId: TokenContractMethods,
+    writeArgs: (w: CarbonBinaryWriter) => void
+  ) => {
+    const call = new TxMsgCall();
+    call.moduleId = ModuleId.Token;
+    call.methodId = methodId;
+    const w = new CarbonBinaryWriter();
+    writeArgs(w);
+    call.args = w.toUint8Array();
+    return call;
+  };
+  const callMsg = (type: TxTypes, inner: object) => {
+    const msg = new TxMsg(type, 1_787_000_000_000n, 0n, 0n, payerPub, SmallString.empty);
+    msg.msg = inner;
+    return msg;
+  };
+  const burnNftCall = (tokenId: bigint, instanceIds: bigint[]) =>
+    tokenCall(TokenContractMethods.BurnNonFungible, (w) => {
+      w.write8u(tokenId);
+      payerPub.write(w);
+      w.write4(instanceIds.length);
+      for (const id of instanceIds) w.write8u(id);
+    });
+
+  it('prices a fungible transfer call exactly as the native transfer, reading token and recipient from the arguments', () => {
+    const call = callMsg(
+      TxTypes.Call,
+      tokenCall(TokenContractMethods.TransferFungible, (w) => {
+        ownerPub.write(w);
+        payerPub.write(w);
+        w.write8u(97n);
+        IntX.fromI64(5n).write(w);
+      })
+    );
+    const plan = planFees(call, config, oneWitness);
+    expect(plan.kinds).toEqual([NativeFeeKind.TransferFungible]);
+    // One transfer fee, and the fresh recipient row that the costlier default assumes.
+    expect(plan.expectedGasBill).toBe(bill(10n, plan.envelopeBytes + 1));
+    expect(plan.maxData).toBe(config.dataEscrowPerRow);
+
+    // The recipient's address form decides one query fee here exactly as it does natively.
+    const infused = callMsg(
+      TxTypes.Call,
+      tokenCall(TokenContractMethods.TransferFungible, (w) => {
+        TokenHelper.getNftAddress(9n, 5n).write(w);
+        payerPub.write(w);
+        w.write8u(97n);
+        IntX.fromI64(5n).write(w);
+      })
+    );
+    expect(planFees(infused, config, oneWitness).expectedGasBill).toBe(
+      bill(20n, plan.envelopeBytes + 1)
+    );
+  });
+
+  it('counts the instances of an NFT transfer call', () => {
+    const instances = [11n, 12n, 13n];
+    const call = callMsg(
+      TxTypes.Call,
+      tokenCall(TokenContractMethods.TransferNonFungible, (w) => {
+        ownerPub.write(w);
+        payerPub.write(w);
+        w.write8u(97n);
+        w.write4(instances.length);
+        for (const id of instances) w.write8u(id);
+      })
+    );
+    const plan = planFees(call, config, oneWitness);
+    expect(plan.kinds).toEqual([NativeFeeKind.TransferNonFungible]);
+    // Three transfer fees; three lookup rows created against three deleted, plus the fresh
+    // recipient balance row - so one net quantum of block data and four rows of ceiling.
+    expect(plan.expectedGasBill).toBe(bill(30n, plan.envelopeBytes + 1));
+    expect(plan.newStorageQuanta).toBe(4);
+    expect(plan.deletedStorageQuanta).toBe(3);
+  });
+
+  it('prices fungible mint and burn calls with their variable-length result', () => {
+    const mint = callMsg(
+      TxTypes.Call,
+      tokenCall(TokenContractMethods.MintFungible, (w) => {
+        w.write8u(97n);
+        ownerPub.write(w);
+        IntX.fromI64(1000n).write(w);
+      })
+    );
+    const mintPlan = planFees(mint, config, { ...oneWitness, bigFungible: false });
+    expect(mintPlan.kinds).toEqual([NativeFeeKind.MintFungible]);
+    // Transfer fee; the recipient's row and the supply row; a 9-byte int64 balance answer.
+    expect(mintPlan.expectedGasBill).toBe(bill(10n, mintPlan.envelopeBytes + 2 + 9));
+
+    const burn = callMsg(
+      TxTypes.Call,
+      tokenCall(TokenContractMethods.BurnFungible, (w) => {
+        w.write8u(97n);
+        payerPub.write(w);
+        IntX.fromI64(1n).write(w);
+      })
+    );
+    const burnPlan = planFees(burn, config, {
+      ...oneWitness,
+      bigFungible: false,
+      tokenBurnedBefore: true,
+      supplyRowExists: true,
+    });
+    expect(burnPlan.kinds).toEqual([NativeFeeKind.BurnFungible]);
+    expect(burnPlan.expectedGasBill).toBe(bill(10n, burnPlan.envelopeBytes + 9));
+  });
+
+  it('prices an NFT burn call for every instance it names and demands what they hold', () => {
+    const call = callMsg(TxTypes.Call, burnNftCall(9n, [11n, 12n]));
+    expect(() => planFees(call, config, oneWitness)).toThrow(/infusions/);
+
+    const plan = planFees(call, config, {
+      ...oneWitness,
+      infusions: [],
+      tokenBurnedBefore: true,
+      supplyRowExists: true,
+    });
+    expect(plan.kinds).toEqual([NativeFeeKind.BurnNonFungible]);
+    // Two instances at a transfer fee plus two queries each; four rows deleted per instance.
+    expect(plan.expectedGasBill).toBe(bill(60n, plan.envelopeBytes));
+    expect(plan.deletedStorageQuanta).toBe(8);
+  });
+
+  // Explicit NFT mints are refused chain-wide by mainnet SR 50 whichever way they arrive, so the
+  // SDK removed its native builder and does not price the call either: there is no transaction to
+  // price. It must stay budgeted rather than quietly grow a model.
+  it('leaves an explicit NFT mint call and an unmodelled call at the script budget', () => {
+    const mint = callMsg(
+      TxTypes.Call,
+      tokenCall(TokenContractMethods.MintNonFungible, (w) => {
+        w.write8u(97n);
+        ownerPub.write(w);
+        w.write4(0);
+      })
+    );
+    expect(planFees(mint, config, oneWitness).kinds).toEqual([NativeFeeKind.Script]);
+
+    const unknown = callMsg(
+      TxTypes.Call,
+      tokenCall(TokenContractMethods.ApplyInflation, (w) => w.write8u(97n))
+    );
+    expect(planFees(unknown, config, oneWitness).kinds).toEqual([NativeFeeKind.Script]);
+  });
+
+  // A call may name argument SECTIONS instead of arguments: the chain assembles them at execution
+  // out of earlier calls' results. Nothing to read a price from, and reading the empty argument
+  // buffer as if it held the fields would be worse than budgeting.
+  it('budgets a call whose arguments are assembled at execution', () => {
+    const call = burnNftCall(9n, [11n]);
+    call.sections = new MsgCallArgSections([
+      { registerOffset: -0xffff0001, args: new Uint8Array() },
+    ]);
+    call.args = new Uint8Array();
+    const plan = planFees(callMsg(TxTypes.Call, call), config, oneWitness);
+    expect(plan.kinds).toEqual([NativeFeeKind.Script]);
+  });
+});
+
+describe('planFees on Call_Multi', () => {
+  const oneWitness = { witnessCount: 1 };
+
+  const burnNftCall = (tokenId: bigint, instanceId: bigint) => {
+    const call = new TxMsgCall();
+    call.moduleId = ModuleId.Token;
+    call.methodId = TokenContractMethods.BurnNonFungible;
+    const w = new CarbonBinaryWriter();
+    w.write8u(tokenId);
+    payerPub.write(w);
+    w.write4(1);
+    w.write8u(instanceId);
+    call.args = w.toUint8Array();
+    return call;
+  };
+  const burnBatch = (count: number) => {
+    const msg = new TxMsg(
+      TxTypes.Call_Multi,
+      1_787_000_000_000n,
+      0n,
+      0n,
+      payerPub,
+      SmallString.empty
+    );
+    msg.msg = new TxMsgCallMulti(
+      Array.from({ length: count }, (_, i) => burnNftCall(9n, BigInt(11 + i)))
+    );
+    return msg;
+  };
+  const burnFacts = {
+    ...oneWitness,
+    infusions: [],
+    tokenBurnedBefore: true,
+    supplyRowExists: true,
+  };
+
+  // The reference point is a measured one: two NFT burns batched this way settled at 73,100,000
+  // kcal-base against a 290-byte envelope on the localnet (evidence cs-live-v6, 2026-09-02), which
+  // is exactly what summing the two burn models and counting the envelope once produces.
+  it('prices a batch as the sum of its calls with the envelope counted once', () => {
+    for (const count of [1, 2, 3, 11, 20]) {
+      const plan = planFees(burnBatch(count), config, burnFacts);
+      expect(plan.kinds).toEqual(Array(count).fill(NativeFeeKind.BurnNonFungible));
+      // Per burn: a transfer fee and two queries. Every burn deletes more rows than it creates, so
+      // the batch adds no block data beyond its envelope.
+      expect(plan.expectedGasBill).toBe(bill(30n * BigInt(count), plan.envelopeBytes));
+      expect(plan.deletedStorageQuanta).toBe(4 * count);
+    }
+  });
+
+  // The defect this file's batch cases exist for: a Call_Multi used to take the flat script budget
+  // whatever it contained, so its price did not follow the work it does. It must now.
+  it('follows the work of the batch instead of a flat budget', () => {
+    const two = planFees(burnBatch(2), config, burnFacts);
+    const twenty = planFees(burnBatch(20), config, burnFacts);
+    const perBurn = (twenty.expectedGasBill - two.expectedGasBill) / 18n;
+    const envelopePerBurn = BigInt(twenty.envelopeBytes - two.envelopeBytes) / 18n;
+    expect(perBurn).toBe(bill(30n, Number(envelopePerBurn)));
+  });
+
+  it('prices what the batch gives back once, not once per burn', () => {
+    const empty = planFees(burnBatch(2), config, burnFacts);
+    const returned = planFees(burnBatch(2), config, {
+      ...burnFacts,
+      infusions: [{ tokenId: 1n }, { tokenId: 97n }],
+    });
+    // One transfer plus one owner-lookup query per returned token, counted for the batch and not
+    // for each of its burns; the custom token's balance row is recreated for the burner.
+    expect(returned.expectedGasBill - empty.expectedGasBill).toBe(40n * 10_000n);
+    expect(returned.maxData - empty.maxData).toBe(config.dataEscrowPerRow);
+  });
+
+  it('prices the calls it models and budgets only the ones it does not', () => {
+    const msg = new TxMsg(
+      TxTypes.Call_Multi,
+      1_787_000_000_000n,
+      0n,
+      0n,
+      payerPub,
+      SmallString.empty
+    );
+    const unknown = new TxMsgCall();
+    unknown.moduleId = ModuleId.Token;
+    unknown.methodId = TokenContractMethods.ApplyInflation;
+    unknown.args = new Uint8Array(8);
+    msg.msg = new TxMsgCallMulti([burnNftCall(9n, 11n), unknown]);
+
+    const plan = planFees(msg, config, { ...burnFacts, scriptUnitsAllowance: 100n });
+    expect(plan.kinds).toEqual([NativeFeeKind.BurnNonFungible, NativeFeeKind.Script]);
+    // Both work terms, and the budget's event bytes. Its four storage quanta are NOT block data
+    // here: the chain bills the net growth of the whole transaction, and the burn deletes four rows
+    // against them - which is the reason a batch is settled once instead of call by call.
+    expect(plan.expectedGasBill).toBe(bill(130n, plan.envelopeBytes + 512));
+    expect(plan.newStorageQuanta).toBe(4);
+    expect(plan.deletedStorageQuanta).toBe(4);
+  });
+
+  it('names every instance a message burns, whichever shape it burns them in', () => {
+    const native = new TxMsg(
+      TxTypes.BurnNonFungible,
+      1_787_000_000_000n,
+      0n,
+      0n,
+      payerPub,
+      SmallString.empty
+    );
+    native.msg = new TxMsgBurnNonFungible({ tokenId: 9n, instanceId: 5n });
+    expect(burnedInstances(native)).toEqual([{ tokenId: 9n, instanceId: 5n }]);
+
+    expect(burnedInstances(burnBatch(2))).toEqual([
+      { tokenId: 9n, instanceId: 11n },
+      { tokenId: 9n, instanceId: 12n },
+    ]);
+
+    const transfer = new TxMsg(
+      TxTypes.TransferFungible,
+      1_787_000_000_000n,
+      0n,
+      0n,
+      payerPub,
+      SmallString.empty
+    );
+    transfer.msg = new TxMsgTransferFungible(ownerPub, 97n, 1n);
+    expect(burnedInstances(transfer)).toEqual([]);
   });
 });

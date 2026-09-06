@@ -175,6 +175,21 @@ export interface NativeFeeParams {
 }
 
 /**
+ * One operation of a batched message: the kind it is priced as and the inputs it is priced from.
+ * See {@link estimateNativeFeeBatch}.
+ */
+export interface NativeFeePart {
+  kind: NativeFeeKind;
+  params?: NativeFeeParams;
+}
+
+/**
+ * The estimate inputs that belong to the transaction rather than to one operation inside it: the
+ * block carries one envelope however many operations the message performs.
+ */
+export type NativeFeeTransactionParams = Pick<NativeFeeParams, 'envelopeBytes' | 'payloadBytes'>;
+
+/**
  * An asset held at a burned NFT's own address, which the burn returns to the burner. See
  * {@link NativeFeeParams.infusions}.
  */
@@ -296,41 +311,96 @@ export function estimateNativeFee(
   config: GasConfig,
   params: NativeFeeParams = {}
 ): NativeFeeEstimate {
+  return estimateNativeFeeBatch([{ kind, params }], config, params);
+}
+
+/**
+ * Fee of a message that performs SEVERAL operations in one transaction - a `TxTypes.Call_Multi`,
+ * whose calls the chain runs in a plain loop with no per-call surcharge and no batch dispatch cost.
+ * The chain accumulates one gas bill, one result buffer and one change set over the whole
+ * transaction and bills the envelope once, so a batch costs the sum of its parts over work, policy
+ * fee, result bytes and rows, settled once.
+ *
+ * Rows are counted per part. Two parts that create the SAME row - two burns of one token both
+ * counting its burnt counter, two transfers into one fresh address both counting its balance row -
+ * count it twice. Carrying "an earlier part already created it" forward is not sound in the
+ * direction that matters: a burn that empties a supply to exactly zero deletes the supply row
+ * again, so a later mint would be priced short and abort, billed. Counting twice raises only the
+ * escrow ceiling, which is refunded.
+ *
+ * @param parts - The operations the message performs, in call order.
+ * @param config - Current chain gas config (see the getGasConfig RPC method).
+ * @param transaction - The sizes that belong to the transaction rather than to one operation.
+ */
+export function estimateNativeFeeBatch(
+  parts: readonly NativeFeePart[],
+  config: GasConfig,
+  transaction: NativeFeeTransactionParams = {}
+): NativeFeeEstimate {
+  return settle(
+    parts.map((part) => partModel(part, config)),
+    config,
+    transaction
+  );
+}
+
+// The model of one operation, with the input check that belongs to every kind. Split out so the
+// single-operation and the batch entry points build their parts the same way.
+function partModel(part: NativeFeePart, config: GasConfig): OperationModel {
+  const params = part.params ?? {};
   const count = params.count ?? 1;
   if (!Number.isSafeInteger(count) || count < 1) {
     throw new RangeError('count must be a positive integer');
   }
-  const v2 = usesGasModelV2(config);
-  const model = operationModel(kind, config, params, count);
+  return operationModel(part.kind, config, params, count);
+}
+
+// Turns the operations a transaction performs into its bill, offer and escrow ceiling. One
+// settlement for one transaction: the work, policy fees, result bytes and rows add up, the envelope
+// is counted once, and the fee scaling and the minimum-bill floor apply to the total - which is
+// what the chain does with the counters it accumulates while the transaction runs.
+function settle(
+  models: readonly OperationModel[],
+  config: GasConfig,
+  transaction: NativeFeeTransactionParams
+): NativeFeeEstimate {
+  let workUnits = 0n;
+  let policyFee = 0n;
+  let resultBytes = 0;
+  let newQuanta = 0;
+  let deletedQuanta = 0;
+  for (const model of models) {
+    workUnits = clampU64(workUnits + model.workUnits);
+    policyFee = clampU64(policyFee + model.policyFee);
+    resultBytes += model.resultBytes;
+    newQuanta += model.newQuanta;
+    deletedQuanta += model.deletedQuanta;
+  }
   // Only the net growth of paid storage is block data; deleted rows are refunded, not billed.
-  const netQuanta = Math.max(model.newQuanta - model.deletedQuanta, 0);
+  const netQuanta = Math.max(newQuanta - deletedQuanta, 0);
 
   let expected: bigint;
   let maxGas: bigint;
-  if (v2) {
-    const envelope = params.envelopeBytes;
+  if (usesGasModelV2(config)) {
+    const envelope = transaction.envelopeBytes;
     if (envelope === undefined) {
       throw new RangeError('envelopeBytes is required under gas model v2');
     }
     assertNonNegativeInteger(envelope, 'envelopeBytes');
     // v2: bill = mulShiftSat(work + blockData * 25, mult, shift) + policyFee, floored at
     // minimumGasBill, where blockData = envelope + net storage quanta + Call result bytes.
-    const blockData = BigInt(envelope + netQuanta + model.resultBytes);
+    const blockData = BigInt(envelope + netQuanta + resultBytes);
     const byteUnits = clampU64(blockData * GAS_MODEL_V2_UNITS_PER_BLOCK_DATA_BYTE);
-    let bill = mulShift(
-      clampU64(model.workUnits + byteUnits),
-      config.feeMultiplier,
-      config.feeShift
-    );
-    bill = clampU64(bill + model.policyFee);
+    let bill = mulShift(clampU64(workUnits + byteUnits), config.feeMultiplier, config.feeShift);
+    bill = clampU64(bill + policyFee);
     expected = bill < config.minimumGasBill ? config.minimumGasBill : bill;
     maxGas = expected < config.minimumGasOffer ? config.minimumGasOffer : expected;
   } else {
     // v1: bill = (work * mult >> shift) + blockData * gasFeePerByte, where blockData = payload +
     // Call result bytes + net storage quanta; no envelope term, no floor. The v1 product prices
     // ride the work term (see operationModel).
-    const work = mulShift(model.workUnits, config.feeMultiplier, config.feeShift);
-    const blockData = BigInt((params.payloadBytes ?? 0) + model.resultBytes + netQuanta);
+    const work = mulShift(workUnits, config.feeMultiplier, config.feeShift);
+    const blockData = BigInt((transaction.payloadBytes ?? 0) + resultBytes + netQuanta);
     expected = clampU64(work + clampU64(blockData * config.gasFeePerByte));
     // Offer shape mirrors the validator's own test-agent stdFee: a 2x minimum-offer pad plus a
     // flat 1 KiB block-data allowance on top of the work term.
@@ -342,10 +412,10 @@ export function estimateNativeFee(
 
   return {
     maxGas,
-    maxData: clampU64(BigInt(model.newQuanta) * config.dataEscrowPerRow),
+    maxData: clampU64(BigInt(newQuanta) * config.dataEscrowPerRow),
     expectedGasBill: expected,
-    newStorageQuanta: model.newQuanta,
-    deletedStorageQuanta: model.deletedQuanta,
+    newStorageQuanta: newQuanta,
+    deletedStorageQuanta: deletedQuanta,
   };
 }
 

@@ -1,10 +1,8 @@
-import { TxTypes } from '../types/carbon/tx-types.js';
 import { GasConfig } from '../types/carbon/blockchain/gas-config.js';
 import { TxMsg } from '../types/carbon/blockchain/tx-msg.js';
-import { TxMsgBurnNonFungible } from '../types/carbon/blockchain/tx-msg-burn-non-fungible.js';
-import { TxMsgBurnNonFungibleGasPayer } from '../types/carbon/blockchain/tx-msg-burn-non-fungible-gas-payer.js';
 import { InfusedAsset } from '../types/carbon/blockchain/tx-helpers/native-fee-estimator.js';
 import {
+  burnedInstances,
   FeePlan,
   FeePlanOptions,
   planFees,
@@ -118,29 +116,24 @@ export class FeePlanner {
   // A burn returns whatever the NFT's own address holds, and the chain charges for each returned
   // asset. That set is chain state the message does not carry and has no costlier bound, so the
   // pure planner demands it; here, with a chain to ask, it is read unless the caller stated it (an
-  // empty list states that the NFT holds nothing).
+  // empty list states that the NFTs hold nothing). A message may burn several instances - a
+  // `Call_Multi` of burns is how a wallet burns a selection - and each is read at its own address,
+  // because the fee follows every returned asset separately.
   private async withInfusions(msg: TxMsg, options: FeePlanOptions): Promise<FeePlanOptions> {
     if (options.infusions !== undefined) return options;
-    let burn: TxMsgBurnNonFungible | TxMsgBurnNonFungibleGasPayer;
-    switch (msg.type) {
-      case TxTypes.BurnNonFungible:
-        burn = msg.msg as TxMsgBurnNonFungible;
-        break;
-      case TxTypes.BurnNonFungible_GasPayer:
-        burn = msg.msg as TxMsgBurnNonFungibleGasPayer;
-        break;
-      default:
-        return options;
-    }
-    if (!this.source.infusedAssets) {
+    const burned = burnedInstances(msg);
+    if (burned.length === 0) return options;
+    const read = this.source.infusedAssets;
+    if (!read) {
       throw new Error(
         "This planner's source cannot read what a burned NFT holds: pass infusions (empty when it holds nothing) or plan through a PhantasmaAPI"
       );
     }
-    return {
-      ...options,
-      infusions: await this.source.infusedAssets(burn.tokenId, burn.instanceId),
-    };
+    const infusions: InfusedAsset[] = [];
+    for (const instance of burned) {
+      infusions.push(...(await read.call(this.source, instance.tokenId, instance.instanceId)));
+    }
+    return { ...options, infusions };
   }
 
   /** Plans a message against a config the caller already holds - no network, no cache. */
