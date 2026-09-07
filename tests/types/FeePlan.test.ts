@@ -25,6 +25,7 @@ import { TxMsgTransferNonFungibleSingleGasPayer } from '../../src/types/carbon/b
 import { SignedTxMsg } from '../../src/types/carbon/blockchain/signed-tx-msg';
 import { TxMsgSigner } from '../../src/types/carbon/blockchain/extensions/tx-msg-signer';
 import { StandardMeta } from '../../src/types/carbon/blockchain/modules/standard-meta';
+import { GovernanceContractMethods } from '../../src/types/carbon/blockchain/modules/governance-contract-methods';
 import { TokenContractMethods } from '../../src/types/carbon/blockchain/modules/token-contract-methods';
 import { TokenHelper } from '../../src/types/carbon/blockchain/modules/token-helper';
 import { SeriesInfoBuilder } from '../../src/types/carbon/blockchain/modules/builders/series-info-builder';
@@ -138,6 +139,27 @@ const phantasmaMintCall = (tokens: PhantasmaNftMintInfo[], recipient: Bytes32 = 
   new MintPhantasmaNonFungibleArgs({ tokenId: 9n, address: recipient, tokens }).write(w);
   call.args = w.toUint8Array();
   msg.msg = call;
+  return msg;
+};
+
+// A module call and a message carrying one. Every block below builds its cases from these two, so
+// what a planned call looks like is written down once.
+const moduleCall = (
+  moduleId: ModuleId,
+  methodId: number,
+  writeArgs: (w: CarbonBinaryWriter) => void
+) => {
+  const call = new TxMsgCall();
+  call.moduleId = moduleId;
+  call.methodId = methodId;
+  const w = new CarbonBinaryWriter();
+  writeArgs(w);
+  call.args = w.toUint8Array();
+  return call;
+};
+const msgOf = (type: TxTypes, inner: object) => {
+  const msg = new TxMsg(type, 1_787_000_000_000n, 0n, 0n, payerPub, SmallString.empty);
+  msg.msg = inner;
   return msg;
 };
 
@@ -491,15 +513,13 @@ describe('planFees on token calls', () => {
   });
 
   it('recognises a name registration', () => {
-    const msg = new TxMsg(TxTypes.Call, 1_787_000_000_000n, 0n, 0n, payerPub, SmallString.empty);
-    const call = new TxMsgCall();
-    call.moduleId = ModuleId.Governance;
-    call.methodId = 1;
-    const w = new CarbonBinaryWriter();
-    payerPub.write(w);
-    new SmallString('alice').write(w);
-    call.args = w.toUint8Array();
-    msg.msg = call;
+    const msg = msgOf(
+      TxTypes.Call,
+      moduleCall(ModuleId.Governance, GovernanceContractMethods.RegisterName, (w) => {
+        payerPub.write(w);
+        new SmallString('alice').write(w);
+      })
+    );
 
     const plan = planFees(msg, config, oneWitness);
     expect(plan.kinds).toEqual([NativeFeeKind.RegisterName]);
@@ -524,12 +544,12 @@ describe('planFees on token calls', () => {
     const scriptPlan = planFees(script, config, oneWitness);
     expect(scriptPlan.kinds).toEqual([NativeFeeKind.Script]);
 
-    const query = new TxMsg(TxTypes.Call, 1_787_000_000_000n, 0n, 0n, payerPub, SmallString.empty);
-    const call = new TxMsgCall();
-    call.moduleId = ModuleId.Token;
-    call.methodId = TokenContractMethods.GetBalance;
-    call.args = new Uint8Array(40);
-    query.msg = call;
+    const query = msgOf(
+      TxTypes.Call,
+      moduleCall(ModuleId.Token, TokenContractMethods.GetBalance, (w) =>
+        w.write(new Uint8Array(40))
+      )
+    );
     const queryPlan = planFees(query, config, { ...oneWitness, scriptUnitsAllowance: 100n });
     expect(queryPlan.kinds).toEqual([NativeFeeKind.Script]);
     expect(queryPlan.expectedGasBill).toBe(bill(100n, queryPlan.envelopeBytes + 4 + 512));
@@ -551,25 +571,8 @@ describe('planFees on token calls', () => {
 describe('planFees on token-module calls', () => {
   const oneWitness = { witnessCount: 1 };
 
-  const tokenCall = (
-    methodId: TokenContractMethods,
-    writeArgs: (w: CarbonBinaryWriter) => void
-  ) => {
-    const call = new TxMsgCall();
-    call.moduleId = ModuleId.Token;
-    call.methodId = methodId;
-    const w = new CarbonBinaryWriter();
-    writeArgs(w);
-    call.args = w.toUint8Array();
-    return call;
-  };
-  const callMsg = (type: TxTypes, inner: object) => {
-    const msg = new TxMsg(type, 1_787_000_000_000n, 0n, 0n, payerPub, SmallString.empty);
-    msg.msg = inner;
-    return msg;
-  };
   const burnNftCall = (tokenId: bigint, instanceIds: bigint[]) =>
-    tokenCall(TokenContractMethods.BurnNonFungible, (w) => {
+    moduleCall(ModuleId.Token, TokenContractMethods.BurnNonFungible, (w) => {
       w.write8u(tokenId);
       payerPub.write(w);
       w.write4(instanceIds.length);
@@ -577,9 +580,9 @@ describe('planFees on token-module calls', () => {
     });
 
   it('prices a fungible transfer call exactly as the native transfer, reading token and recipient from the arguments', () => {
-    const call = callMsg(
+    const call = msgOf(
       TxTypes.Call,
-      tokenCall(TokenContractMethods.TransferFungible, (w) => {
+      moduleCall(ModuleId.Token, TokenContractMethods.TransferFungible, (w) => {
         ownerPub.write(w);
         payerPub.write(w);
         w.write8u(97n);
@@ -593,9 +596,9 @@ describe('planFees on token-module calls', () => {
     expect(plan.maxData).toBe(config.dataEscrowPerRow);
 
     // The recipient's address form decides one query fee here exactly as it does natively.
-    const infused = callMsg(
+    const infused = msgOf(
       TxTypes.Call,
-      tokenCall(TokenContractMethods.TransferFungible, (w) => {
+      moduleCall(ModuleId.Token, TokenContractMethods.TransferFungible, (w) => {
         TokenHelper.getNftAddress(9n, 5n).write(w);
         payerPub.write(w);
         w.write8u(97n);
@@ -609,9 +612,9 @@ describe('planFees on token-module calls', () => {
 
   it('counts the instances of an NFT transfer call', () => {
     const instances = [11n, 12n, 13n];
-    const call = callMsg(
+    const call = msgOf(
       TxTypes.Call,
-      tokenCall(TokenContractMethods.TransferNonFungible, (w) => {
+      moduleCall(ModuleId.Token, TokenContractMethods.TransferNonFungible, (w) => {
         ownerPub.write(w);
         payerPub.write(w);
         w.write8u(97n);
@@ -629,9 +632,9 @@ describe('planFees on token-module calls', () => {
   });
 
   it('prices fungible mint and burn calls with their variable-length result', () => {
-    const mint = callMsg(
+    const mint = msgOf(
       TxTypes.Call,
-      tokenCall(TokenContractMethods.MintFungible, (w) => {
+      moduleCall(ModuleId.Token, TokenContractMethods.MintFungible, (w) => {
         w.write8u(97n);
         ownerPub.write(w);
         IntX.fromI64(1000n).write(w);
@@ -642,9 +645,9 @@ describe('planFees on token-module calls', () => {
     // Transfer fee; the recipient's row and the supply row; a 9-byte int64 balance answer.
     expect(mintPlan.expectedGasBill).toBe(bill(10n, mintPlan.envelopeBytes + 2 + 9));
 
-    const burn = callMsg(
+    const burn = msgOf(
       TxTypes.Call,
-      tokenCall(TokenContractMethods.BurnFungible, (w) => {
+      moduleCall(ModuleId.Token, TokenContractMethods.BurnFungible, (w) => {
         w.write8u(97n);
         payerPub.write(w);
         IntX.fromI64(1n).write(w);
@@ -661,7 +664,7 @@ describe('planFees on token-module calls', () => {
   });
 
   it('prices an NFT burn call for every instance it names and demands what they hold', () => {
-    const call = callMsg(TxTypes.Call, burnNftCall(9n, [11n, 12n]));
+    const call = msgOf(TxTypes.Call, burnNftCall(9n, [11n, 12n]));
     expect(() => planFees(call, config, oneWitness)).toThrow(/infusions/);
 
     const plan = planFees(call, config, {
@@ -680,9 +683,9 @@ describe('planFees on token-module calls', () => {
   // SDK removed its native builder and does not price the call either: there is no transaction to
   // price. It must stay budgeted rather than quietly grow a model.
   it('leaves an explicit NFT mint call and an unmodelled call at the script budget', () => {
-    const mint = callMsg(
+    const mint = msgOf(
       TxTypes.Call,
-      tokenCall(TokenContractMethods.MintNonFungible, (w) => {
+      moduleCall(ModuleId.Token, TokenContractMethods.MintNonFungible, (w) => {
         w.write8u(97n);
         ownerPub.write(w);
         w.write4(0);
@@ -690,9 +693,9 @@ describe('planFees on token-module calls', () => {
     );
     expect(planFees(mint, config, oneWitness).kinds).toEqual([NativeFeeKind.Script]);
 
-    const unknown = callMsg(
+    const unknown = msgOf(
       TxTypes.Call,
-      tokenCall(TokenContractMethods.ApplyInflation, (w) => w.write8u(97n))
+      moduleCall(ModuleId.Token, TokenContractMethods.ApplyInflation, (w) => w.write8u(97n))
     );
     expect(planFees(unknown, config, oneWitness).kinds).toEqual([NativeFeeKind.Script]);
   });
@@ -706,7 +709,7 @@ describe('planFees on token-module calls', () => {
       { registerOffset: -0xffff0001, args: new Uint8Array() },
     ]);
     call.args = new Uint8Array();
-    const plan = planFees(callMsg(TxTypes.Call, call), config, oneWitness);
+    const plan = planFees(msgOf(TxTypes.Call, call), config, oneWitness);
     expect(plan.kinds).toEqual([NativeFeeKind.Script]);
   });
 });
@@ -714,18 +717,13 @@ describe('planFees on token-module calls', () => {
 describe('planFees on Call_Multi', () => {
   const oneWitness = { witnessCount: 1 };
 
-  const burnNftCall = (tokenId: bigint, instanceId: bigint) => {
-    const call = new TxMsgCall();
-    call.moduleId = ModuleId.Token;
-    call.methodId = TokenContractMethods.BurnNonFungible;
-    const w = new CarbonBinaryWriter();
-    w.write8u(tokenId);
-    payerPub.write(w);
-    w.write4(1);
-    w.write8u(instanceId);
-    call.args = w.toUint8Array();
-    return call;
-  };
+  const burnNftCall = (tokenId: bigint, instanceId: bigint) =>
+    moduleCall(ModuleId.Token, TokenContractMethods.BurnNonFungible, (w) => {
+      w.write8u(tokenId);
+      payerPub.write(w);
+      w.write4(1);
+      w.write8u(instanceId);
+    });
   const burnBatch = (count: number) => {
     const msg = new TxMsg(
       TxTypes.Call_Multi,
@@ -843,23 +841,11 @@ describe('planFees on Call_Multi', () => {
 // message type therefore cannot be added and quietly fall into the script budget - this test fails
 // until someone states what its fee is. A `Script` entry below is a decision, not an omission.
 describe('planFees over every transaction type', () => {
-  const msgOf = (type: TxTypes, inner: object) => {
-    const msg = new TxMsg(type, 1_787_000_000_000n, 0n, 0n, payerPub, SmallString.empty);
-    msg.msg = inner;
-    return msg;
-  };
-  const tokenCall = (methodId: TokenContractMethods) => {
-    const call = new TxMsgCall();
-    call.moduleId = ModuleId.Token;
-    call.methodId = methodId;
-    const w = new CarbonBinaryWriter();
+  const burnCall = moduleCall(ModuleId.Token, TokenContractMethods.BurnFungible, (w) => {
     w.write8u(97n);
     payerPub.write(w);
     IntX.fromI64(1n).write(w);
-    call.args = w.toUint8Array();
-    return call;
-  };
-  const burnCall = tokenCall(TokenContractMethods.BurnFungible);
+  });
 
   const cases: { type: TxTypes; msg: TxMsg; expected: NativeFeeKind[] | 'refused' }[] = [
     {
@@ -1022,7 +1008,10 @@ describe('planFees over every transaction type', () => {
     expect(named).toEqual(all);
   });
 
-  it.each(cases)('plans $type as declared', ({ msg, expected }) => {
+  it.each(cases)('plans $type as declared', ({ type, msg, expected }) => {
+    // The row's declared type is what the exhaustiveness check above counts, so it has to be the
+    // type of the message actually planned here - otherwise a row could claim a type it never sends.
+    expect(msg.type).toBe(type);
     // Only the witness-array types take a count; the rest fix their own witness set and refuse one.
     const open = SignedTxMsg.requiredWitnesses(msg) === undefined;
     const options = { ...(open ? { witnessCount: 1 } : {}), infusions: [] };
@@ -1038,6 +1027,213 @@ describe('planFees over every transaction type', () => {
 // from one field. `exact` is true only when nothing the plan had to assume could have moved the
 // number - which is a different question from whether any fact was left unstated, because most
 // facts do not enter most operations.
+// The coverage gate this file owes the CALL dispatch, which the table above cannot give it: a
+// modelled call method is priced as the very kind its native transaction already covers, so
+// `Token.TransferFungible` adds nothing to the kinds a run has seen and a new branch can appear
+// without anything noticing. These tables name every method of the two modules the planner
+// dispatches on, say what it makes of each, and are asserted to be exhaustive over their enums. A
+// `Script` entry is a decision - the planner has no formula for that method - not an omission.
+describe('planFees over every module call', () => {
+  const options = { witnessCount: 1, infusions: [] };
+  // A method with no model reads none of its arguments, so any bytes are enough to reach the
+  // branch; the modelled ones below carry arguments they can actually be read from.
+  const budgeted = (methods: TokenContractMethods[]) =>
+    methods.map((method) => ({
+      method,
+      msg: msgOf(
+        TxTypes.Call,
+        moduleCall(ModuleId.Token, method, (w) => w.write8u(97n))
+      ),
+      expected: NativeFeeKind.Script,
+    }));
+  const seriesInfo = () =>
+    SeriesInfoBuilder.build(
+      TokenSchemasBuilder.prepareStandard(false).seriesMetadata,
+      7n,
+      0,
+      0,
+      payerPub,
+      []
+    );
+
+  const tokenCases: { method: TokenContractMethods; msg: TxMsg; expected: NativeFeeKind }[] = [
+    {
+      method: TokenContractMethods.TransferFungible,
+      msg: msgOf(
+        TxTypes.Call,
+        moduleCall(ModuleId.Token, TokenContractMethods.TransferFungible, (w) => {
+          ownerPub.write(w);
+          payerPub.write(w);
+          w.write8u(97n);
+          IntX.fromI64(1n).write(w);
+        })
+      ),
+      expected: NativeFeeKind.TransferFungible,
+    },
+    {
+      method: TokenContractMethods.TransferNonFungible,
+      msg: msgOf(
+        TxTypes.Call,
+        moduleCall(ModuleId.Token, TokenContractMethods.TransferNonFungible, (w) => {
+          ownerPub.write(w);
+          payerPub.write(w);
+          w.write8u(9n);
+          w.write4(1);
+          w.write8u(5n);
+        })
+      ),
+      expected: NativeFeeKind.TransferNonFungible,
+    },
+    {
+      method: TokenContractMethods.MintFungible,
+      msg: msgOf(
+        TxTypes.Call,
+        moduleCall(ModuleId.Token, TokenContractMethods.MintFungible, (w) => {
+          w.write8u(97n);
+          ownerPub.write(w);
+          IntX.fromI64(1n).write(w);
+        })
+      ),
+      expected: NativeFeeKind.MintFungible,
+    },
+    {
+      method: TokenContractMethods.BurnFungible,
+      msg: msgOf(
+        TxTypes.Call,
+        moduleCall(ModuleId.Token, TokenContractMethods.BurnFungible, (w) => {
+          w.write8u(97n);
+          payerPub.write(w);
+          IntX.fromI64(1n).write(w);
+        })
+      ),
+      expected: NativeFeeKind.BurnFungible,
+    },
+    {
+      method: TokenContractMethods.BurnNonFungible,
+      msg: msgOf(
+        TxTypes.Call,
+        moduleCall(ModuleId.Token, TokenContractMethods.BurnNonFungible, (w) => {
+          w.write8u(9n);
+          payerPub.write(w);
+          w.write4(1);
+          w.write8u(5n);
+        })
+      ),
+      expected: NativeFeeKind.BurnNonFungible,
+    },
+    {
+      method: TokenContractMethods.CreateToken,
+      msg: CreateTokenTxHelper.buildTx(tokenInfo(false), payerPub),
+      expected: NativeFeeKind.CreateToken,
+    },
+    {
+      method: TokenContractMethods.CreateTokenSeries,
+      msg: CreateTokenSeriesTxHelper.buildTx(9n, seriesInfo(), payerPub),
+      expected: NativeFeeKind.CreateTokenSeries,
+    },
+    {
+      method: TokenContractMethods.MintPhantasmaNonFungible,
+      msg: phantasmaMintCall([phantasmaMint(1n, 40)]),
+      expected: NativeFeeKind.MintPhantasmaNonFungible,
+    },
+    // Everything the planner has no formula for. `MintNonFungible` is here on purpose: mainnet SR
+    // 50 refuses an explicit NFT mint whichever way it arrives, so there is nothing to price.
+    ...budgeted([
+      TokenContractMethods.GetBalance,
+      TokenContractMethods.DeleteTokenSeries,
+      TokenContractMethods.MintNonFungible,
+      TokenContractMethods.GetInstances,
+      TokenContractMethods.GetNonFungibleInfo,
+      TokenContractMethods.GetNonFungibleInfoByRomId,
+      TokenContractMethods.GetSeriesInfo,
+      TokenContractMethods.GetSeriesInfoByMetaId,
+      TokenContractMethods.GetTokenInfo,
+      TokenContractMethods.GetTokenInfoBySymbol,
+      TokenContractMethods.GetTokenSupply,
+      TokenContractMethods.GetSeriesSupply,
+      TokenContractMethods.GetTokenIdBySymbol,
+      TokenContractMethods.GetBalances,
+      TokenContractMethods.CreateMintedTokenSeries,
+      TokenContractMethods.ApplyInflation,
+      TokenContractMethods.UpdateTokenMetadata,
+      TokenContractMethods.GetNextTokenInflation,
+      TokenContractMethods.SetTokensConfig,
+      TokenContractMethods.UpdateSeriesMetadata,
+    ]),
+  ];
+
+  const governanceCases: {
+    method: GovernanceContractMethods;
+    msg: TxMsg;
+    expected: NativeFeeKind;
+  }[] = [
+    {
+      method: GovernanceContractMethods.RegisterName,
+      msg: msgOf(
+        TxTypes.Call,
+        moduleCall(ModuleId.Governance, GovernanceContractMethods.RegisterName, (w) => {
+          payerPub.write(w);
+          new SmallString('alice').write(w);
+        })
+      ),
+      expected: NativeFeeKind.RegisterName,
+    },
+    {
+      method: GovernanceContractMethods.SetGasConfig,
+      msg: msgOf(
+        TxTypes.Call,
+        moduleCall(ModuleId.Governance, GovernanceContractMethods.SetGasConfig, (w) =>
+          w.write8u(1n)
+        )
+      ),
+      expected: NativeFeeKind.Script,
+    },
+  ];
+
+  const exhaustive = (named: number[], all: object) =>
+    expect([...named].sort((a, b) => a - b)).toEqual(
+      Object.values(all)
+        .filter((v): v is number => typeof v === 'number')
+        .sort((a, b) => a - b)
+    );
+
+  it('names every token contract method', () => {
+    exhaustive(
+      tokenCases.map((c) => c.method),
+      TokenContractMethods
+    );
+  });
+
+  it('names every governance contract method', () => {
+    exhaustive(
+      governanceCases.map((c) => c.method),
+      GovernanceContractMethods
+    );
+  });
+
+  it.each(tokenCases.map((c) => ({ ...c, name: TokenContractMethods[c.method] })))(
+    'prices Token.$name as declared',
+    ({ msg, expected }) => {
+      expect(planFees(msg, config, options).kinds).toEqual([expected]);
+    }
+  );
+
+  it.each(governanceCases.map((c) => ({ ...c, name: GovernanceContractMethods[c.method] })))(
+    'prices Governance.$name as declared',
+    ({ msg, expected }) => {
+      expect(planFees(msg, config, options).kinds).toEqual([expected]);
+    }
+  );
+
+  it('budgets a call to a module it does not dispatch on', () => {
+    const msg = msgOf(
+      TxTypes.Call,
+      moduleCall(ModuleId.Organization, 0, (w) => w.write8u(97n))
+    );
+    expect(planFees(msg, config, options).kinds).toEqual([NativeFeeKind.Script]);
+  });
+});
+
 describe('planFees reports whether the bill is a prediction', () => {
   const oneWitness = { witnessCount: 1 };
 
