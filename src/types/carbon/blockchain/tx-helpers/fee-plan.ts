@@ -107,7 +107,9 @@ export interface FeePlan extends NativeFeeEstimate {
    *
    * It says nothing about facts the caller DID state. A stated fact that is wrong produces a wrong
    * bill, and the transaction aborts if the mistake was on the cheap side; `true` means only that
-   * the plan did not have to guess.
+   * the plan did not have to guess. The one exception is `bigFungible: true`, which is not a claim
+   * about state but a request to price the widest answer a variable-length balance can have, so a
+   * plan that rests on it reports `false` however it was arrived at.
    */
   exact: boolean;
   /** The signed size the plan was computed for - the bytes the block will carry. */
@@ -167,6 +169,11 @@ export function planFees(msg: TxMsg, config: GasConfig, options: FeePlanOptions 
  * and a plan that reported it as assumed would send every ordinary transfer to the "up to" branch.
  *
  * `infusions` is not flipped: it has no cheaper reading and is demanded rather than defaulted.
+ * `bigFungible` is flipped even when the caller DID state it, because unlike the other facts its
+ * costly reading is not a claim about chain state that yields an exact price - it asks the model to
+ * price the WIDEST answer a variable-length balance can have (33 bytes against a measured 10 at a
+ * 2^70 balance). A plan resting on that is a bound whoever asked for it. The live matrix caught this
+ * as two rows that called themselves predictions and settled below their own number.
  */
 function assumptionsMattered(
   msg: TxMsg,
@@ -180,7 +187,7 @@ function assumptionsMattered(
     recipientHoldsToken: options.recipientHoldsToken ?? true,
     tokenBurnedBefore: options.tokenBurnedBefore ?? true,
     supplyRowExists: options.supplyRowExists ?? true,
-    bigFungible: options.bigFungible ?? false,
+    bigFungible: false,
     romHasMetaId: options.romHasMetaId ?? false,
     seriesHasMetaId: options.seriesHasMetaId ?? false,
     duplicatedSeries: options.duplicatedSeries ?? false,

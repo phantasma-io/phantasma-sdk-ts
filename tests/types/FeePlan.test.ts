@@ -1057,6 +1057,25 @@ describe('planFees reports whether the bill is a prediction', () => {
     expect(planFees(custom, config, { recipientHoldsToken: false }).exact).toBe(true);
   });
 
+  // `bigFungible: true` does not say what the balance IS, it says the answer may be as wide as an
+  // int256 - so the model prices 33 bytes and the chain writes fewer. Stating it does not make the
+  // number a prediction, and the live matrix proved it: two rows that stated it settled below their
+  // own plan.
+  it('is not exact when the plan rests on the widest fungible result', () => {
+    const mint = new TxMsg(
+      TxTypes.MintFungible,
+      1_787_000_000_000n,
+      0n,
+      0n,
+      payerPub,
+      SmallString.empty
+    );
+    mint.msg = new TxMsgMintFungible({ tokenId: 97n, to: ownerPub, amount: IntX.fromI64(1n) });
+    const facts = { recipientHoldsToken: true, supplyRowExists: true };
+    expect(planFees(mint, config, { ...facts, bigFungible: true }).exact).toBe(false);
+    expect(planFees(mint, config, { ...facts, bigFungible: false }).exact).toBe(true);
+  });
+
   it('is never exact when part of the message had to be budgeted', () => {
     const script = new TxMsg(
       TxTypes.Phantasma,
