@@ -92,13 +92,24 @@ export interface FeePlan extends NativeFeeEstimate {
    *
    * Every kind but {@link NativeFeeKind.Script} is priced with the chain's own formula for that
    * operation; `Script` covers VM scripts and unmodelled calls, whose work depends on execution and
-   * can only be budgeted (see `scriptUnitsAllowance` and its neighbours). So a plan is a prediction
-   * when no entry is `Script`, and a budget in the part that is.
+   * can only be budgeted (see `scriptUnitsAllowance` and its neighbours).
    *
-   * A formula-priced bill is exact for the facts it was given and an upper bound for the ones it
-   * had to assume: a state fact left unspecified is filled with its costlier default.
+   * This says what was priced, not how firm the number is - {@link FeePlan.exact} answers that, and
+   * it accounts for both causes: a budgeted part, and a state fact the plan had to assume.
    */
   kinds: readonly NativeFeeKind[];
+  /**
+   * Whether this bill is a prediction of the settlement rather than an upper bound on it: true when
+   * nothing the plan had to assume could have changed the number, false when a chain-state fact was
+   * left unstated and its assumed reading decided part of the price, or when any part of the
+   * message had to be budgeted rather than priced. A wallet showing a fee reads this one field to
+   * choose between "0.0073 KCAL" and "up to 0.0073 KCAL".
+   *
+   * It says nothing about facts the caller DID state. A stated fact that is wrong produces a wrong
+   * bill, and the transaction aborts if the mistake was on the cheap side; `true` means only that
+   * the plan did not have to guess.
+   */
+  exact: boolean;
   /** The signed size the plan was computed for - the bytes the block will carry. */
   envelopeBytes: number;
   /** A copy of `msg` with `maxGas` and `maxData` set to the plan. The input is left untouched. */
@@ -124,9 +135,11 @@ export function planFees(msg: TxMsg, config: GasConfig, options: FeePlanOptions 
   const parts = describe(msg, options);
   const envelopeBytes = SignedTxMsg.envelopeBytes(msg, options.witnessCount);
   const estimate = estimateNativeFeeBatch(parts, config, { envelopeBytes });
+  const budgeted = parts.some((part) => part.kind === NativeFeeKind.Script);
   return {
     ...estimate,
     kinds: parts.map((part) => part.kind),
+    exact: !budgeted && !assumptionsMattered(msg, config, options, envelopeBytes, estimate),
     envelopeBytes,
     apply(target: TxMsg): TxMsg {
       return new TxMsg(
@@ -140,6 +153,44 @@ export function planFees(msg: TxMsg, config: GasConfig, options: FeePlanOptions 
       );
     },
   };
+}
+
+/**
+ * Would a fact the caller left unstated have changed this quote? The message is priced a second
+ * time with every unstated state fact at its CHEAPER reading, and the two quotes are compared: if
+ * they agree, the costlier defaults did not decide anything and the bill is a prediction.
+ *
+ * Asking the question this way, rather than listing which facts each operation reads, keeps ONE
+ * definition of that list - the operation models themselves - so the answer cannot drift from them
+ * as the models change. It also answers per message rather than per kind, which matters: a gas-token
+ * transfer does not depend on `recipientHoldsToken` at all, because the chain's own rows are free,
+ * and a plan that reported it as assumed would send every ordinary transfer to the "up to" branch.
+ *
+ * `infusions` is not flipped: it has no cheaper reading and is demanded rather than defaulted.
+ */
+function assumptionsMattered(
+  msg: TxMsg,
+  config: GasConfig,
+  options: FeePlanOptions,
+  envelopeBytes: number,
+  quoted: NativeFeeEstimate
+): boolean {
+  const cheapest: FeePlanOptions = {
+    ...options,
+    recipientHoldsToken: options.recipientHoldsToken ?? true,
+    tokenBurnedBefore: options.tokenBurnedBefore ?? true,
+    supplyRowExists: options.supplyRowExists ?? true,
+    bigFungible: options.bigFungible ?? false,
+    romHasMetaId: options.romHasMetaId ?? false,
+    seriesHasMetaId: options.seriesHasMetaId ?? false,
+    duplicatedSeries: options.duplicatedSeries ?? false,
+  };
+  const cheaper = estimateNativeFeeBatch(describe(msg, cheapest), config, { envelopeBytes });
+  return (
+    cheaper.expectedGasBill !== quoted.expectedGasBill ||
+    cheaper.maxGas !== quoted.maxGas ||
+    cheaper.maxData !== quoted.maxData
+  );
 }
 
 /**

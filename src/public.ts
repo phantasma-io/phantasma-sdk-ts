@@ -314,6 +314,7 @@ export type {
   PlanRequestOptions,
 } from './rpc/fee-planner.js';
 export {
+  burnedInstances,
   DEFAULT_TX_EXPIRY_MS,
   expiryWithin,
   NativeFeeKind,
