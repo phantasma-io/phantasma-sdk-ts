@@ -301,8 +301,9 @@ export type { TokenDescriptor } from './interfaces/token.js';
 export type { TxSigner } from './types/carbon/blockchain/extensions/tx-signer.js';
 
 // Fee planning: the chain's prices, the planner that reads them, and the calculator underneath.
-// Sizing an actual message is `SignedTxMsg.envelopeBytes`, so the byte-count helper the calculator
-// exposes for callers who hold only a serialized length is deliberately not re-exported here.
+// An actual message is sized with `SignedTxMsg.envelopeBytes`. The calculator also exposes a
+// byte-count helper for callers who hold only a serialized length, and that helper is left out of
+// this list on purpose.
 export { GasConfig } from './types/carbon/blockchain/gas-config.js';
 export { gasConfigFromRpc } from './rpc/interfaces/gas-config.js';
 export type { GasConfigData, GasConfigResult } from './rpc/interfaces/gas-config.js';
@@ -314,6 +315,7 @@ export type {
   PlanRequestOptions,
 } from './rpc/fee-planner.js';
 export {
+  burnedInstances,
   DEFAULT_TX_EXPIRY_MS,
   expiryWithin,
   NativeFeeKind,
@@ -338,7 +340,7 @@ export type {
   TransferNonFungibleParams,
   TxLimits,
 } from './types/carbon/blockchain/tx-helpers/index.js';
-// Sending: the one-step path and the chain-state checks it runs before signing.
+// Sending: the one-step path, and the chain-state checks it runs before signing.
 export { TransactionPreflightError, preflightTransaction } from './rpc/transaction-preflight.js';
 export type {
   PreflightResult,

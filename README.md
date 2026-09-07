@@ -109,64 +109,97 @@ const transfer = NativeTxHelper.transferFungible({
 const plan = await api.fees.plan(transfer);
 console.log(summarizeFeePlan(plan)); // { gasBill: '0.00426', gasOffer: '0.00426', storageCeiling: '0' }
 
-// 3-4. Sign and send - or let sendTransaction do 2-4 in one call.
+// 3-4. Sign and send. Or let sendTransaction do steps 2 to 4 in one call.
 const hash = await api.sendTransaction(transfer, keys);
 ```
 
 Under gas model v2 there are two things to know, and `sendTransaction` handles both for you:
 
-1. **Plan before you sign.** The chain bills every byte the transaction puts in the block and
-   escrows every storage row it creates, so a message carries a gas offer and a storage ceiling that
-   have to be set before signing - a message signed with a zero offer is never admitted.
+1. **Plan before you sign.** The chain bills every byte the transaction puts in the block, and it
+   escrows every storage row the transaction creates. A message therefore carries a gas offer and a
+   storage ceiling, and both have to be set before signing. A message signed with a zero offer is
+   never admitted.
 2. **What the plan cannot know, it assumes expensive.** Some of the price depends on chain state the
-   message does not carry: whether the recipient already holds the token, which mode a series mints
-   in. Each is taken at the value that costs MORE, because unused gas is refunded while a short
-   offer is rejected. The plan is therefore a ceiling, not a prediction.
+   message does not carry. Examples are whether the recipient already holds the token, and which mode
+   a series mints in. Each fact is taken at the value that costs MORE. Unused gas is refunded, and a
+   short offer is rejected. `plan.exact` says whether such an assumption decided this number.
 
-- `api.fees` is the fee planner of the chain the client talks to. It reads `getGasConfig` once,
-  keeps it for a minute, and prices every message from the message itself: the signed size is
-  computed without a key, and the storage rows, call result bytes and gas sites of each native
-  operation are priced with the chain's own formula (`planFees`). `plan.kinds` says which operations
-  were priced - a `Call_Multi` performs several, and each is priced and then summed, because the
-  chain bills a batch as the sum of its calls with the envelope counted once. The one kind that is a
-  budget rather than a formula is `NativeFeeKind.Script` - VM scripts and unmodelled calls, whose
-  work depends on execution.
+- `api.fees` is the fee planner of the chain the client talks to. It reads `getGasConfig` once and
+  keeps it for a minute. It prices every message from the message itself. The signed size is computed
+  without a key. The storage rows, call result bytes and gas sites of each native operation are
+  priced with the chain's own formula (`planFees`).
+- `plan.kinds` says which operations were priced. A `Call_Multi` performs several, and each one is
+  priced and then summed, because the chain bills a batch as the sum of its calls with the envelope
+  counted once. One kind is a budget and not a formula: `NativeFeeKind.Script`, which covers VM
+  scripts and unmodelled calls. Their work depends on execution.
 - `FeePlanOptions` is where you tighten point 2 by telling the planner a fact it would otherwise
   assume. Every field is optional and most callers pass none.
+- `plan.exact` says whether the number is a prediction or a ceiling. It is `true` when nothing the
+  plan had to assume could have changed it. It is `false` when an unstated fact decided part of the
+  price, or when a part of the message had to be budgeted. A wallet shows the amount when the flag
+  is `true`, and "up to" in front of the amount when it is `false`.
+  The flag is answered by pricing the message a second time, with every unstated fact at its cheaper
+  reading. It is therefore about THIS message and not about which fields you filled in. A KCAL
+  transfer is exact without stating anything, because the chain's own token rows are free and
+  `recipientHoldsToken` cannot move its price. The flag promises nothing about facts you stated
+  yourself: a wrong stated fact gives a wrong bill.
+
+### Which fact each operation reads
+
+Only the facts an operation reads can move its price, so this table is the whole of what is worth
+stating. Every default is the reading that costs MORE. One storage quantum is `dataEscrowPerRow` of
+escrow plus 25 gas units of block data, and the chain's `feeMultiplier` scales both. Balance rows of
+the gas and data tokens are free, so for those tokens `recipientHoldsToken` changes nothing.
+
+| `NativeFeeKind`            | facts it reads                                                     | what the default assumes                                                                                          | what the default costs                                                                                                                                                                                                                                                                                                                               |
+| -------------------------- | ------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `TransferFungible`         | `recipientHoldsToken`                                              | the recipient has no row for this token                                                                           | 1 quantum                                                                                                                                                                                                                                                                                                                                            |
+| `TransferNonFungible`      | `recipientHoldsToken`                                              | the recipient has no row for this token                                                                           | 1 quantum                                                                                                                                                                                                                                                                                                                                            |
+| `MintFungible`             | `recipientHoldsToken`, `supplyRowExists`, `bigFungible`            | no recipient row; the supply row was dropped and must be recreated; the resulting balance needs the widest answer | 1 quantum each, and 24 more result bytes (33 against 9)                                                                                                                                                                                                                                                                                              |
+| `BurnFungible`             | `tokenBurnedBefore`, `supplyRowExists`, `bigFungible`              | the token's burnt counter does not exist yet; the supply row must be recreated; widest answer                     | 1 quantum each, and 24 more result bytes                                                                                                                                                                                                                                                                                                             |
+| `MintNonFungible`          | `recipientHoldsToken`, `supplyRowExists`, `romHasMetaId`           | as above, plus: the ROM carries an `_i` id, which is indexed in one more row                                      | 1 quantum each, and 1 quantum per instance for the id                                                                                                                                                                                                                                                                                                |
+| `MintPhantasmaNonFungible` | `recipientHoldsToken`, `supplyRowExists`, `duplicatedSeries`       | as above, plus: the series mints duplicates                                                                       | 1 quantum each, and one query fee per instance plus one per distinct series                                                                                                                                                                                                                                                                          |
+| `BurnNonFungible`          | `tokenBurnedBefore`, `supplyRowExists`, **`infusions` (required)** | burnt counter does not exist; supply row must be recreated                                                        | 1 quantum each. `infusions` has no default at all. A burn returns whatever the NFT holds, and there is no upper bound on that, so the plan demands the list and `api.fees` reads it from the chain. `romHasMetaId` is read here too but cannot move the bill: a burn deletes more rows than it creates, so its net storage growth is zero either way |
+| `CreateToken`              | none                                                               | nothing is assumed                                                                                                | the price comes entirely from the message: the symbol length, the serialized `TokenInfo`, and which keys its metadata carries                                                                                                                                                                                                                        |
+| `CreateTokenSeries`        | `seriesHasMetaId`                                                  | the series metadata carries an `_i` id                                                                            | 1 quantum                                                                                                                                                                                                                                                                                                                                            |
+| `RegisterName`             | none                                                               | nothing is assumed                                                                                                | governance rows are free data; the price is the length-shifted policy fee and the envelope                                                                                                                                                                                                                                                           |
+| `Script`                   | none                                                               | 5000 work units, 512 event bytes and 4 storage quanta, per unmodelled call                                        | a budget and never a prediction. `plan.exact` is `false` whenever one is present                                                                                                                                                                                                                                                                     |
+
 - A message the caller has already planned (`maxGas > 0`) is sent as it is. Signing an unplanned
   message is refused, because a zero offer is never admitted.
 - `sendTransaction` runs a pre-flight before signing a **token creation**. `Token.CreateToken` is
-  charged its policy fee - the largest single price in the protocol, set by governance and readable
-  from `getGasConfig` - **before** the contract checks whether the symbol is free, so sending one
-  that is already taken costs that fee and gets nothing back. One lookup avoids it
+  charged its policy fee **before** the contract looks at the symbol. That fee is the largest single
+  price in the protocol. Governance sets it and `getGasConfig` reports it. Sending a symbol that is
+  already taken pays the fee and gets nothing back. One lookup avoids that
   (`preflightTransaction`). Every other message goes straight through.
-- The pre-flight never reads a verdict out of an error message. A symbol that resolves is `taken`;
-  one that does not comes back as an ordinary RPC error, which a broken or proxied node produces
-  just as readily, so the check asks a second question it knows the answer to - the gas token, by
-  id, a lookup that does not touch symbols. If that answers, the node is answering and the symbol is
-  `free`; if it does not, the verdict is `unknown` and nothing was established. `sendTransaction`
-  refuses on `taken` and on `unknown`. A caller who would rather decide for itself - warn before
-  spending the fee, retry against another node - calls `preflightTransaction`, reads the verdict and
-  sends with `{ preflight: false }`.
+- The pre-flight never reads a verdict out of an error message. A symbol that resolves is `taken`. A
+  symbol that does not resolve comes back as an ordinary RPC error, and a broken or proxied node
+  produces that same error just as readily. So the check asks a second question whose answer it
+  already knows. It fetches the gas token by its id, and that lookup does not touch symbols. When the
+  node answers it, the node is serving token lookups and the symbol is `free`. When the node does not
+  answer it, the verdict is `unknown` and nothing was established. `sendTransaction` refuses on
+  `taken` and on `unknown`. A caller that wants to decide for itself calls `preflightTransaction`,
+  reads the verdict and sends with `{ preflight: false }`. It can then warn before the fee is spent,
+  or try another node.
 - A burn returns whatever the NFT holds at its own address, and the chain charges for each
   returned asset: a transfer fee and an owner lookup per fungible token, an instance query, a
   transfer per instance and that lookup per NFT token, plus a balance row for a returned token the
   burner does not hold. That set is chain state with no costlier bound, so `planFees` demands
-  `infusions` for a burn - an empty list says the NFT holds nothing - while `api.fees.plan`, and so
-  `sendTransaction`, reads it from the chain (`api.infusedAssets`).
+  `infusions` for a burn. An empty list says the NFT holds nothing. `api.fees.plan`, and so
+  `sendTransaction`, reads the list from the chain (`api.infusedAssets`).
 - Any witness that implements `TxSigner` (`publicKey` + `sign(bytes)`) can sign, and
-  `TxMsgSigner.signWith` accepts several - the gas-payer transaction types take two. A wallet
-  that signs elsewhere plans with `api.fees.plan` and hands `plan.apply(msg)` over.
+  `TxMsgSigner.signWith` accepts several. The gas-payer transaction types take two. A wallet that
+  signs elsewhere plans with `api.fees.plan` and hands `plan.apply(msg)` over.
 - A contract call (`Call`, `Call_Multi`, `Trade`, `Phantasma`) chooses its own witnesses, and each
-  one is 96 bytes the chain bills, so `planFees` asks for `witnessCount` instead of assuming one
-  and under-offering every multi-party transaction. `sendTransaction` fills it in from the signers
-  it was given. The gas payer must be one of them - the chain rejects a transaction its payer did
-  not sign.
+  one is 96 bytes the chain bills. So `planFees` asks for `witnessCount`. An assumed single witness
+  would under-offer every multi-party transaction by 96 bytes per extra signature.
+  `sendTransaction` fills the count in from the signers it was given. The gas payer must be one of
+  them, because the chain rejects a transaction its payer did not sign.
 - A message expires. Builders stamp `DEFAULT_TX_EXPIRY_MS` from now, which is sized for a
-  transaction signed on the spot; when a person has to approve it first, take the chain's whole
-  window instead: `expiryWithin((await api.fees.chainParams()).expiryWindow)`.
-- `parseUnits` / `formatUnits` convert between decimal amounts and atoms (KCAL has 10 decimals,
-  SOUL 8); `summarizeFeePlan` renders a plan in KCAL and SOUL for display.
+  transaction signed on the spot. When a person has to approve it first, take the chain's whole
+  window with `expiryWithin((await api.fees.chainParams()).expiryWindow)`.
+- `parseUnits` and `formatUnits` convert between decimal amounts and atoms. KCAL has 10 decimals
+  and SOUL has 8. `summarizeFeePlan` renders a plan in KCAL and SOUL for display.
 
 ## Examples
 

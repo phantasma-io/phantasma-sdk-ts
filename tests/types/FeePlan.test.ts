@@ -36,7 +36,11 @@ import { CreateTokenTxHelper } from '../../src/types/carbon/blockchain/tx-helper
 import { PhantasmaNftMintInfo } from '../../src/types/carbon/blockchain/modules/phantasma-nft-mint-info';
 import { TxMsgTransferNonFungibleMulti } from '../../src/types/carbon/blockchain/tx-msg-transfer-non-fungible-multi';
 import { MintPhantasmaNonFungibleArgs } from '../../src/types/carbon/blockchain/modules/mint-phantasma-non-fungible-args';
-import { burnedInstances, planFees } from '../../src/types/carbon/blockchain/tx-helpers/fee-plan';
+import {
+  burnedInstances,
+  planFees,
+  type FeePlanOptions,
+} from '../../src/types/carbon/blockchain/tx-helpers/fee-plan';
 import { NativeFeeKind } from '../../src/types/carbon/blockchain/tx-helpers/native-fee-estimator';
 import {
   VmDynamicStruct,
@@ -1027,5 +1031,156 @@ describe('planFees over every transaction type', () => {
       return;
     }
     expect(planFees(msg, config, options).kinds).toEqual(expected);
+  });
+});
+
+// A wallet has to choose between showing "0.0073 KCAL" and "up to 0.0073 KCAL", and it reads that
+// from one field. `exact` is true only when nothing the plan had to assume could have moved the
+// number - which is a different question from whether any fact was left unstated, because most
+// facts do not enter most operations.
+describe('planFees reports whether the bill is a prediction', () => {
+  const oneWitness = { witnessCount: 1 };
+
+  it('is exact for a gas-token transfer whatever the caller states', () => {
+    // The chain's own token rows are free, so the recipient's row costs nothing and the fact the
+    // caller did not state could not have changed the price. A wallet's commonest operation must
+    // not be pushed into the "up to" branch by a fact that does not apply to it.
+    expect(planFees(transfer(config.gasTokenId), config).exact).toBe(true);
+    expect(planFees(transfer(config.dataTokenId), config).exact).toBe(true);
+  });
+
+  it('is not exact when an unstated fact decided part of the price', () => {
+    // A custom token's recipient row is paid, so `recipientHoldsToken` decides one storage quantum.
+    const custom = transfer(97n);
+    expect(planFees(custom, config).exact).toBe(false);
+    expect(planFees(custom, config, { recipientHoldsToken: true }).exact).toBe(true);
+    expect(planFees(custom, config, { recipientHoldsToken: false }).exact).toBe(true);
+  });
+
+  // `bigFungible: true` does not say what the balance IS, it says the answer may be as wide as an
+  // int256 - so the model prices 33 bytes and the chain writes fewer. Stating it does not make the
+  // number a prediction, and the live matrix proved it: two rows that stated it settled below their
+  // own plan.
+  it('is not exact when the plan rests on the widest fungible result', () => {
+    const mint = new TxMsg(
+      TxTypes.MintFungible,
+      1_787_000_000_000n,
+      0n,
+      0n,
+      payerPub,
+      SmallString.empty
+    );
+    mint.msg = new TxMsgMintFungible({ tokenId: 97n, to: ownerPub, amount: IntX.fromI64(1n) });
+    const facts = { recipientHoldsToken: true, supplyRowExists: true };
+    expect(planFees(mint, config, { ...facts, bigFungible: true }).exact).toBe(false);
+    expect(planFees(mint, config, { ...facts, bigFungible: false }).exact).toBe(true);
+  });
+
+  it('is never exact when part of the message had to be budgeted', () => {
+    const script = new TxMsg(
+      TxTypes.Phantasma,
+      1_787_000_000_000n,
+      0n,
+      0n,
+      payerPub,
+      SmallString.empty
+    );
+    script.msg = new TxMsgPhantasma({
+      nexus: new SmallString('simnet'),
+      chain: new SmallString('main'),
+      script: new Uint8Array(40),
+    });
+    expect(planFees(script, config, oneWitness).exact).toBe(false);
+  });
+
+  it('is exact for a burn batch that states the two facts a burn reads', () => {
+    const burn = new TxMsg(
+      TxTypes.BurnNonFungible,
+      1_787_000_000_000n,
+      0n,
+      0n,
+      payerPub,
+      SmallString.empty
+    );
+    burn.msg = new TxMsgBurnNonFungible({ tokenId: 9n, instanceId: 5n });
+    expect(planFees(burn, config, { infusions: [] }).exact).toBe(false);
+    expect(
+      planFees(burn, config, { infusions: [], tokenBurnedBefore: true, supplyRowExists: true })
+        .exact
+    ).toBe(true);
+    // The ROM's meta-id row is deleted by a burn, never created, and a burn deletes more rows than
+    // it creates - so that fact cannot move a burn's bill and leaving it unstated does not make the
+    // number an upper bound.
+    expect(
+      planFees(burn, config, {
+        infusions: [],
+        tokenBurnedBefore: true,
+        supplyRowExists: true,
+        romHasMetaId: false,
+      }).exact
+    ).toBe(true);
+  });
+
+  // The flag is computed by pricing the message a second time with every unstated fact at its
+  // cheaper reading. That only answers honestly if the "costlier default" claim on each fact is
+  // true, so it is checked here: stating the other value must never raise the quote.
+  it('prices every default at or above the alternative reading', () => {
+    const cases: { msg: TxMsg; options: FeePlanOptions[] }[] = [
+      {
+        msg: transfer(97n),
+        options: [{ recipientHoldsToken: true }],
+      },
+      {
+        msg: (() => {
+          const mint = new TxMsg(
+            TxTypes.MintFungible,
+            1_787_000_000_000n,
+            0n,
+            0n,
+            payerPub,
+            SmallString.empty
+          );
+          mint.msg = new TxMsgMintFungible({
+            tokenId: 97n,
+            to: ownerPub,
+            amount: IntX.fromI64(1n),
+          });
+          return mint;
+        })(),
+        options: [{ recipientHoldsToken: true }, { supplyRowExists: true }, { bigFungible: false }],
+      },
+      {
+        msg: (() => {
+          const burn = new TxMsg(
+            TxTypes.BurnFungible,
+            1_787_000_000_000n,
+            0n,
+            0n,
+            payerPub,
+            SmallString.empty
+          );
+          burn.msg = new TxMsgBurnFungible({ tokenId: 97n, amount: IntX.fromI64(1n) });
+          return burn;
+        })(),
+        options: [{ tokenBurnedBefore: true }, { supplyRowExists: true }, { bigFungible: false }],
+      },
+      {
+        msg: phantasmaMintCall([phantasmaMint(1n, 40), phantasmaMint(2n, 40)]),
+        options: [
+          { witnessCount: 1, recipientHoldsToken: true },
+          { witnessCount: 1, supplyRowExists: true },
+          { witnessCount: 1, duplicatedSeries: false },
+        ],
+      },
+    ];
+    for (const { msg, options } of cases) {
+      const witness = msg.type === TxTypes.Call ? oneWitness : {};
+      const assumed = planFees(msg, config, witness);
+      for (const stated of options) {
+        const told = planFees(msg, config, { ...witness, ...stated });
+        expect(told.expectedGasBill <= assumed.expectedGasBill).toBe(true);
+        expect(told.maxData <= assumed.maxData).toBe(true);
+      }
+    }
   });
 });
