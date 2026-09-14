@@ -30,9 +30,9 @@ export class TxMsgSigner {
   }
 
   /**
-   * Signs a message with in-memory keys, one per witness the message needs. Works for every
-   * transaction type: a gas-payer transfer takes the gas payer's and the owner's keys in any order,
-   * a Call takes the keys of every witness the contract will check.
+   * Signs a message with in-memory keys, one per witness the message needs. It works for every
+   * transaction type. A gas-payer transfer takes the gas payer's key and the owner's key in any
+   * order. A Call takes the keys of every witness the contract will check.
    */
   static signWithKeys(msg: TxMsg, keys: PhantasmaKeys[]): SignedTxMsg {
     assertPlanned(msg);
@@ -48,9 +48,11 @@ export class TxMsgSigner {
   }
 
   /**
-   * Signs a message with any {@link TxSigner}s - keys, hardware wallets, remote services - one per
-   * witness. Every signer signs the same serialized message; a signer that must witness twice (the
-   * same account paying gas and owning the tokens) is asked once and its signature reused.
+   * Signs a message with any {@link TxSigner}, one per witness. A signer can hold keys, drive a
+   * hardware wallet or call a remote service. Every signer signs the same serialized message.
+   *
+   * One account can fill two witness slots, when it pays the gas and owns the tokens. Such a signer
+   * is asked once and its signature is reused.
    */
   static async signWith(msg: TxMsg, signers: TxSigner[]): Promise<SignedTxMsg> {
     assertPlanned(msg);
@@ -74,9 +76,9 @@ export class TxMsgSigner {
   }
 }
 
-// A zero gas offer is never admissible, so it marks a message that was built but not planned;
-// signing it would only produce a rejection. Plan with `PhantasmaAPI.fees.plan` / `planFees`, or
-// set `maxGas` deliberately.
+// A zero gas offer is never admissible, so it marks a message that was built and not planned.
+// Signing such a message would only produce a rejection. Plan it with `PhantasmaAPI.fees.plan` or
+// `planFees`, or set `maxGas` on purpose.
 function assertPlanned(msg: TxMsg): void {
   if (msg.maxGas === 0n) {
     throw new Error('Transaction has no gas offer: plan its fees or set maxGas before signing');
@@ -90,12 +92,14 @@ function serialize(signed: SignedTxMsg): Uint8Array {
 }
 
 /**
- * Pairs every witness slot of the envelope with the signer that owns its address. For the types
- * whose witness set the node fixes (native transfers, mints, burns and their gas-payer variants)
- * the slots come in envelope order regardless of how the signers were passed, and the signer set
- * must match the required addresses exactly - a missing owner key or a stray extra key is a
- * caller mistake the node would reject later at a cost. For the witness-array types the caller's
- * order is the envelope order.
+ * Pairs every witness slot of the envelope with the signer that owns its address.
+ *
+ * The node fixes the witness set of the native transfers, mints and burns, and of their gas-payer
+ * variants. For those the slots come in envelope order however the signers were passed, and the
+ * signer set must match the required addresses exactly. A missing owner key or a stray extra key is
+ * a caller mistake, and the node would reject it later at a cost.
+ *
+ * For the witness-array types the caller's order is the envelope order.
  */
 function witnessSlots<S extends TxSigner>(msg: TxMsg, signers: S[]): WitnessSlot<S>[] {
   const required = SignedTxMsg.requiredWitnesses(msg);

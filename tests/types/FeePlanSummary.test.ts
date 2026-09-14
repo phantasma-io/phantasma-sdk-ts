@@ -19,8 +19,8 @@ const config = new GasConfig({
 const owner = new Bytes32(PhantasmaKeys.generate().publicKey);
 
 describe('summarizeFeePlan', () => {
-  // A settled transfer of an ordinary token into a fresh holder - 0.0042850000 KCAL of gas and one row of
-  // 0.00200000 SOUL escrowed - is what a wallet must show, in those units.
+  // A settled transfer of an ordinary token into a fresh holder costs 0.0042850000 KCAL of gas and
+  // escrows one row of 0.00200000 SOUL. A wallet must show those two numbers in those units.
   it('renders the plan in KCAL and SOUL', () => {
     const msg = NativeTxHelper.transferFungible({
       from: owner,

@@ -29,8 +29,8 @@ export interface EstimateTransactionResult {
 }
 
 /**
- * Converts a completed estimate into the same FeeQuote struct Tier-1 estimates produce, so wallet
- * code consumes both tiers identically: maxGas/maxData are the recommended ceilings and
+ * Converts a completed estimate into the same FeeQuote struct that Tier-1 estimates produce. Wallet
+ * code then reads both tiers the same way. maxGas and maxData are the recommended ceilings, and
  * expectedGasBill is the exact settled bill. Throws when wouldAbort is set - an aborted simulation
  * has no recommendations (retry with a higher offer or fall back to the Tier-1 estimator).
  */

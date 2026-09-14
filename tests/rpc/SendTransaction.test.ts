@@ -89,7 +89,7 @@ class StubApi extends PhantasmaAPI {
   ): Promise<Token> {
     this.lookups += 1;
     if (!this.reachable) return { error: this.lookupError } as unknown as Token;
-    // A live node resolves by id without looking at the symbol; that path is the pre-flight's
+    // A live node resolves by id without looking at the symbol. That path is the pre-flight's
     // control, and it answers for the gas token whatever the caller's symbol turns out to be.
     if (carbonTokenId !== 0n) return { symbol: 'KCAL' } as Token;
     return this.tokens.get(symbol) ?? ({ error: this.lookupError } as unknown as Token);
@@ -230,7 +230,7 @@ describe('PhantasmaAPI.sendTransaction', () => {
   // A free symbol is established, not inferred from the error text: the node refuses to answer
   // about FRESH, so the check asks it for a token that certainly exists. That answer proves the
   // lookup works and is being truthful, which is what makes the refusal about FRESH mean "absent".
-  // Whatever the error says is irrelevant - including "Method not found", the JSON-RPC name of
+  // Whatever the error says is irrelevant. That includes "Method not found", the JSON-RPC name of
   // error -32601, which contains the words "not found" and means the question was never asked.
   it('establishes a free symbol from a control lookup, not from the error text', async () => {
     const api = new StubApi();
@@ -243,7 +243,7 @@ describe('PhantasmaAPI.sendTransaction', () => {
   });
 
   // And the case the whole check exists for: a node that cannot answer at all. Nothing is
-  // established, so nothing is signed - the policy fee is not spent on a guess.
+  // established, so nothing is signed. The policy fee is not spent on a guess.
   it('refuses when the lookup cannot answer even about a token that exists', async () => {
     const api = new StubApi();
     api.reachable = false;
@@ -258,7 +258,8 @@ describe('PhantasmaAPI.sendTransaction', () => {
   });
 
   // `sendTransaction` acts on one verdict only. A caller who wants to stop on the others reads the
-  // verdict itself and sends separately - which is the whole reason the check reports one instead
+  // verdict itself and sends separately. That is the whole reason the check reports a verdict
+  // instead
   // of deciding. This is that path, and it is the one a wallet uses to warn before spending the fee.
   it('hands the verdict to a caller who wants to decide for itself', async () => {
     const api = new StubApi();
@@ -270,7 +271,7 @@ describe('PhantasmaAPI.sendTransaction', () => {
     });
 
     // A source that cannot offer a control token has nothing to check the refusal against, so it
-    // says so rather than picking a side. `controlTokenId` is optional for exactly this reason.
+    // says so and picks no side. `controlTokenId` is optional for exactly this reason.
     const noControl = { getToken: (symbol: string) => api.getToken(symbol) };
     expect(await preflightTransaction(noControl, createToken('FRESH'))).toEqual({
       verdict: 'unknown',
@@ -332,7 +333,8 @@ describe('PhantasmaAPI.sendTransaction', () => {
     });
     expect(sent.msg.maxGas).toBe(expected.maxGas);
     expect(sent.msg.maxData).toBe(expected.maxData);
-    // KCAL and GPX: a transfer and a query each; ART: a query, two transfers, a query - 80 units.
+    // KCAL and GPX cost a transfer and a query each. ART costs a query, two transfers and a query.
+    // That is 80 units.
     const empty = planFees(burn, config, { infusions: [] });
     expect(sent.msg.maxGas - empty.maxGas).toBe(800_000n);
 

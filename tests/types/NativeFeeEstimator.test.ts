@@ -102,7 +102,7 @@ describe('estimateNativeFee against settled v2 transactions', () => {
   });
 
   // Mainnet tx 6C1A6412... (block 9,075,820): a PoltergeistLite transfer of 178 bytes was billed
-  // 44,600,000 - the figure the node printed in its "gas fees" abort.
+  // 44,600,000, which is the figure the node printed in its "gas fees" abort.
   it('reproduces the first live mainnet bill', () => {
     const estimate = estimateNativeFee(NativeFeeKind.TransferFungible, v2Config(), {
       envelopeBytes: 178,
@@ -114,7 +114,8 @@ describe('estimateNativeFee against settled v2 transactions', () => {
   // A native MintFungible of 171 bytes into a fresh holder of a token whose supply row is in
   // place. The call returns the new balance, and a call result is block data exactly like the
   // envelope. The result's size depends on the balance it reports: 9 bytes while it fits int64, up
-  // to 33 beyond - so stating `bigFungible: false` prices the 9-byte result exactly, and leaving
+  // to 33 beyond. Stating `bigFungible: false` therefore prices the 9-byte result exactly, and
+  // leaving
   // it unstated prices the 33-byte maximum, 24 bytes of block data more.
   it('bills a fungible mint with its 9-byte result when the token is declared small', () => {
     const estimate = estimateNativeFee(NativeFeeKind.MintFungible, v2Config(), {
@@ -159,7 +160,7 @@ describe('estimateNativeFee against settled v2 transactions', () => {
     expect(estimate.expectedGasBill).toBe(42_950_000n);
 
     // Minting into an NFT address pays the same owner lookup, once per call, on all three mint
-    // kinds - the chain checks the recipient the same way it does for a transfer.
+    // kinds. The chain checks the recipient the same way it does for a transfer.
     const mints = [
       NativeFeeKind.MintFungible,
       NativeFeeKind.MintNonFungible,
@@ -173,7 +174,7 @@ describe('estimateNativeFee against settled v2 transactions', () => {
     }
   });
 
-  // A native NFT burn of 138 bytes; the mint's ten quanta are deleted and refunded,
+  // A native NFT burn of 138 bytes. The mint's ten quanta are deleted and refunded,
   // no net block data, the token had been burned before and its supply row was in place.
   it('bills an NFT burn for its work and envelope only', () => {
     const estimate = estimateNativeFee(NativeFeeKind.BurnNonFungible, v2Config(), {
@@ -192,8 +193,9 @@ describe('estimateNativeFee against settled v2 transactions', () => {
 
   // Burning an NFT returns whatever its own address holds, and the chain charges for each returned
   // asset as the transfers it performs: a transfer fee plus the owner lookup of the NFT-address
-  // source per fungible token; an instance query, a transfer per instance and that lookup per NFT
-  // token. The returned rows never add block data - a burn refunds more than the returns create -
+  // source per fungible token. An NFT token costs an instance query, a transfer per instance and
+  // that same lookup. The returned rows never add block data, because a burn refunds more than the
+  // returns create.
   // so the bill moves by the work alone, while the escrow ceiling covers a balance row the burner
   // lacks and the moved lookup rows. Measured live 2026-09-02: +200,000 for one infused KCAL atom,
   // +700,000 for KCAL, a custom token and an NFT together.
@@ -218,7 +220,7 @@ describe('estimateNativeFee against settled v2 transactions', () => {
     expect(kcal.deletedStorageQuanta).toBe(empty.deletedStorageQuanta);
 
     // A custom token the burner does not hold: the same work, plus the balance row the return
-    // creates - and the NFT address's own row, which the return deletes.
+    // creates. The NFT address's own row is deleted by the return.
     const custom = burn({ tokenId: 97n });
     expect(custom.expectedGasBill - empty.expectedGasBill).toBe(20n * 10_000n);
     expect(custom.newStorageQuanta).toBe(empty.newStorageQuanta + 1);
@@ -230,14 +232,15 @@ describe('estimateNativeFee against settled v2 transactions', () => {
     // An id the reader could not resolve is priced as a paid row: over-covering, never short.
     expect(burn({}).newStorageQuanta).toBe(empty.newStorageQuanta + 1);
 
-    // Two instances of an NFT token: the instance query, two transfers, the lookup; a balance row
+    // Two instances of an NFT token cost the instance query, two transfers and the lookup. A
+    // balance row
     // plus two moved lookup rows created, the NFT address's balance row and two lookups deleted.
     const nft = burn({ tokenId: 9n, nonFungible: true, instanceCount: 2 });
     expect(nft.expectedGasBill - empty.expectedGasBill).toBe(40n * 10_000n);
     expect(nft.newStorageQuanta).toBe(empty.newStorageQuanta + 3);
     expect(nft.deletedStorageQuanta).toBe(empty.deletedStorageQuanta + 3);
 
-    // The live combination: KCAL, a held custom token and one NFT - seventy units.
+    // The live combination is KCAL, a held custom token and one NFT. That is seventy units.
     const all = burn(
       { tokenId: 1n },
       { tokenId: 97n, burnerHoldsToken: true },
@@ -251,7 +254,7 @@ describe('estimateNativeFee against settled v2 transactions', () => {
   });
 
   // Two settled CreateToken bills with 7-character symbols. The fungible one is 374 signed bytes and writes the
-  // symbol, token-info and null-balance rows and returns the u64 token id; the NFT-capable one
+  // symbol, token-info and null-balance rows and returns the u64 token id. The NFT-capable one
   // (466 bytes) adds the series counter. Policy fee 10 KCAL + 10 KCAL >> 6.
   it('reproduces the two localnet CreateToken bills to the atom', () => {
     const fungible = estimateNativeFee(NativeFeeKind.CreateToken, localnetConfig(), {
@@ -310,7 +313,8 @@ describe('estimateNativeFee against settled v2 transactions', () => {
   });
 
   // Two settled deterministic Phantasma mints. The 182-byte public ROM was the token's
-  // first mint to that owner (fresh balance row, 5 quanta); the 3,083-byte one found the balance
+  // first mint to that owner, with a fresh balance row and 5 quanta. The 3,083-byte one found the
+  // balance
   // row in place and its canonical ROM alone took seven quanta (10 in total). Each instance pays the
   // mint plus two query fees and returns 40 bytes after the 4-byte count.
   //
@@ -418,8 +422,8 @@ describe('estimateNativeFee against settled v2 transactions', () => {
     expect(single.newStorageQuanta).toBe(5);
   });
 
-  // A duplicated series is read twice per instance rather than once - the mode check and the shared
-  // ROM each read the token info - and its supply is read once per series for the whole
+  // A duplicated series is read twice per instance and not once, because the mode check and the
+  // shared ROM each read the token info. Its supply is read once per series for the whole
   // transaction, because the chain reuses the number it already read. The counts therefore scale
   // differently and the model has to keep them apart.
   it('charges a duplicated series three queries an instance and one for the series', () => {
@@ -503,7 +507,7 @@ describe('estimateNativeFee against settled v2 transactions', () => {
   // Facts about chain state that the message cannot carry are defaulted to the case that COSTS
   // MORE, because the offer is spent against the real bill and a short one aborts the transaction
   // while an over-offer is refunded. These three pin that direction for the facts where the cheap
-  // reading used to be the default; each case fails if a default flips back.
+  // reading used to be the default. Each case fails if a default flips back.
   describe('unspecified state facts default to the costlier reading', () => {
     it('assumes a Phantasma series is duplicated until told otherwise', () => {
       const shared = { envelopeBytes: 490, count: 3, romBytes: 75 } as const;
@@ -548,7 +552,8 @@ describe('estimateNativeFee against settled v2 transactions', () => {
       expect(assumed.maxData - without.maxData).toBe(v2Config().dataEscrowPerRow);
     });
 
-    // Same flag, same default on a burn - it keeps the deleted rows mirroring what the mint wrote -
+    // The same flag has the same default on a burn. It keeps the deleted rows mirroring what the
+    // mint wrote.
     // but there it moves a reported number and nothing else. Deleted rows are refunded, `maxData`
     // covers only the rows an operation CREATES, and a burn always deletes more than it creates, so
     // the block-data term floors at zero whichever way the flag goes. This pins both halves: the
@@ -576,8 +581,9 @@ describe('estimateNativeFee against settled v2 transactions', () => {
       expect(assumed.newStorageQuanta).toBe(without.newStorageQuanta + 1);
     });
 
-    // The supply row disappears when its balance reaches exactly zero - a limited token fully in
-    // circulation, an unlimited one with nothing outstanding - and the next mint or burn recreates
+    // The supply row disappears when its balance reaches exactly zero. That happens to a limited
+    // token fully in circulation and to an unlimited one with nothing outstanding. The next mint or
+    // burn then recreates
     // it. Unstated, every mint and burn prices that recreation: one quantum in the bill and the
     // escrow ceiling. Transfers never touch the row, and the chain's own gas and data tokens are
     // free rows, so neither moves with the flag.
@@ -596,7 +602,7 @@ describe('estimateNativeFee against settled v2 transactions', () => {
         expect(assumed.newStorageQuanta).toBe(inPlace.newStorageQuanta + 1);
         expect(assumed.maxData - inPlace.maxData).toBe(v2Config().dataEscrowPerRow);
         // An NFT burn deletes more quanta than it creates, so its block-data term floors at zero
-        // either way and only the escrow ceiling moves; everywhere else the bill moves too.
+        // either way and only the escrow ceiling moves. Everywhere else the bill moves too.
         expect(assumed.expectedGasBill - inPlace.expectedGasBill).toBe(
           kind === NativeFeeKind.BurnNonFungible ? 0n : 25n * 10_000n
         );
@@ -619,8 +625,8 @@ describe('estimateNativeFee against settled v2 transactions', () => {
     });
   });
 
-  // A wallet that caches prices gets its config back as plain data - a spread, a structured clone,
-  // a value out of a store - with the fields intact and the class prototype gone. Selecting the gas
+  // A wallet that caches prices gets its config back as plain data: a spread, a structured clone, a
+  // value out of a store. The fields are intact and the class prototype is gone. Selecting the gas
   // model through a prototype accessor silently bills such a config under the v1 rules and offers
   // orders of magnitude too little, which is the shape of the failure this whole fee model exists
   // to prevent. The model is chosen by the version field, so it survives the round trip.
@@ -663,7 +669,7 @@ describe('estimateNativeFee under gas model v1', () => {
     expect(estimate.maxData).toBe(2n);
   });
 
-  // CreateToken under v1 charges unit-priced product fees through the multiplier; the 8-byte
+  // CreateToken under v1 charges unit-priced product fees through the multiplier. The 8-byte
   // result and the rows are block data at the v1 byte price.
   it('prices token creation through the multiplier', () => {
     const estimate = estimateNativeFee(NativeFeeKind.CreateToken, v1Config(), {
@@ -685,8 +691,8 @@ describe('estimateNativeFee under gas model v1', () => {
     expect(v2.expectedGasBill).toBe((100_000_000_000_000_000n >> 7n) + 300n * 25n * 10_000n);
   });
 
-  // feeShift semantics: the chain clamps shifts >= 64 to a zero work delta; the estimator must
-  // match rather than undercharge/overcharge.
+  // feeShift semantics. The chain clamps a shift of 64 or more to a zero work delta. The estimator
+  // must match that, so it neither undercharges nor overcharges.
   it('zeroes scaled terms on an oversized feeShift', () => {
     const config = v1Config();
     config.feeShift = 64;
@@ -748,7 +754,8 @@ describe('estimateNativeFee guard rails', () => {
     ).toThrow(/cannot be priced offline/);
   });
 
-  // Impossible inputs are rejected instead of quoting fees for txs the chain would never admit.
+  // Impossible inputs are rejected. A quoted fee would be for a transaction the chain never
+  // admits.
   it('rejects invalid inputs', () => {
     expect(() =>
       estimateNativeFee(NativeFeeKind.TransferFungible, v1Config(), { count: 0 })

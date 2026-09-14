@@ -46,13 +46,13 @@ import {
 } from './rpc-result.js';
 export interface SendTransactionOptions extends PlanRequestOptions {
   /**
-   * For a token creation, ask the chain whether the symbol is already taken and refuse unless the
-   * chain answered that it is free (see `preflightTransaction`). Every other message is unaffected.
-   * Default true; `false` skips the lookup.
+   * For a token creation, ask the chain whether the symbol is already taken. The send goes ahead
+   * only when the chain answered that the symbol is free, see `preflightTransaction`. Every other
+   * message is unaffected. Default true. `false` skips the lookup.
    *
-   * It refuses a lookup that did not answer, not only one that answered "taken": the policy fee is
-   * spent before the contract looks at the symbol, so sending on an unestablished state is exactly
-   * the outcome worth paying a round trip to avoid.
+   * The send is also refused when the lookup answered nothing at all. The policy fee is spent before
+   * the contract looks at the symbol, so sending on an unestablished state is the outcome worth
+   * paying a round trip to avoid.
    */
   preflight?: boolean;
 }
@@ -197,9 +197,9 @@ async function readStreamBody(
   return decodeChunks(chunks, totalBytes);
 }
 
-// The RPC answers an application failure ("Token symbol not found", "name not registered") with
-// an HTTP error status AND a JSON-RPC error body. The body is the answer; the status alone would
-// hide it behind "HTTP 400: Bad Request".
+// The RPC answers an application failure with an HTTP error status AND a JSON-RPC error body.
+// Examples of such a failure are "Token symbol not found" and "name not registered". The body is the
+// answer. The status alone would hide it behind "HTTP 400: Bad Request".
 async function jsonRpcErrorMessage(
   res: Response,
   method: string,
@@ -487,10 +487,10 @@ export class PhantasmaAPI {
   /**
    * @deprecated Use `formatUnits` instead. This method will be removed in v1.0.
    *
-   * It divides in binary floating point, so it cannot express an amount exactly: KCAL has ten
-   * decimals, and an integer number of atoms stops being representable in a `number` above roughly
-   * 900,720 KCAL. `formatUnits` takes the atoms as a `bigint` and returns a decimal string, which
-   * is exact for every amount and every token.
+   * It divides in binary floating point, so it cannot express an amount exactly. KCAL has ten
+   * decimals, and above roughly 900,720 KCAL a `number` can no longer hold an integer count of
+   * atoms. `formatUnits` takes the atoms as a `bigint` and returns a decimal string. That is exact
+   * for every amount and every token.
    */
   convertDecimals(amount: number, decimals: number): number {
     const mult = Math.pow(10, decimals);
@@ -680,8 +680,8 @@ export class PhantasmaAPI {
   private feePlanner?: FeePlanner;
 
   /**
-   * The fee planner of the chain this client talks to: reads the chain's gas config through
-   * this client, caches it briefly, and prices messages with it (`api.fees.plan(msg)`).
+   * The fee planner of the chain this client talks to. It reads the chain's gas config through this
+   * client, caches it briefly, and prices messages with it. Call it as `api.fees.plan(msg)`.
    */
   get fees(): FeePlanner {
     this.feePlanner ??= new FeePlanner(this);
@@ -689,10 +689,10 @@ export class PhantasmaAPI {
   }
 
   /**
-   * The gas token's id, which the pre-flight uses as its control lookup: it certainly exists on any
-   * live chain. It comes from the same cached gas config the planner reads, so asking costs a round
-   * trip only once a minute. Undefined when this client cannot read that config - the pre-flight
-   * then reports `unknown` rather than guessing.
+   * The gas token's id. The pre-flight uses it as its control lookup, because that token certainly
+   * exists on any live chain. The id comes from the same cached gas config the planner reads, so
+   * asking for it costs a round trip only once a minute. It is undefined when this client cannot
+   * read that config, and the pre-flight then reports `unknown`.
    */
   async controlTokenId(): Promise<bigint | undefined> {
     try {
@@ -703,12 +703,13 @@ export class PhantasmaAPI {
   }
 
   /**
-   * What NFT `instanceId` of token `tokenId` holds at its own address, in the form the fee planner
-   * prices: a burn of that NFT returns every one of these to the burner and pays for each. Read
-   * through the account queries with the address in its Carbon form; fungible balances are resolved
-   * to token ids so the free rows of the gas and data tokens are recognised. Whether the burner
-   * already holds a returned token is left at the costlier reading, which moves only the escrow
-   * ceiling.
+   * Returns what NFT `instanceId` of token `tokenId` holds at its own address, in the form the fee
+   * planner prices. A burn of that NFT returns every one of these to the burner and pays for each.
+   *
+   * The assets are read through the account queries, with the address in its Carbon form. Fungible
+   * balances are resolved to token ids, so the free rows of the gas and data tokens are recognised.
+   * Whether the burner already holds a returned token is left at the costlier reading, and that
+   * moves the escrow ceiling alone.
    */
   async infusedAssets(tokenId: bigint, instanceId: bigint): Promise<InfusedAsset[]> {
     const address = TokenHelper.getNftAddress(tokenId, instanceId).toHex();
@@ -736,9 +737,9 @@ export class PhantasmaAPI {
     return assets;
   }
 
-  // Walks a cursor-paginated query to the end. The loop is driven by the cursor the node returns,
-  // never by an item count, and stops on a cursor it has already seen or past a page cap so a
-  // misbehaving node cannot keep it going forever.
+  // Walks a cursor-paginated query to the end. The cursor the node returns drives the loop, and an
+  // item count never does. The loop stops on a cursor it has already seen, and it stops past a page
+  // cap. A misbehaving node therefore cannot keep it going forever.
   private async readAllPages<T>(
     page: (cursor: string) => Promise<CursorPaginatedResult<T[]>>
   ): Promise<T[]> {
@@ -757,13 +758,15 @@ export class PhantasmaAPI {
   }
 
   /**
-   * Sends a message in one step: pre-flight, fee plan, signatures, broadcast. A message whose
-   * `maxGas` is still zero is planned against this chain's prices (`fees.plan`); one the caller
-   * already planned is sent as it is. Every witness signs through its {@link TxSigner} - keys,
-   * hardware, or a remote service. Returns the transaction hash.
+   * Sends a message in one step. The steps are pre-flight, fee plan, signatures and broadcast.
+   * Returns the transaction hash.
    *
-   * The pre-flight refuses a token creation whose symbol the chain says is taken, and one it could
-   * not establish anything about; see the `preflight` option.
+   * A message whose `maxGas` is still zero is planned against this chain's prices with `fees.plan`.
+   * A message the caller already planned is sent as it is. Every witness signs through its
+   * {@link TxSigner}, which can hold keys, drive hardware or call a remote service.
+   *
+   * The pre-flight refuses a token creation whose symbol the chain says is taken. It also refuses
+   * one it could establish nothing about. See the `preflight` option.
    */
   async sendTransaction(
     msg: TxMsg,

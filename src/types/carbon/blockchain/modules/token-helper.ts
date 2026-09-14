@@ -22,10 +22,12 @@ export class TokenHelper {
   }
 
   /**
-   * Whether a 32-byte address is an NFT-derived address - the address every minted instance owns,
-   * which assets are sent to when they are infused into that NFT. The form is syntactic, the same
-   * test the chain applies: fifteen zero bytes, a 0x01 marker, then a nonzero token id and a
-   * nonzero instance id. `planFees` uses it to price the recipient's owner lookup.
+   * Returns true if a 32-byte address is an NFT-derived address. Every minted instance owns such an
+   * address, and assets infused into that NFT are sent to it.
+   *
+   * The test is syntactic and is the one the chain applies: fifteen zero bytes, a 0x01 marker, then
+   * a nonzero token id and a nonzero instance id. `planFees` uses it to price the recipient's owner
+   * lookup.
    */
   static isNftAddress(address: Bytes32 | Uint8Array): boolean {
     const bytes = address instanceof Bytes32 ? address.bytes : address;

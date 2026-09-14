@@ -1,16 +1,18 @@
 import { CarbonBinaryReader } from '../../../carbon-serialization.js';
 
 /**
- * Arguments of the token-module calls that carry a token movement, read back out of a
- * `TxMsgCall`. A wallet that batches operations sends them as module calls rather than as native
- * transaction types, and the fee model prices the two identically, so the planner has to recover
- * from the call what the native message would have carried in named fields: which token moves,
- * where it goes and how many instances.
+ * Arguments of the token-module calls that carry a token movement, read back out of a `TxMsgCall`.
  *
- * Only the leading fields the fee model needs are read; the amount that follows them is a
- * variable-length IntX nothing here depends on. Each reader throws on a buffer too short to hold
- * its fields - a caller planning a malformed call gets an error rather than a price for something
- * the chain would refuse.
+ * A wallet that batches operations sends them as module calls and not as native transaction types.
+ * The fee model prices the two identically. The planner therefore has to recover from the call what
+ * the native message would have carried in named fields: which token moves, where it goes and how
+ * many instances.
+ *
+ * Only the leading fields the fee model needs are read. The amount that follows them is a
+ * variable-length IntX, and nothing here depends on it.
+ *
+ * Each reader throws on a buffer too short to hold its fields. A caller planning a malformed call
+ * then gets an error. The chain would refuse that call anyway.
  */
 export class TokenCallArgs {
   /** `Token.TransferFungible(to, from, tokenId, amount)`. */

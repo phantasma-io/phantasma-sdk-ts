@@ -4,7 +4,8 @@ import { formatUnits } from '../../src/utils/units';
 // The SDK converts atoms to a decimal string in two places on purpose, and this pins the difference
 // so that neither one drifts and nobody adds a third. `toWholeNumber` is what a Ledger device shows:
 // always every decimal place, so amounts line up. `formatUnits` is the general conversion and trims
-// trailing zeros. Both are exact - neither goes through a floating-point number - and the test below
+// trailing zeros. Both are exact, because neither goes through a floating-point number. The test
+// below
 // says so by deriving one from the other.
 describe('atom-to-decimal conversion, device display versus general purpose', () => {
   it('keeps every decimal place a device column needs', () => {

@@ -1,24 +1,28 @@
 import { TxMsg } from '../tx-msg.js';
 
 /**
- * Explicit transaction limits a builder writes into the message. Builders carry no prices: a
- * message built without `maxGas` has a zero gas offer, which marks it as not yet planned - plan it
- * with `PhantasmaAPI.fees.plan` / `planFees` before signing, or pass the offer here.
+ * Explicit transaction limits a builder writes into the message.
+ *
+ * Builders carry no prices. A message built without `maxGas` has a zero gas offer, and that marks it
+ * as not yet planned. Plan it with `PhantasmaAPI.fees.plan` or `planFees` before signing, or pass
+ * the offer here.
  */
 export interface TxLimits {
-  /** Gas offer in kcal-base (`TxMsg.maxGas`). Default 0 = unplanned. */
+  /** Gas offer in kcal-base (`TxMsg.maxGas`). Default 0, which means unplanned. */
   maxGas?: bigint;
   /** Storage-escrow ceiling in data-token atoms (`TxMsg.maxData`). Default 0. */
   maxData?: bigint;
   /**
    * Expiry as a millisecond timestamp (`TxMsg.expiry`). Default {@link DEFAULT_TX_EXPIRY_MS} from
-   * now. A flow with a person in it - a hardware wallet confirming, a wallet-link round trip -
-   * should set this from the chain's own window instead; see {@link expiryWithin}.
+   * now.
+   *
+   * A flow with a person in it should set this from the chain's own window instead. Examples are a
+   * hardware wallet confirming and a wallet-link round trip. See {@link expiryWithin}.
    */
   expiry?: bigint;
 }
 
-/** Writes the limits into a message the builders assemble. */
+/** Writes the limits into a message that the builders assemble. */
 export function applyTxLimits(msg: TxMsg, limits: TxLimits = {}): TxMsg {
   msg.maxGas = limits.maxGas ?? 0n;
   msg.maxData = limits.maxData ?? 0n;
@@ -29,12 +33,15 @@ export function applyTxLimits(msg: TxMsg, limits: TxLimits = {}): TxMsg {
 /**
  * Default lifetime of a message a builder stamps, in milliseconds.
  *
- * The chain reads `expiry` in milliseconds and refuses anything at or beyond `now + expiryWindow`,
- * where `expiryWindow` is a chain setting whose node default is 60,000 ms. A default has to hold on
- * the shortest window a chain may run, and it is compared against the NODE's clock, so it also has
- * to survive the two clocks disagreeing - hence a quarter of a minute of headroom rather than the
- * whole 60,000. Chains that allow longer report it as `expiryWindow` in `getGasConfig`, reachable as
- * `PhantasmaAPI.fees.chainParams()`.
+ * The chain reads `expiry` in milliseconds and refuses anything at or beyond `now + expiryWindow`.
+ * `expiryWindow` is a chain setting, and its node default is 60,000 ms.
+ *
+ * A default has to hold on the shortest window a chain may run. The value is also compared against
+ * the NODE's clock, so it has to survive the two clocks disagreeing. That is why it keeps a quarter
+ * of a minute of headroom and does not take the whole 60,000.
+ *
+ * A chain that allows longer reports its own window as `expiryWindow` in `getGasConfig`, reachable
+ * as `PhantasmaAPI.fees.chainParams()`.
  */
 export const DEFAULT_TX_EXPIRY_MS = 45_000;
 

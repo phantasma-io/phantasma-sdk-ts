@@ -157,8 +157,8 @@ function carbonTxBuilderVector(caseId: string): string {
     case 'mint_non_fungible_u256_nft_id': {
       const schemas = TokenSchemasBuilder.prepareStandard(false);
       const rom = NftRomBuilder.buildAndSerialize(schemas.rom, (1n << 256n) - 1n, nftMetadata());
-      // The native-mint builder is gone from the SDK; the wire type stays, and so do its pinned
-      // bytes - the message is assembled directly.
+      // The native-mint builder is gone from the SDK. The wire type stays, and so do its pinned
+      // bytes. The message is assembled directly here.
       return serializeTx(
         new TxMsg(
           TxTypes.MintNonFungible,

@@ -17,12 +17,12 @@ import { TxMsgTransferNonFungibleSingleGasPayer } from '../tx-msg-transfer-non-f
 import { applyTxLimits, TxLimits } from './tx-limits.js';
 
 /**
- * Who pays: the native transaction types come in pairs - the plain form, where the account moving
- * the tokens also pays the gas and signs alone, and the `_GasPayer` form, where a second account
- * pays the gas and both sign. Naming a `gasPayer` selects the second form.
+ * Who pays the gas. The native transaction types come in pairs. In the plain form the account moving
+ * the tokens also pays the gas and signs alone. In the `_GasPayer` form a second account pays the
+ * gas and both accounts sign. Naming a `gasPayer` selects the second form.
  */
 export interface NativeTxParties extends TxLimits {
-  /** The account whose tokens move; always a witness. */
+  /** The account whose tokens move. It is always a witness. */
   from: Bytes32;
   /** A different account that pays the gas and becomes the first witness. */
   gasPayer?: Bytes32;
@@ -31,30 +31,33 @@ export interface NativeTxParties extends TxLimits {
 export interface TransferFungibleParams extends NativeTxParties {
   to: Bytes32;
   tokenId: bigint;
-  /** Amount in the token's atoms (u64; big-fungible tokens need a script transfer). */
+  /** Amount in the token's atoms, as a u64. A big-fungible token needs a script transfer
+   * instead. */
   amount: bigint;
 }
 
 export interface TransferNonFungibleParams extends NativeTxParties {
   to: Bytes32;
   tokenId: bigint;
-  /** One instance uses the single-instance type, several the multi-instance type. */
+  /** The instances to move. One instance uses the single-instance type. Several use the
+   * multi-instance type. */
   instanceIds: readonly bigint[];
 }
 
 export interface MintFungibleParams extends TxLimits {
-  /** The token owner: pays the gas and signs. */
+  /** The token owner. This account pays the gas and signs. */
   owner: Bytes32;
   to: Bytes32;
   tokenId: bigint;
-  /** Amount in the token's atoms. Mint and burn carry an IntX because they also serve big-fungible
-   * tokens, whose balances do not fit a u64; `IntX.fromI64` wraps an ordinary amount. */
+  /** Amount in the token's atoms. Mint and burn carry an IntX, because they also serve
+   * big-fungible tokens, whose balances do not fit a u64. `IntX.fromI64` wraps an ordinary
+   * amount. */
   amount: IntX;
 }
 
 export interface BurnFungibleParams extends NativeTxParties {
   tokenId: bigint;
-  /** Amount in the token's atoms, as an IntX for the same reason as a mint. */
+  /** Amount in the token's atoms, as an IntX. The reason is the same as for a mint. */
   amount: IntX;
 }
 
@@ -64,10 +67,13 @@ export interface BurnNonFungibleParams extends NativeTxParties {
 }
 
 /**
- * Builders for the native transaction types - transfers, mints and burns that need no VM script.
- * They assemble the message only: fees are planned afterwards from the message itself
- * (`PhantasmaAPI.fees.plan`, `planFees`) and the witnesses sign with `TxMsgSigner`. Unless a
- * `maxGas` is passed the message carries a zero offer and cannot be signed until it is planned.
+ * Builders for the native transaction types. Those are the transfers, mints and burns that need no
+ * VM script.
+ *
+ * A builder assembles the message and nothing else. Fees are planned afterwards from the message
+ * itself, with `PhantasmaAPI.fees.plan` or `planFees`. The witnesses then sign with `TxMsgSigner`.
+ *
+ * Without a `maxGas` the message carries a zero offer, and it cannot be signed until it is planned.
  */
 export class NativeTxHelper {
   static transferFungible(p: TransferFungibleParams): TxMsg {

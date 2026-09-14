@@ -12,14 +12,14 @@ import { TxMsgTransferNonFungibleMultiGasPayer } from './tx-msg-transfer-non-fun
 import { TxMsgTransferNonFungibleSingleGasPayer } from './tx-msg-transfer-non-fungible-single-gas-payer.js';
 
 /**
- * A transaction message with its witness signatures, in the envelope layout the chain reads:
+ * A transaction message with its witness signatures, in the envelope layout the chain reads.
  *
- * - native single-witness types append one bare 64-byte signature by `gasFrom`;
- * - the `_GasPayer` types append two bare signatures: first the gas payer (`gasFrom`), then the
- *   token owner (the message's `from`), which the node resolves from the message rather than from
- *   the envelope;
- * - Call, Call_Multi, Trade and Phantasma append a length-prefixed array of (address, signature)
- *   witnesses composed by the caller;
+ * - A native single-witness type appends one bare 64-byte signature by `gasFrom`.
+ * - A `_GasPayer` type appends two bare signatures. The gas payer (`gasFrom`) comes first and the
+ *   token owner second. The owner is the message's `from`, and the node resolves that address from
+ *   the message itself.
+ * - Call, Call_Multi, Trade and Phantasma append a length-prefixed array of witnesses. Each entry is
+ *   an address and a signature, and the caller composes the array.
  * - Phantasma_Raw carries no witnesses.
  */
 export class SignedTxMsg implements CarbonBlobLike {
@@ -29,9 +29,10 @@ export class SignedTxMsg implements CarbonBlobLike {
   ) {}
 
   /**
-   * Addresses whose signatures the envelope of `msg` must carry, in envelope order, for the
-   * types whose witness set is fixed by the message. Returns `undefined` for the witness-array
-   * types (Call, Call_Multi, Trade, Phantasma), whose witnesses are chosen by the caller.
+   * Returns the addresses whose signatures the envelope of `msg` must carry, in envelope order.
+   * This works for the types whose witness set the message fixes. It returns `undefined` for the
+   * witness-array types, which are Call, Call_Multi, Trade and Phantasma. The caller chooses the
+   * witnesses of those four.
    */
   static requiredWitnesses(msg: TxMsg): Bytes32[] | undefined {
     switch (msg.type) {
@@ -57,11 +58,12 @@ export class SignedTxMsg implements CarbonBlobLike {
   }
 
   /**
-   * The size in bytes of `msg` once signed - the envelope the block carries and gas model v2
-   * bills - computed without a key: signatures are fixed-width, so zero-filled placeholder
-   * witnesses serialize to exactly the signed length. The witness set is the one the message
-   * requires; for the witness-array types (Call, Call_Multi, Trade, Phantasma) pass how many
-   * witnesses will sign.
+   * Returns the size in bytes of `msg` once signed. That is the envelope the block carries and gas
+   * model v2 bills. No key is needed. Signatures are fixed-width, so zero-filled placeholder
+   * witnesses serialize to exactly the signed length.
+   *
+   * The witness set is the one the message requires. For the witness-array types, which are Call,
+   * Call_Multi, Trade and Phantasma, pass how many witnesses will sign.
    */
   static envelopeBytes(msg: TxMsg, witnessCount?: number): number {
     const required = SignedTxMsg.requiredWitnesses(msg);

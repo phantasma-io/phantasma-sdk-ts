@@ -115,38 +115,41 @@ const hash = await api.sendTransaction(transfer, keys);
 
 Under gas model v2 there are two things to know, and `sendTransaction` handles both for you:
 
-1. **Plan before you sign.** The chain bills every byte the transaction puts in the block and
-   escrows every storage row it creates, so a message carries a gas offer and a storage ceiling that
-   have to be set before signing - a message signed with a zero offer is never admitted.
+1. **Plan before you sign.** The chain bills every byte the transaction puts in the block, and it
+   escrows every storage row the transaction creates. A message therefore carries a gas offer and a
+   storage ceiling, and both have to be set before signing. A message signed with a zero offer is
+   never admitted.
 2. **What the plan cannot know, it assumes expensive.** Some of the price depends on chain state the
-   message does not carry: whether the recipient already holds the token, which mode a series mints
-   in. Each is taken at the value that costs MORE, because unused gas is refunded while a short
-   offer is rejected. `plan.exact` says whether any such assumption actually decided this number.
+   message does not carry. Examples are whether the recipient already holds the token, and which mode
+   a series mints in. Each fact is taken at the value that costs MORE. Unused gas is refunded, and a
+   short offer is rejected. `plan.exact` says whether such an assumption decided this number.
 
-- `api.fees` is the fee planner of the chain the client talks to. It reads `getGasConfig` once,
-  keeps it for a minute, and prices every message from the message itself: the signed size is
-  computed without a key, and the storage rows, call result bytes and gas sites of each native
-  operation are priced with the chain's own formula (`planFees`). `plan.kinds` says which operations
-  were priced - a `Call_Multi` performs several, and each is priced and then summed, because the
-  chain bills a batch as the sum of its calls with the envelope counted once. The one kind that is a
-  budget rather than a formula is `NativeFeeKind.Script` - VM scripts and unmodelled calls, whose
-  work depends on execution.
+- `api.fees` is the fee planner of the chain the client talks to. It reads `getGasConfig` once and
+  keeps it for a minute. It prices every message from the message itself. The signed size is computed
+  without a key. The storage rows, call result bytes and gas sites of each native operation are
+  priced with the chain's own formula (`planFees`).
+- `plan.kinds` says which operations were priced. A `Call_Multi` performs several, and each one is
+  priced and then summed, because the chain bills a batch as the sum of its calls with the envelope
+  counted once. One kind is a budget and not a formula: `NativeFeeKind.Script`, which covers VM
+  scripts and unmodelled calls. Their work depends on execution.
 - `FeePlanOptions` is where you tighten point 2 by telling the planner a fact it would otherwise
   assume. Every field is optional and most callers pass none.
-- `plan.exact` says whether the number is a prediction or a ceiling: `true` when nothing the plan had
-  to assume could have changed it, `false` when an unstated fact decided part of the price or a part
-  of the message had to be budgeted. Show `plan.exact ? amount : "up to " + amount`. It is answered
-  by pricing the message a second time with every unstated fact at its cheaper reading, so it is
-  about THIS message, not about which fields you filled in: a KCAL transfer is exact without stating
-  anything, because the chain's own token rows are free and `recipientHoldsToken` cannot move its
-  price. It promises nothing about facts you stated yourself - a wrong stated fact gives a wrong bill.
+- `plan.exact` says whether the number is a prediction or a ceiling. It is `true` when nothing the
+  plan had to assume could have changed it. It is `false` when an unstated fact decided part of the
+  price, or when a part of the message had to be budgeted. Show `plan.exact ? amount : "up to " +
+amount`.
+  The flag is answered by pricing the message a second time, with every unstated fact at its cheaper
+  reading. It is therefore about THIS message and not about which fields you filled in. A KCAL
+  transfer is exact without stating anything, because the chain's own token rows are free and
+  `recipientHoldsToken` cannot move its price. The flag promises nothing about facts you stated
+  yourself: a wrong stated fact gives a wrong bill.
 
 ### Which fact each operation reads
 
-Only the facts an operation reads can move its price, so this is the whole of what is worth stating.
-Every default is the reading that costs MORE. One storage quantum is `dataEscrowPerRow` of escrow
-plus 25 gas units of block data, both scaled by the chain's `feeMultiplier`; balance rows of the gas
-and data tokens are free, so for those tokens `recipientHoldsToken` changes nothing.
+Only the facts an operation reads can move its price, so this table is the whole of what is worth
+stating. Every default is the reading that costs MORE. One storage quantum is `dataEscrowPerRow` of
+escrow plus 25 gas units of block data, and the chain's `feeMultiplier` scales both. Balance rows of
+the gas and data tokens are free, so for those tokens `recipientHoldsToken` changes nothing.
 
 | `NativeFeeKind`            | facts it reads                                                     | what the default assumes                                                                                          | what the default costs                                                                                                                                                                                                                                                                                                                            |
 | -------------------------- | ------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |

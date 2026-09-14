@@ -32,7 +32,8 @@ export class CreateTokenTxHelper {
     return applyTxLimits(msg, limits);
   }
 
-  /** Builds, plans against `config` and signs with in-memory keys, returning the envelope bytes. */
+  /** Builds the call, plans it against `config`, signs it with in-memory keys and returns the
+   * envelope bytes. */
   static buildTxAndSign(
     tokenInfo: TokenInfo,
     signer: PhantasmaKeys,
@@ -54,8 +55,8 @@ export class CreateTokenTxHelper {
 
   /**
    * The token id the creation returned. Token.CreateToken answers with a u64, and a token id is a
-   * `bigint` everywhere else in the SDK - a `number` cannot hold the whole range, and reading only
-   * its low half would return a wrong id rather than fail.
+   * `bigint` everywhere else in the SDK. A `number` cannot hold the whole range. Reading only its
+   * low half would return a wrong id and would not fail.
    */
   static parseResult(resultHex: string): bigint {
     const r = new CarbonBinaryReader(hexToBytes(resultHex));

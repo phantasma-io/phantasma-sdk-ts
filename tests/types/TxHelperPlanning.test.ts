@@ -17,7 +17,7 @@ import { PhantasmaKeys } from '../../src/types/phantasma-keys';
 // Every `buildTxAndSign` helper follows one rule: a message whose `maxGas` the caller already set
 // is signed as it stands, and only an unplanned one is priced. The rule is read from the MESSAGE,
 // not from the options argument, because the builders are what write the caller's limits into the
-// message; this file holds every buildTxAndSign helper to that one rule.
+// message. This file holds every buildTxAndSign helper to that one rule.
 
 function mainnetConfig(): GasConfig {
   return new GasConfig({

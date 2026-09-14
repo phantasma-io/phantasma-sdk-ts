@@ -17,7 +17,8 @@ import { TxMsgCall } from '../tx-msg-call.js';
 import { PlanAndSignOptions, planAndSignWithKeys } from './plan-and-sign.js';
 import { applyTxLimits, TxLimits } from './tx-limits.js';
 
-/** A deterministic Phantasma NFT mint: one call, one recipient, one entry per minted instance. */
+/** A deterministic Phantasma NFT mint. It is one call with one recipient and one entry per minted
+ * instance. */
 export interface PhantasmaNftMintParams {
   tokenId: bigint;
   /** The account that pays the gas and signs the mint. */
@@ -25,14 +26,16 @@ export interface PhantasmaNftMintParams {
   /** The account that receives every instance this call mints. */
   to: Bytes32;
   /**
-   * One entry per instance, each naming the Phantasma series it is minted into and carrying the
-   * public ROM. Instances of several series may share one call; a single mint passes one entry.
+   * One entry per instance. Each entry names the Phantasma series the instance is minted into and
+   * carries the public ROM. Instances of several series may share one call. A single mint passes
+   * one entry.
    */
   tokens: readonly PhantasmaNftMintInfo[];
 }
 
 export class MintPhantasmaNonFungibleTxHelper {
-  /** Builds the Token.MintPhantasmaNonFungible call. Fees are planned from the message afterwards. */
+  /** Builds the Token.MintPhantasmaNonFungible call. Fees are planned from the message
+   * afterwards. */
   static buildTx(p: PhantasmaNftMintParams, limits?: TxLimits): TxMsg {
     if (p.tokens.length === 0) throw new Error('tokens must not be empty');
 
@@ -59,7 +62,8 @@ export class MintPhantasmaNonFungibleTxHelper {
     return applyTxLimits(msg, limits);
   }
 
-  /** Builds, plans against `config` and signs with in-memory keys, returning the envelope bytes. */
+  /** Builds the call, plans it against `config`, signs it with in-memory keys and returns the
+   * envelope bytes. */
   static buildTxAndSign(
     p: PhantasmaNftMintParams,
     signer: PhantasmaKeys,

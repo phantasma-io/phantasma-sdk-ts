@@ -6,13 +6,16 @@ import { TxMsg } from '../tx-msg.js';
 import { FeePlanOptions, planFees } from './fee-plan.js';
 import { TxLimits } from './tx-limits.js';
 
-/** Options of the `buildTxAndSign*` conveniences: how to plan the fee, or what to write instead. */
+/** Options of the `buildTxAndSign*` helpers. They say how to plan the fee, or what to write in
+ * place of a plan. */
 export type PlanAndSignOptions = FeePlanOptions & TxLimits;
 
 /**
- * Plans a freshly built message against `config` - unless the caller fixed `maxGas` themselves -
- * and signs it with in-memory keys. The convenience behind every `buildTxAndSign*` helper; a
- * wallet with an external signer plans with `planFees` and signs with `TxMsgSigner.signWith`.
+ * Plans a freshly built message against `config` and signs it with in-memory keys. A message whose
+ * `maxGas` the caller already fixed is signed as it is.
+ *
+ * This is the function behind every `buildTxAndSign*` helper. A wallet with an external signer plans
+ * with `planFees` and signs with `TxMsgSigner.signWith` instead.
  */
 export function planAndSignWithKeys(
   msg: TxMsg,
@@ -20,12 +23,12 @@ export function planAndSignWithKeys(
   config: GasConfig,
   options: PlanAndSignOptions = {}
 ): Uint8Array {
-  // Whether the fee is already settled is read from the MESSAGE: the builders are what write the
-  // caller's limits into it, so the message is the one place that is right for every helper. The
-  // same rule as `PhantasmaAPI.sendTransaction`.
+  // Whether the fee is already settled is read from the MESSAGE. The builders write the caller's
+  // limits into it, so the message is the one place that is right for every helper.
+  // `PhantasmaAPI.sendTransaction` follows the same rule.
   if (msg.maxGas !== 0n) return TxMsgSigner.signAndSerializeWithKeys(msg, keys);
   // Only the witness-array types take their witness count from the caller, and these keys are that
-  // caller's answer; for every other type the message fixes its own slots and one key may fill two
+  // caller's answer. Every other type fixes its own slots in the message, and one key may fill two
   // of them, so passing a count would contradict the message.
   const openWitnessSet = SignedTxMsg.requiredWitnesses(msg) === undefined;
   const planned = planFees(msg, config, {

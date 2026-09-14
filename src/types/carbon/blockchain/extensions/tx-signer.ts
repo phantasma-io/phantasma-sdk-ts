@@ -1,13 +1,14 @@
 import { Signature } from '../../../../interfaces/signature.js';
 
 /**
- * Anything that can witness a Carbon transaction: keys held in memory (`PhantasmaKeys`), a hardware
- * wallet, a remote signing service. A signer signs the serialized `TxMsg` bytes it is given and
- * returns the Ed25519 signature; a hardware or remote signer may resolve asynchronously, which is
- * why the result may be a promise.
+ * Anything that can witness a Carbon transaction. It can be keys held in memory (`PhantasmaKeys`), a
+ * hardware wallet or a remote signing service.
  *
- * This is `KeyPair` with the two things an external signer cannot promise removed: it does not ask
- * for a private key, which lives on the device, and it allows the signature to arrive later. A
+ * A signer signs the serialized `TxMsg` bytes it is given and returns the Ed25519 signature. A
+ * hardware or remote signer may resolve asynchronously, so the result may be a promise.
+ *
+ * This interface is `KeyPair` without the two things an external signer cannot promise. It does not
+ * ask for a private key, which stays on the device, and it lets the signature arrive later. A
  * `KeyPair` therefore satisfies it as it is, and passing `PhantasmaKeys` where a `TxSigner` is
  * expected needs no adapter.
  */

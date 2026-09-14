@@ -38,25 +38,29 @@ import {
 } from './native-fee-estimator.js';
 
 /**
- * Facts about chain state and signing that a message does not carry but the fee depends on. Every
- * state fact defaults to the case that costs more, so an unspecified plan is an upper bound the
- * settlement can only undercut; the defaults themselves belong to {@link NativeFeeParams}, which
- * documents each one, and are not restated here so the two cannot drift apart. The one fact
- * without a costlier reading is `infusions`: a burned NFT can hold any number of assets, so
- * `planFees` demands it instead of assuming, and `api.fees` reads it from the chain.
+ * Facts about chain state and signing that a message does not carry. The fee depends on them.
  *
- * A `Call_Multi` performs several operations under one set of options: the state facts describe
- * every call in the batch, and `infusions` lists what ALL of its burns give back.
+ * Every state fact defaults to the reading that costs more. A plan that states nothing is an upper
+ * bound, and the settlement can only come out below it. Each default is documented on
+ * {@link NativeFeeParams}. The defaults are not repeated here, so the two cannot drift apart.
+ *
+ * `infusions` has no costlier reading, because a burned NFT can hold any number of assets.
+ * `planFees` demands the list. `api.fees` reads it from the chain.
+ *
+ * A `Call_Multi` performs several operations under one set of options. The state facts describe
+ * every call in the batch. `infusions` lists what ALL of its burns give back.
  */
 export interface FeePlanOptions extends Pick<
   NativeFeeParams,
-  // Taken from NativeFeeParams rather than re-declared, so each fact keeps one definition, one
-  // default and one doc comment. The facts the message itself carries - counts, sizes, token ids,
-  // the NFT-address recipient, `nonFungible`, `pre_burn` - are deliberately absent: `planFees`
-  // reads those out of the message, and a caller-supplied value could only contradict it.
+  // Taken from NativeFeeParams instead of being declared again. Each fact then has one definition,
+  // one default and one doc comment.
   //
-  // Every one of these is optional and most callers pass none. Roughly in order of how likely a
-  // caller is to know the answer:
+  // The facts the message itself carries are absent here: counts, sizes, token ids, the NFT-address
+  // recipient, `nonFungible`, `pre_burn`. `planFees` reads those out of the message. A value from
+  // the caller could only contradict it.
+  //
+  // Every one of these is optional and most callers pass none. They are listed roughly in order of
+  // how likely a caller is to know the answer.
   //
   // an ordinary wallet may well know these:
   | 'recipientHoldsToken'
@@ -67,19 +71,21 @@ export interface FeePlanOptions extends Pick<
   | 'duplicatedSeries'
   | 'romHasMetaId'
   | 'seriesHasMetaId'
-  // what a burned NFT holds - required to plan a burn here, read from the chain by `api.fees`:
+  // what a burned NFT holds. Required to plan a burn here. `api.fees` reads it from the chain:
   | 'infusions'
-  // and these three size the allowance for a VM script, whose cost no formula can predict:
+  // these three size the allowance for a VM script. No formula predicts what a script costs:
   | 'scriptUnitsAllowance'
   | 'scriptEventBytes'
   | 'scriptStorageQuanta'
 > {
   /**
-   * How many witnesses will sign a Call / Call_Multi / Trade / Phantasma message. Required for
-   * those types and for them only: their witness set is chosen by the caller, nothing in the
-   * message says how large it will be, and each witness adds 96 bytes the chain bills. Every other
-   * type fixes its own witness set, so passing this for one of them is an error rather than a hint.
-   * `PhantasmaAPI.sendTransaction` fills it in from the signers it was given.
+   * How many witnesses will sign a Call / Call_Multi / Trade / Phantasma message. Required for those
+   * four types and for no other.
+   *
+   * The caller chooses the witness set of those four, and nothing in the message says how large it
+   * will be. Each witness adds 96 bytes that the chain bills. Every other type fixes its own witness
+   * set, so passing this for one of them is an error. `PhantasmaAPI.sendTransaction` fills it in
+   * from the signers it was given.
    */
   witnessCount?: number;
 }
@@ -87,48 +93,53 @@ export interface FeePlanOptions extends Pick<
 /** A fee plan for one message: the estimate, what it was computed from, and how to apply it. */
 export interface FeePlan extends NativeFeeEstimate {
   /**
-   * The operations the message was recognised as, in call order, which is also what the bill was
-   * computed from: one entry for an ordinary message, one per inner call for a `Call_Multi`.
+   * The operations the message was recognised as, in call order. The bill was computed from them. An
+   * ordinary message has one entry. A `Call_Multi` has one entry per inner call.
    *
-   * Every kind but {@link NativeFeeKind.Script} is priced with the chain's own formula for that
-   * operation; `Script` covers VM scripts and unmodelled calls, whose work depends on execution and
-   * can only be budgeted (see `scriptUnitsAllowance` and its neighbours).
+   * Every kind except {@link NativeFeeKind.Script} is priced with the chain's own formula for that
+   * operation. `Script` covers VM scripts and unmodelled calls. Their work depends on execution, so
+   * they can only be budgeted (see `scriptUnitsAllowance` and its neighbours).
    *
-   * This says what was priced, not how firm the number is - {@link FeePlan.exact} answers that, and
-   * it accounts for both causes: a budgeted part, and a state fact the plan had to assume.
+   * This field says what was priced. How firm the number is, {@link FeePlan.exact} answers. That
+   * field accounts for both causes: a budgeted part, and a state fact the plan had to assume.
    */
   kinds: readonly NativeFeeKind[];
   /**
-   * Whether this bill is a prediction of the settlement rather than an upper bound on it: true when
-   * nothing the plan had to assume could have changed the number, false when a chain-state fact was
-   * left unstated and its assumed reading decided part of the price, or when any part of the
-   * message had to be budgeted rather than priced. A wallet showing a fee reads this one field to
-   * choose between "0.0073 KCAL" and "up to 0.0073 KCAL".
+   * True when this bill is a prediction of the settlement. False when it is an upper bound on it. A
+   * wallet showing a fee reads this one field to choose between "0.0073 KCAL" and "up to 0.0073
+   * KCAL".
    *
-   * It says nothing about facts the caller DID state. A stated fact that is wrong produces a wrong
-   * bill, and the transaction aborts if the mistake was on the cheap side; `true` means only that
-   * the plan did not have to guess. The one exception is `bigFungible: true`, which is not a claim
-   * about state but a request to price the widest answer a variable-length balance can have, so a
-   * plan that rests on it reports `false` however it was arrived at.
+   * The field is false in two cases. A chain-state fact was left unstated and its assumed reading
+   * decided part of the price. Or some part of the message had to be budgeted.
+   *
+   * The field says nothing about facts the caller stated. A stated fact that is wrong produces a
+   * wrong bill, and the transaction then aborts if the mistake was on the cheap side. `true` means
+   * only that the plan did not have to guess.
+   *
+   * `bigFungible: true` is the one exception. It claims nothing about chain state. It asks the model
+   * to price the widest answer a variable-length balance can have. A plan that rests on it reports
+   * `false` however it was arrived at.
    */
   exact: boolean;
-  /** The signed size the plan was computed for - the bytes the block will carry. */
+  /** The signed size the plan was computed for. These are the bytes the block will carry. */
   envelopeBytes: number;
   /** A copy of `msg` with `maxGas` and `maxData` set to the plan. The input is left untouched. */
   apply(msg: TxMsg): TxMsg;
 }
 
 /**
- * Plans the gas offer and storage ceiling of a message from the message itself: its type and
- * contents decide the operation model, its signed size is computed with placeholder witnesses,
- * and the chain config supplies the prices. Pure - fetch the config with `PhantasmaAPI.fees` or
- * `getGasConfig` and pass it in.
+ * Plans the gas offer and the storage ceiling of a message from the message itself. Its type and
+ * contents decide the operation model. Its signed size is computed with placeholder witnesses. The
+ * chain config supplies the prices.
+ *
+ * The function touches no network. Fetch the config with `PhantasmaAPI.fees` or `getGasConfig` and
+ * pass it in.
  */
 export function planFees(msg: TxMsg, config: GasConfig, options: FeePlanOptions = {}): FeePlan {
   // A witness-array message does not say how many signatures it will carry, and each one is 96
-  // billed bytes. Assuming a single witness would under-offer every multi-party transaction by 96
-  // bytes each and get it rejected, so the count is demanded rather than guessed - the same stance
-  // `estimateNativeFee` takes on a missing envelope size.
+  // billed bytes. An assumed single witness would under-offer every multi-party transaction by 96
+  // bytes per extra signature, and the chain would reject it. So the count is demanded here.
+  // `estimateNativeFee` takes the same stance on a missing envelope size.
   if (SignedTxMsg.requiredWitnesses(msg) === undefined && options.witnessCount === undefined) {
     throw new Error(
       `${TxTypes[msg.type]} transactions choose their own witnesses: pass witnessCount to plan one`
@@ -158,22 +169,26 @@ export function planFees(msg: TxMsg, config: GasConfig, options: FeePlanOptions 
 }
 
 /**
- * Would a fact the caller left unstated have changed this quote? The message is priced a second
- * time with every unstated state fact at its CHEAPER reading, and the two quotes are compared: if
- * they agree, the costlier defaults did not decide anything and the bill is a prediction.
+ * Returns true if a fact the caller left unstated changed this quote.
  *
- * Asking the question this way, rather than listing which facts each operation reads, keeps ONE
- * definition of that list - the operation models themselves - so the answer cannot drift from them
- * as the models change. It also answers per message rather than per kind, which matters: a gas-token
- * transfer does not depend on `recipientHoldsToken` at all, because the chain's own rows are free,
- * and a plan that reported it as assumed would send every ordinary transfer to the "up to" branch.
+ * The message is priced a second time, with every unstated state fact at its CHEAPER reading. The
+ * two quotes are then compared. If they agree, the costlier defaults decided nothing and the bill
+ * is a prediction.
  *
- * `infusions` is not flipped: it has no cheaper reading and is demanded rather than defaulted.
- * `bigFungible` is flipped even when the caller DID state it, because unlike the other facts its
- * costly reading is not a claim about chain state that yields an exact price - it asks the model to
- * price the WIDEST answer a variable-length balance can have (33 bytes against a measured 10 at a
- * 2^70 balance). A plan resting on that is a bound whoever asked for it. The live matrix caught this
- * as two rows that called themselves predictions and settled below their own number.
+ * The question is asked this way to keep ONE definition of which facts an operation reads: the
+ * operation models themselves. A list written here would drift from them as the models change.
+ *
+ * The answer is also per message, not per kind. That matters. A gas-token transfer does not depend
+ * on `recipientHoldsToken` at all, because the chain's own rows are free. A plan that reported the
+ * fact as assumed would send every ordinary transfer to the "up to" branch.
+ *
+ * `infusions` is not flipped. It has no cheaper reading, and the planner demands it.
+ *
+ * `bigFungible` is flipped even when the caller stated it. The other facts claim something about
+ * chain state, and a true claim yields an exact price. This one asks the model to price the WIDEST
+ * answer a variable-length balance can have: 33 bytes, against a measured 10 at a 2^70 balance. A
+ * plan resting on that is a bound for whoever asked for it. The live matrix caught this as two rows
+ * that called themselves predictions and settled below their own number.
  */
 function assumptionsMattered(
   msg: TxMsg,
@@ -201,11 +216,15 @@ function assumptionsMattered(
 }
 
 /**
- * The NFT instances a message burns: the native burn types, a `Token.BurnNonFungible` call, and
- * every such call inside a `Call_Multi`. A burn returns whatever the instance's own address holds
- * and pays for each returned asset, so a planner with a chain to ask reads them per instance and
- * hands the union to {@link FeePlanOptions.infusions}. It lives beside the decomposition that
- * decides which calls are burns so the two cannot come to disagree.
+ * Returns the NFT instances a message burns. It covers the native burn types, a
+ * `Token.BurnNonFungible` call, and every such call inside a `Call_Multi`.
+ *
+ * A burn returns whatever the instance's own address holds, and the chain charges for each returned
+ * asset. A planner with a chain to ask reads those assets per instance and hands the union to
+ * {@link FeePlanOptions.infusions}.
+ *
+ * This function sits beside the decomposition that decides which calls are burns, so the two cannot
+ * come to disagree.
  */
 export function burnedInstances(msg: TxMsg): { tokenId: bigint; instanceId: bigint }[] {
   switch (msg.type) {
@@ -235,12 +254,12 @@ function burnedByCall(call: TxMsgCall): { tokenId: bigint; instanceId: bigint }[
   return instanceIds.map((instanceId) => ({ tokenId, instanceId }));
 }
 
-// What a message does, as the calculator's operations. One entry for an ordinary message; a
-// `Call_Multi` yields one per inner call, which is what lets a batch be priced instead of budgeted.
+// What a message does, written as the calculator's operations. An ordinary message gives one entry.
+// A `Call_Multi` gives one entry per inner call. That is what lets a batch be priced.
 function describe(msg: TxMsg, options: FeePlanOptions): NativeFeePart[] {
-  // Passed through undefined and all: the calculator owns every default, so no default is decided
-  // in two places. Whether the recipient is an NFT-derived address is NOT here: the address form
-  // decides it, and the message carries the address, so each branch below reads it out.
+  // Passed through even when undefined. The calculator owns every default, so no default is decided
+  // in two places. Whether the recipient is an NFT-derived address is NOT here. The address form
+  // decides that, and the message carries the address, so each branch below reads it out.
   const stateFacts: NativeFeeParams = {
     recipientHoldsToken: options.recipientHoldsToken,
     bigFungible: options.bigFungible,
@@ -319,9 +338,9 @@ function describe(msg: TxMsg, options: FeePlanOptions): NativeFeePart[] {
     case TxTypes.BurnNonFungible:
     case TxTypes.BurnNonFungible_GasPayer: {
       const inner = msg.msg as TxMsgBurnNonFungible | TxMsgBurnNonFungibleGasPayer;
-      // The stored ROM is chain state the message does not carry, so the deleted quanta are a lower
-      // bound. That does not touch the offer: a burn deletes more than it creates, and only the
-      // rows it creates are escrowed.
+      // The stored ROM is chain state that the message does not carry, so the deleted quanta are a
+      // lower bound. The offer is unaffected. A burn deletes more rows than it creates, and only
+      // the rows it creates are escrowed.
       return [
         describeAs(NativeFeeKind.BurnNonFungible, {
           ...stateFacts,
@@ -335,8 +354,8 @@ function describe(msg: TxMsg, options: FeePlanOptions): NativeFeePart[] {
       return [describeCall(msg.msg as TxMsgCall, stateFacts, options, options.infusions)];
     case TxTypes.Call_Multi: {
       // The chain runs the calls in a loop and bills their sum, so the plan is the sum of their
-      // models. `infusions` covers every burn in the batch and the returns cost the same wherever
-      // they are counted, so the first burn takes the whole list and the burns after it take none.
+      // models. `infusions` covers every burn in the batch. The returns cost the same wherever they
+      // are counted, so the first burn takes the whole list and the burns after it take none.
       let returns = options.infusions;
       return (msg.msg as TxMsgCallMulti).calls.map((call) => {
         const part = describeCall(call, stateFacts, options, returns);
@@ -358,17 +377,20 @@ function describeCall(
   options: FeePlanOptions,
   infusions: readonly InfusedAsset[] | undefined
 ): NativeFeePart {
-  // A call whose arguments are assembled at execution out of earlier calls' results carries none of
-  // them yet. There is nothing to read a price from, so it is budgeted like any unmodelled call.
+  // A call can build its arguments at execution time from the results of earlier calls. Such a call
+  // carries none of them yet. There is nothing to read a price from, so it takes the script
+  // budget.
   if (call.sections?.hasSections()) {
     return scriptPlan(options);
   }
   if (call.moduleId === ModuleId.Token) {
     switch (call.methodId) {
-      // The five token movements below cost exactly what they cost as native transaction types:
-      // both paths enter the same contract method, and a batched wallet operation is the reason
-      // they arrive as module calls at all. `Token.MintNonFungible` is deliberately absent - the
-      // chain refuses it under mainnet SR 50 whichever way it arrives, so there is nothing to price.
+      // The five token movements below cost exactly what they cost as native transaction types.
+      // Both paths enter the same contract method. They arrive as module calls because a wallet
+      // batched them.
+      //
+      // `Token.MintNonFungible` is absent on purpose. The chain refuses it under mainnet SR 50
+      // whichever way it arrives, so there is nothing to price.
       case TokenContractMethods.TransferFungible: {
         const args = TokenCallArgs.transferFungible(call.args);
         return describeAs(NativeFeeKind.TransferFungible, {
@@ -413,10 +435,10 @@ function describeCall(
         const metadata = info.metadata.length
           ? VmDynamicStruct.read(new CarbonBinaryReader(info.metadata))
           : undefined;
-        // The token-info row is the Call arguments as submitted: the chain stores the TokenInfo it
-        // was given, metadata included, and measured bills confirm the row equals the arguments.
-        // Which extra rows the creation writes, and which lookups validating it costs, is decided
-        // by the metadata, which is a named struct the plan can read.
+        // The token-info row is the Call arguments as submitted. The chain stores the TokenInfo it
+        // was given, metadata included, and measured bills confirm that the row equals the
+        // arguments. The metadata decides which extra rows the creation writes and which lookups
+        // its validation costs. The plan can read the metadata, because it is a named struct.
         return describeAs(NativeFeeKind.CreateToken, {
           symbolLength: info.symbol.data.length,
           tokenInfoBytes: call.args.length,
@@ -438,9 +460,9 @@ function describeCall(
         });
       case TokenContractMethods.MintPhantasmaNonFungible: {
         const args = MintPhantasmaNonFungibleArgs.read(new CarbonBinaryReader(call.args));
-        // Each instance names the series it is minted into, so the number of distinct series a
-        // duplicated mint touches - which is what the chain's per-series supply read costs follow -
-        // is readable from the call and never has to be supplied by the caller.
+        // Each instance names the series it is minted into. The number of distinct series a
+        // duplicated mint touches is therefore readable from the call, and the caller never has to
+        // supply it. The chain's per-series supply reads are charged per distinct series.
         const seriesIds = new Set(args.tokens.map((t) => t.phantasmaSeriesId.toBigInt()));
         return describeAs(NativeFeeKind.MintPhantasmaNonFungible, {
           ...stateFacts,
@@ -470,9 +492,9 @@ function describeCall(
   return scriptPlan(options);
 }
 
-// What the NFTs hold is chain state with no costlier bound, so it is demanded, not assumed: a burn
-// planned as if the addresses were empty is short by every returned asset and aborts, billed, on
-// every retry.
+// What the NFTs hold is chain state, and it has no costlier bound, so the planner demands it. A
+// burn planned as if the addresses were empty is short by every returned asset. It then aborts and
+// is billed, on every retry.
 function requireInfusions(infusions: readonly InfusedAsset[] | undefined): readonly InfusedAsset[] {
   if (infusions === undefined) {
     throw new Error(
