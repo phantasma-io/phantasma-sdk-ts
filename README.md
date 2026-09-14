@@ -116,7 +116,7 @@ const hash = await api.sendTransaction(transfer, keys);
 - `api.fees` is the fee planner of the chain the client talks to. It reads `getGasConfig` once,
   keeps it for a minute, and prices every message from the message itself: the signed size is
   computed without a key, and the storage rows, call result bytes and gas sites of each native
-  operation are priced with the chain's own formula (`planFees`, `estimateNativeFee`). `plan.kind`
+  operation are priced with the chain's own formula (`planFees`). `plan.kind`
   says which operation was priced; the one kind that is a budget rather than a formula is
   `NativeFeeKind.Script` - VM scripts and unmodelled calls, whose work depends on execution.
 - A fact the message does not carry - whether the recipient already holds the token, which mode a
