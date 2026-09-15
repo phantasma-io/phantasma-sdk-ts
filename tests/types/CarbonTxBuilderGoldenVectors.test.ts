@@ -2,6 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import { createHash } from 'crypto';
 
+import { CarbonBinaryReader } from '../../src/core/types/CarbonSerialization';
 import { CarbonBlob } from '../../src/core/types/Carbon/CarbonBlob';
 import { Bytes32 } from '../../src/core/types/Carbon/Bytes32';
 import { IntX } from '../../src/core/types/Carbon/IntX';
@@ -59,6 +60,20 @@ describe('Carbon transaction builder golden vectors', () => {
     expect(carbonTxBuilderVector(caseId)).toBe(expectedHex);
     expect(notes).toBeTruthy();
   });
+
+  // Every prefix of a valid message cuts a field the reader still needs. A reader that cannot
+  // report the end of the stream accepts the prefix and hands back fields it never read; the C++
+  // SDK had that defect and this is the test that found it. A signed case carries a signature
+  // after the message, so a prefix of one can be a whole message and is not a truncation.
+  test.each(carbonBuilderRows().filter(([caseId]) => !caseId.startsWith('signed_')))(
+    'refuses every truncated %s',
+    (caseId, _source, expectedHex) => {
+      const data = Buffer.from(expectedHex, 'hex');
+      for (let length = 0; length < data.length; length++) {
+        expect(() => TxMsg.read(new CarbonBinaryReader(data.subarray(0, length)))).toThrow();
+      }
+    }
+  );
 });
 
 function carbonBuilderRows(): string[][] {
