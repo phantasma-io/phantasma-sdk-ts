@@ -1,6 +1,5 @@
 // Phantasma Link v5 - protocol constants (the new generation; runs in parallel with the
-// legacy v1-v4 string protocol in `../phantasma-link.ts`). See the design spec:
-// codex-pha `.codex/context/link/phantasma-link-v5-spec.md`.
+// legacy v1-v4 string protocol in `../phantasma-link.ts`).
 
 /** Protocol version carried in every v5 envelope (`plv`). A peer that does not recognize
  * this value rejects the message with {@link LinkErrorCode.InvalidRequest}. */
