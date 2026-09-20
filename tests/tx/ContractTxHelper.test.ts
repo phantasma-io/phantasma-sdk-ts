@@ -1,5 +1,6 @@
 import {
   ContractTxHelper,
+  DEFAULT_TX_EXPIRY_MS,
   PhantasmaKeys,
   ProofOfWork,
   ScriptBuilder,
@@ -69,5 +70,37 @@ describe('ContractTxHelper', () => {
 
   it('encodes UTF-8 payload text without VM wrapper bytes', () => {
     expect(ContractTxHelper.encodePayloadText('pha')).toBe('706861');
+  });
+
+  // The script path and the Carbon path are admitted by the same chain check, so they stamp the
+  // same lifetime. A chain refuses an expiry at or beyond its own window, and that window can be as
+  // short as the node default.
+  it('stamps the Carbon default lifetime when the caller names no expiration', () => {
+    const before = Date.now();
+    const tx = ContractTxHelper.buildDeployTransaction({
+      nexus: 'simnet',
+      from: TEST_ADDRESS,
+      contractName: 'sample',
+      script: 'CAFE',
+      abi: 'DEAD',
+    });
+    const after = Date.now();
+
+    expect(tx.expiration.getTime()).toBeGreaterThanOrEqual(before + DEFAULT_TX_EXPIRY_MS);
+    expect(tx.expiration.getTime()).toBeLessThanOrEqual(after + DEFAULT_TX_EXPIRY_MS);
+  });
+
+  it('keeps the expiration the caller passes', () => {
+    const expiration = new Date(Date.UTC(2030, 0, 1, 12, 0, 0));
+    const tx = ContractTxHelper.buildUpgradeTransaction({
+      nexus: 'simnet',
+      from: TEST_ADDRESS,
+      contractName: 'sample',
+      script: 'CAFE',
+      abi: 'DEAD',
+      expiration,
+    });
+
+    expect(tx.expiration.getTime()).toBe(expiration.getTime());
   });
 });

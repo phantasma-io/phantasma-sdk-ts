@@ -1,5 +1,6 @@
 import { ProofOfWork } from '../link/interfaces/proof-of-work.js';
 import { Address } from '../types/address.js';
+import { DEFAULT_TX_EXPIRY_MS } from '../types/carbon/blockchain/tx-helpers/tx-limits.js';
 import { DomainSettings } from '../types/domain-settings.js';
 import { PhantasmaKeys } from '../types/phantasma-keys.js';
 import { bytesToHex } from '../utils/index.js';
@@ -24,6 +25,13 @@ export interface ContractScriptBuildParams {
 export interface ContractTransactionBuildParams extends ContractScriptBuildParams {
   nexus: string;
   chain?: string;
+  /**
+   * Moment the transaction stops being admissible. Default {@link DEFAULT_TX_EXPIRY_MS} from now,
+   * the same lifetime a Carbon message gets.
+   *
+   * A flow with a person in it should set this from the chain's own window instead. Examples are a
+   * hardware wallet confirming and a wallet-link round trip. See `expiryWithin`.
+   */
   expiration?: Date;
   payloadHex?: string;
 }
@@ -148,7 +156,7 @@ export class ContractTxHelper {
       nexus,
       chain,
       scriptHex,
-      params.expiration ?? new Date(Date.now() + 5 * 60 * 1000),
+      params.expiration ?? new Date(Date.now() + DEFAULT_TX_EXPIRY_MS),
       payloadHex
     );
   }
