@@ -282,8 +282,6 @@
   },
   "homepage": "https://github.com/phantasma-io/phantasma-sdk-ts#readme",
   "dependencies": {
-    "@ledgerhq/hw-transport-node-hid": "^6.33.2",
-    "@ledgerhq/hw-transport-webusb": "^6.34.2",
     "big-integer": "^1.6.52",
     "bip32": "^5.0.1",
     "bip39": "^3.1.0",

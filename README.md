@@ -201,6 +201,37 @@ the gas and data tokens are free, so for those tokens `recipientHoldsToken` chan
 - `parseUnits` and `formatUnits` convert between decimal amounts and atoms. KCAL has 10 decimals
   and SOUL has 8. `summarizeFeePlan` renders a plan in KCAL and SOUL for display.
 
+## Ledger
+
+The SDK carries the Ledger flow itself: the device commands, the address and transaction
+transcoding and the signing, behind `getLedgerDeviceInfo`, `getLedgerAccountSigner`,
+`getAddressFromLedger` and `sendTransactionLedger`. It opens no device and depends on no USB
+package. The application brings the transport of its own runtime and passes it in the config:
+
+```ts
+import TransportNodeHid from '@ledgerhq/hw-transport-node-hid';
+import { BIP32Factory } from 'bip32';
+import * as bip39 from 'bip39';
+import * as ecc from 'tiny-secp256k1';
+import { getLedgerDeviceInfo, PhantasmaAPI } from 'phantasma-sdk-ts';
+
+const info = await getLedgerDeviceInfo({
+  transport: TransportNodeHid,
+  bip39,
+  bip32Factory: BIP32Factory,
+  curve: ecc,
+  nexusName: 'mainnet',
+  chainName: 'main',
+  rpc: new PhantasmaAPI('https://pharpc1.phantasma.info/rpc', null, 'mainnet'),
+});
+```
+
+`transport` is anything that answers `isSupported()`, `list()` and `open(path)`, where the opened
+device answers `exchange(request)` and `close()`. `@ledgerhq/hw-transport-node-hid` has that shape
+on the desktop and `@ledgerhq/hw-transport-webusb` in a browser, so either can be passed as it is.
+The transport stays with the application on purpose: a consumer that never touches a Ledger then
+installs no native USB stack, and a browser build pulls in no code meant for Node.
+
 ## Examples
 
 The `examples/` folder contains TypeScript examples that are compiled by `npm run test:package-exports`.
