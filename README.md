@@ -46,6 +46,8 @@ Those compatibility paths are deprecated. New code should use `/public` or the l
 The dApp↔wallet connection protocol (envelope, transports, pairing, sessions, encryption)
 is specified in [`spec/phantasma-link-v5.md`](spec/phantasma-link-v5.md). This package is
 its reference implementation, exposed under the `phantasma-sdk-ts/link/v5` entry point.
+The reasons behind the protocol decisions are recorded under
+[`spec/decisions/`](spec/decisions/).
 
 ## RPC Example
 

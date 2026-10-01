@@ -33,6 +33,7 @@ import {
   InvokeScriptResult,
 } from './methods.js';
 import { LoopbackTransport, LoopbackTransportOptions } from './loopback-transport.js';
+import { InjectedTransport, InjectedTransportOptions } from './injected-transport.js';
 import {
   DeeplinkTransport,
   DeeplinkTransportOptions,
@@ -119,6 +120,19 @@ export class PhantasmaLink5 {
   /** Build a client over the desktop loopback transport (plaintext, trusted-local). */
   static loopback(options: LoopbackTransportOptions = {}): PhantasmaLink5 {
     return new PhantasmaLink5(new LoopbackTransport(options));
+  }
+
+  /** A browser-extension wallet on this page (spec §6.1): frames go through the provider
+   * `window.phantasmaLink`. Trusted-local, plaintext. Throws `4900` when no v5 provider is
+   * present; check {@link findInjectedProvider} first to fall back to another transport.
+   * Consents run in the extension UI, so the request timeout is the same generous default
+   * as deeplink and relay. */
+  static injected(
+    options: InjectedTransportOptions & { requestTimeoutMs?: number } = {}
+  ): PhantasmaLink5 {
+    return new PhantasmaLink5(new InjectedTransport(options), {
+      requestTimeoutMs: options.requestTimeoutMs ?? DEEPLINK_REQUEST_TIMEOUT_MS,
+    });
   }
 
   /** Build a client over the deeplink transport (spec §17). The channel key from pairing is
