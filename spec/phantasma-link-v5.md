@@ -1,6 +1,6 @@
 # Phantasma Link v5 - protocol specification
 
-Status: v1.0 (stable). Supersedes the v1-v4 string protocol, which remains supported
+Status: v1.1 (stable). Supersedes the v1-v4 string protocol, which remains supported
 during a deprecation window (see §12).
 
 This is an engineering specification and the source of truth for the dApp↔wallet
@@ -43,8 +43,8 @@ Non-goals (v5):
 ## 2. Terminology
 
 - **dApp**: the requesting app (web page, native app, game). Holds NO keys.
-- **Wallet**: holds keys, shows approval UI, signs. (PoltergeistLite desktop, Ecto
-  extension, ecto-mobile, future native apps.)
+- **Wallet**: holds keys, shows approval UI, signs. (Aura on browser extension, desktop
+  and mobile; PoltergeistLite; future native apps.)
 - **Envelope**: the JSON message format (§4).
 - **Transport / binding**: a concrete channel carrying envelopes (§6): injected,
   loopback, deeplink, relay.
@@ -139,7 +139,7 @@ Wallet → dApp (in the `pha_connect` result):
   "txFormats": ["script","carbon"],                      // routes to SendRawTransaction / SendCarbonTransaction (§9.4)
   "signatureKinds": ["Ed25519","ECDSA"],
   "features": ["batch","events"],
-  "maxPayloadBytes": { "relay": 33554432, "deeplink": 8192, "loopback": 33554432 },
+  "maxPayloadBytes": { "relay": 33554432, "deeplink": 8192, "loopback": 33554432, "injected": 33554432 },
   "account": { "address": "P2K…", "name": "…", "balances": [ … ] }
 }
 ```
@@ -155,13 +155,79 @@ features are additive capabilities; no new protocol version forks every implemen
 
 The SDK selects in this order; each is described below.
 
-### 6.1 Injected (browser extension wallet - Ecto)
+### 6.1 Injected (browser-extension wallet)
 
-- The extension injects a provider on the page. Envelopes pass page→content→background
-  via the extension messaging bridge (as today, but carrying the v5 envelope).
-- Detection: provider object present on `window`.
-- No size concern beyond extension messaging limits (large payloads fine).
-- Best UX on desktop when the extension is installed.
+The wallet is a browser extension. It puts a provider object on the page, and the dApp
+talks to that object directly. The rules below are the whole contract between a dApp and
+an extension wallet. How the extension moves a frame between the page and its background
+process is the wallet's own business and is not part of the contract. The reasons behind
+this binding and the rejected options: decision record 0001 in `spec/decisions/`.
+
+**Provider object.** The extension defines `window.phantasmaLink` in the page's main
+world before any page script runs (a content script at `document_start` in the `MAIN`
+world). The object has this shape:
+
+```ts
+interface PhantasmaLinkProvider {
+  /** Protocol generations the wallet speaks. Contains 5. */
+  readonly plvVersions: readonly number[];
+  /** Sends one request envelope and returns its response envelope. */
+  request(frame: string): Promise<string>;
+  /** Subscribes to event envelopes. Returns the function that unsubscribes. */
+  onEvent(handler: (frame: string) => void): () => void;
+}
+
+declare global {
+  interface Window {
+    phantasmaLink?: PhantasmaLinkProvider;
+  }
+}
+```
+
+**Frames.** Every frame is the UTF-8 JSON text of one envelope (§4), in plain text. This
+binding has no channel encryption (§8). The page and the extension run in the same
+browser on the same machine. Encryption would add nothing: a key held by the page is
+visible to every script that can call the provider.
+
+**Requests.** One call to `request` carries one request envelope. The promise resolves
+with the response envelope that carries the same `id`. Any number of calls may be in
+flight at the same time, and the wallet answers each one by its `id` (§4). The promise
+rejects only when the bridge itself fails: the extension is gone, or its background
+process cannot be reached. A wallet error, a protocol error or a rejected approval never
+rejects the promise. It arrives as an error envelope (§10). The SDK reports a rejected
+promise to the dApp as `4900`.
+
+**Events.** `onEvent` delivers the event envelopes of §9.5. The wallet delivers an event
+only to the pages that own the session named in the event, and only when the page's
+origin is the origin bound to that session (§7).
+
+**Detection.** A provider is present when `window.phantasmaLink` exists, its `request`
+is a function, and `plvVersions` contains `5`. The check is synchronous. No readiness
+event is defined, because the provider exists before the page's scripts run. When a
+provider is present, the SDK uses it before any other transport (§3).
+
+**Origin.** The extension learns the page origin from its own runtime (the sender of the
+message), never from the frame. The wallet binds the session to that origin (§7) and
+shows it in every approval. The `dapp.url` given in `pha_connect` is information for the
+user. When its origin differs from the runtime origin, the wallet SHOULD say so in the
+approval. When the runtime gives no origin, the wallet labels the caller as unverified,
+as §6.2 does for loopback callers.
+
+**Iframes.** An iframe gets its own provider and is treated as its own origin.
+
+**Sizes.** The wallet advertises `maxPayloadBytes.injected` (§5). The default is the
+chain maximum, 32 MiB. The limits of the browser's extension messaging are the wallet's
+concern. The wallet answers `5001` when a frame is too large for it.
+
+**One provider.** A page has one provider slot. When two extensions define it, the later
+one wins. A mechanism for several wallets at once (announce and discover) is a later
+additive capability.
+
+**Coexistence with v1-v4.** During the deprecation window (§12) an extension MAY also
+define `window.PhantasmaLinkSocket` and `window._PhantasmaLinkDetected` for v1-v4 dApps.
+A v5 client never reads them.
+
+**Reference implementation.** `PhantasmaLink5.injected()` in `phantasma-sdk-ts` (§13).
 
 ### 6.2 Loopback (desktop browser/app ↔ desktop wallet) - KEPT
 
@@ -552,7 +618,7 @@ JSON-RPC reserved:
 ## 11. Sizes & budget
 
 - `maxPayloadBytes` advertised per transport in the handshake. Defaults: deeplink 8192
-  (conservative URL budget), loopback/relay 32 MiB (chain max-tx).
+  (conservative URL budget), loopback/relay/injected 32 MiB (chain max-tx).
 - An image-bearing token/NFT tx is bounded by the chain's 1 MiB metadata struct
   (~750 KB image after base64+JSON) - the SDK validates against the advertised limit and
   the chain limit BEFORE sending, with a clear `5001` error instead of a silent fail.
@@ -571,14 +637,15 @@ JSON-RPC reserved:
 - New dApps adopt v5 via the SDK; old dApps keep working untouched.
 - Deprecation window: announce → grace period → remove legacy (date/criteria TBD).
   Track which dApps still use v1-v4 before removal.
-- ecto-mobile MUST stop vendoring an old SDK copy and consume the canonical SDK.
+- A wallet consumes the published SDK. A wallet that vendors its own copy of the SDK is
+  out of scope for v5.
 
 ## 13. Reference implementation & conformance
 
 - ONE reference implementation of the v5 envelope + transports in `phantasma-sdk-ts`
   (`src/link/v5/`; canonical per workspace rule; never reimplement VM/script/serialization - reuse the
-  SDK). Wallets consume it: Ecto/ecto-mobile via the TS SDK; PoltergeistLite via the C#
-  core (`phantasmaphoenix-sdk-cs`) mirroring the same envelope.
+  SDK). Wallets consume it: Aura via the TS SDK; PoltergeistLite via the C# core
+  (`phantasmaphoenix-sdk-cs`) mirroring the same envelope.
 - Parity SDKs (C#, Unity, Go, C++) implement the SAME envelope against a shared set of
   **conformance test vectors** (encode/decode of every method's request/response, error
   cases, handshake, encryption KATs). Parity is already a mandatory SDK rule.
@@ -590,6 +657,8 @@ JSON-RPC reserved:
   `link.phantasma.info` must serve `apple-app-site-association` + Android `assetlinks.json`.
 - Loopback bound to loopback only + origin binding; replace the hand-rolled HTTP/WS
   server with a vetted library.
+- Injected: the page origin comes from the extension runtime, so the page cannot forge
+  it; the session is bound to it (§6.1).
 - Session expiry + revocation UI; per-method/per-chain scoping; dApp identity shown on
   every approval.
 - signMessage non-forgeable (CSPRNG random + domain tag).
