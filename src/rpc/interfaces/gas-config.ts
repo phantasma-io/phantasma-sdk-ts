@@ -4,8 +4,8 @@ import { GAS_MODEL_V2_UNITS_PER_BLOCK_DATA_BYTE } from '../../types/carbon/block
 /**
  * Response of the getGasConfig RPC method: the current on-chain gas configuration plus the
  * chain parameters fee estimation needs. 64-bit config values arrive as decimal strings (they
- * can exceed the 2^53 precision of JSON numbers). Feed {@link gasConfigFromRpc} into
- * estimateNativeFee for Tier-1 fee estimates.
+ * can exceed the 2^53 precision of JSON numbers). {@link gasConfigFromRpc} turns it into the
+ * config that planFees takes.
  */
 export interface GasConfigResult {
   /** Gas model version: 1 = original fee model, 2 = gas-model-v2 (config version >= 1). */
