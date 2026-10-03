@@ -12,7 +12,7 @@ import {
   openEnvelopeText,
   EncryptedFrame,
 } from '../../src/link/v5/session-crypto.js';
-import { bytesToBase64Url } from '../../src/link/v5/encoding.js';
+import { bytesToBase64, bytesToBase64Url } from '../../src/link/v5/encoding.js';
 import { parsePairingUri } from '../../src/link/v5/pairing.js';
 
 /** A controllable WebSocket double; tests play the relay server. */
@@ -202,6 +202,29 @@ describe('RelayTransport', () => {
     } finally {
       jest.useRealTimers();
     }
+  });
+
+  // A receiver takes a message of up to 67 chunks, the sealed frame of a 32 MiB
+  // transaction at the default chunk size, and drops a message that claims more.
+  it('reassembles 67 chunks and drops a message of 68', () => {
+    const { sockets, received } = harness();
+    const socket = sockets[0];
+    socket.open();
+    const deliverAll = (msgId: string, total: number) => {
+      for (let seq = 0; seq < total; seq++) {
+        socket.receive({
+          op: 'deliver',
+          topic: 'top-1',
+          payload: { msgId, seq, total, chunk: 'x' },
+        });
+      }
+    };
+
+    deliverAll('fits', 67);
+    expect(received).toEqual(['x'.repeat(67)]);
+
+    deliverAll('too-many', 68);
+    expect(received).toHaveLength(1);
   });
 
   // Reassembly is bounded: a stream exceeding the configured ceiling is discarded
@@ -523,4 +546,56 @@ describe('PhantasmaLink5.relay (sealed end-to-end over a fake relay)', () => {
     await expect(promise).resolves.toMatchObject({ nexus: 'simnet' });
     client.close();
   });
+
+  // The largest transaction the chain accepts, 32 MiB, crosses the relay. The test builds
+  // and seals a real request, so it measures the sealed frame instead of trusting the
+  // arithmetic: two base64 layers make it about 59.7 million characters, 67 chunks. The
+  // test plays the relay and acknowledges every chunk. It is slow by design.
+  it('carries a sealed 32 MiB transaction', async () => {
+    const sessionKey = generateSessionKey();
+    const sockets: FakeSocket[] = [];
+    const client = PhantasmaLink5.relay({
+      topic: 'topic-big',
+      sessionKey,
+      webSocketFactory: (url) => {
+        const socket = new FakeSocket(url);
+        sockets.push(socket);
+        return socket;
+      },
+    });
+    const socket = sockets[0];
+    socket.open();
+
+    const tx = new Uint8Array(32 * 1024 * 1024).fill(0x5a);
+    const promise = client.signTransaction({ format: 'carbon', tx: bytesToBase64(tx) });
+
+    // Only the newest publish is parsed: the earlier ones are already acknowledged.
+    const chunks: string[] = [];
+    let total = 0;
+    do {
+      await settle();
+      const publish = JSON.parse(socket.sent[socket.sent.length - 1]) as Record<string, unknown>;
+      const payload = publish.payload as { seq: number; total: number; chunk: string };
+      expect(payload.seq).toBe(chunks.length);
+      chunks.push(payload.chunk);
+      total = payload.total;
+      socket.receive({ op: 'ack', topic: 'topic-big', id: publish.id });
+    } while (chunks.length < total);
+    expect(total).toBe(67);
+
+    const envelope = JSON.parse(
+      openEnvelopeText(JSON.parse(chunks.join('')) as EncryptedFrame, sessionKey)
+    );
+    expect(envelope.method).toBe('pha_signTransaction');
+    expect(envelope.params.tx).toHaveLength(44_739_244); // base64 of 32 MiB
+
+    const response = JSON.stringify({ plv: PLV, id: envelope.id, result: { signedTx: 'AA==' } });
+    socket.receive({
+      op: 'deliver',
+      topic: 'topic-big',
+      payload: JSON.stringify(sealEnvelopeText(response, sessionKey)),
+    });
+    await expect(promise).resolves.toEqual({ signedTx: 'AA==' });
+    client.close();
+  }, 120_000);
 });

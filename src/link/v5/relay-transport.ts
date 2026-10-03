@@ -30,9 +30,29 @@ export const RELAY_CHUNK_BYTES = 900_000;
  * a weak mobile connection. A whole chunk then takes about 55 s to leave the device. */
 const SLOW_UPLINK_BYTES_PER_S = 16 * 1024;
 
+/** The largest transaction the relay carries: the chain maximum (spec §11). */
+const MAX_TX_BYTES = 32 * 1024 * 1024;
+
+/** Room for the envelope around the transaction: the method, the ids, the other params,
+ * and the signatures that a signed transaction adds. */
+const ENVELOPE_ALLOWANCE_BYTES = 64 * 1024;
+
+/** Returns the length of the base64 text of `byteLength` bytes. */
+function base64Length(byteLength: number): number {
+  return 4 * Math.ceil(byteLength / 3);
+}
+
+// The longest sealed frame (spec §16). It holds two base64 layers: the transaction is
+// base64 inside the envelope JSON, and the sealed envelope (plus the 16-byte
+// authenticator) is base64 again in the frame object, which adds the nonce and the field
+// names (128 characters cover them). Counting one layer only gives about 30.9 MiB
+// instead of 32 MiB.
+const MAX_SEALED_FRAME_CHARS =
+  base64Length(base64Length(MAX_TX_BYTES) + ENVELOPE_ALLOWANCE_BYTES + 16) + 128;
+
 // Reassembly bounds (spec §16: enforce total and per-message ceilings so a peer cannot
-// balloon our memory). 64 chunks x 900 KB covers the 32 MiB chain ceiling after base64.
-const MAX_CHUNKS_PER_MESSAGE = 64;
+// balloon our memory). The chunk count is the same both ways: 67 at the default chunk size.
+const MAX_CHUNKS_PER_MESSAGE = Math.ceil(MAX_SEALED_FRAME_CHARS / RELAY_CHUNK_BYTES);
 const MAX_CONCURRENT_PARTIALS = 8;
 const PARTIAL_STALE_MS = 120_000;
 
