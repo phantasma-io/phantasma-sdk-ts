@@ -2,7 +2,7 @@ import { jest } from '@jest/globals';
 import { RelayTransport, DEFAULT_RELAY_URL } from '../../src/link/v5/relay-transport.js';
 import { WebSocketLike } from '../../src/link/v5/loopback-transport.js';
 import { PhantasmaLink5 } from '../../src/link/v5/client.js';
-import { LinkError } from '../../src/link/v5/errors.js';
+import { LinkError, LinkErrorCode } from '../../src/link/v5/errors.js';
 import { PLV } from '../../src/link/v5/protocol.js';
 import {
   generateSessionKey,
@@ -91,6 +91,21 @@ describe('RelayTransport', () => {
 
     socket.receive({ op: 'ack', topic: 'top-1', id: 'p1' });
     await expect(sendPromise).resolves.toBeUndefined();
+  });
+
+  // A publish the relay refuses (an error frame with the publish id) fails with 4900: the
+  // wallet cannot be reached through the relay (spec §10). The relay's reason is kept.
+  it('fails a refused publish with 4900', async () => {
+    const { transport, sockets } = harness();
+    const socket = sockets[0];
+    socket.open();
+
+    const sendPromise = transport.send('FRAME-1');
+    socket.receive({ op: 'error', code: 'bad_topic', message: 'Invalid topic', id: 'p1' });
+    await expect(sendPromise).rejects.toMatchObject({
+      code: LinkErrorCode.Disconnected,
+      message: 'Invalid topic',
+    });
   });
 
   // Frames published before the socket opened must go out right after the subscribe.
@@ -225,6 +240,20 @@ describe('RelayTransport', () => {
 
     deliverAll('too-many', 68);
     expect(received).toHaveLength(1);
+  });
+
+  // A frame of more than 67 chunks is above the 32 MiB budget. The transport refuses it
+  // with 5001 and the budget, and sends nothing, so the dApp learns at once.
+  it('refuses a frame above the budget with 5001 before sending', async () => {
+    const { transport, sockets } = harness();
+    const socket = sockets[0];
+    socket.open();
+
+    await expect(transport.send('A'.repeat(67 * 900_000 + 1))).rejects.toMatchObject({
+      code: LinkErrorCode.PayloadTooLarge,
+      data: { maxPayloadBytes: 32 * 1024 * 1024 },
+    });
+    expect(socket.sentJson()).toEqual([{ op: 'subscribe', topic: 'top-1' }]);
   });
 
   // Reassembly is bounded: a stream exceeding the configured ceiling is discarded
@@ -596,6 +625,33 @@ describe('PhantasmaLink5.relay (sealed end-to-end over a fake relay)', () => {
       payload: JSON.stringify(sealEnvelopeText(response, sessionKey)),
     });
     await expect(promise).resolves.toEqual({ signedTx: 'AA==' });
+    client.close();
+  }, 120_000);
+
+  // A transaction above the chain maximum reaches the caller as 5001 with the budget,
+  // the code the specification gives a payload that is too large.
+  it('reports a transaction above 32 MiB as 5001', async () => {
+    const sessionKey = generateSessionKey();
+    const sockets: FakeSocket[] = [];
+    const client = PhantasmaLink5.relay({
+      topic: 'topic-huge',
+      sessionKey,
+      webSocketFactory: (url) => {
+        const socket = new FakeSocket(url);
+        sockets.push(socket);
+        return socket;
+      },
+    });
+    sockets[0].open();
+
+    const tx = new Uint8Array(33 * 1024 * 1024).fill(0x5a);
+    await expect(
+      client.signTransaction({ format: 'carbon', tx: bytesToBase64(tx) })
+    ).rejects.toMatchObject({
+      code: LinkErrorCode.PayloadTooLarge,
+      data: { maxPayloadBytes: 32 * 1024 * 1024 },
+    });
+    expect(sockets[0].sent).toHaveLength(1); // the subscribe only
     client.close();
   }, 120_000);
 });

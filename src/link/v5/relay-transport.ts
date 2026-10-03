@@ -165,9 +165,12 @@ export class RelayTransport implements LinkTransport {
     // publishes and only the receiver reassembles (the relay stays blind).
     const total = Math.ceil(frame.length / this.maxPayloadBytes);
     if (total > MAX_CHUNKS_PER_MESSAGE) {
+      // Spec §10/§11: a payload above the budget fails with 5001 and the limit, before
+      // anything is sent.
       throw new LinkError(
-        LinkErrorCode.InvalidParams,
-        'Frame exceeds the relay transport size ceiling'
+        LinkErrorCode.PayloadTooLarge,
+        'Frame exceeds the relay transport size ceiling',
+        { maxPayloadBytes: MAX_TX_BYTES }
       );
     }
     const msgId = randomToken();
@@ -339,12 +342,13 @@ export class RelayTransport implements LinkTransport {
         const entry = typeof frame.id === 'string' ? this.pending.get(frame.id) : undefined;
         const message = (frame as { message?: unknown }).message;
         if (entry) {
-          // A publish-scoped error settles that one publish.
+          // A publish-scoped error settles that one publish. The relay refused the frame, so the
+          // wallet cannot be reached through it: 4900 (spec §10).
           this.pending.delete(frame.id as string);
           clearTimeout(entry.timer);
           entry.reject(
             new LinkError(
-              LinkErrorCode.InternalError,
+              LinkErrorCode.Disconnected,
               typeof message === 'string' ? message : 'Relay rejected the publish'
             )
           );

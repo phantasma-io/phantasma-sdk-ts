@@ -20,6 +20,8 @@ export const LinkErrorCode = {
   NexusMismatch: 5002,
   UnsupportedSignatureKind: 5003,
   CapabilityNotSupported: 5004,
+  /** No answer from the wallet before the client's timeout; the user may still be deciding. */
+  Timeout: 5005,
   SessionExpired: 5100,
   SessionRevoked: 5101,
 } as const;

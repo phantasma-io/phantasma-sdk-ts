@@ -166,11 +166,10 @@ export class LinkSessionClient {
       if (this.requestTimeoutMs > 0) {
         pending.timer = setTimeout(() => {
           this.pending.delete(id);
+          // Spec §10: 5005, so a dApp can tell a user who has not decided yet from a wallet
+          // that cannot be reached (4900).
           reject(
-            new LinkError(
-              LinkErrorCode.InternalError,
-              `Phantasma Link request "${method}" timed out`
-            )
+            new LinkError(LinkErrorCode.Timeout, `Phantasma Link request "${method}" timed out`)
           );
         }, this.requestTimeoutMs);
       }
@@ -178,13 +177,18 @@ export class LinkSessionClient {
     });
 
     // Send after registering the pending entry so a synchronous transport error settles it.
+    // A LinkError from the transport keeps its code: the transport knows the reason, as with
+    // a frame too large for the relay (5001). Any other failure means the wallet is out of
+    // reach.
     Promise.resolve(this.transport.send(this.encodeOutgoing(envelope))).catch((err: unknown) => {
       this.settleError(
         id,
-        new LinkError(
-          LinkErrorCode.Disconnected,
-          err instanceof Error ? err.message : 'Failed to send request to wallet'
-        )
+        err instanceof LinkError
+          ? err
+          : new LinkError(
+              LinkErrorCode.Disconnected,
+              err instanceof Error ? err.message : 'Failed to send request to wallet'
+            )
       );
     });
 

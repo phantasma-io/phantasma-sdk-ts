@@ -104,14 +104,15 @@ describe('LinkSessionClient (plaintext / trusted-local transport)', () => {
     });
   });
 
-  // A request that is never answered times out (fake timers keep the test instant).
-  it('times out an unanswered request', async () => {
+  // A request that is never answered times out with 5005 (spec §10), the code that tells a
+  // waiting user from a lost connection (fake timers keep the test instant).
+  it('times out an unanswered request with 5005', async () => {
     jest.useFakeTimers();
     try {
       const transport = new MockTransport();
       const client = new LinkSessionClient(transport, { requestTimeoutMs: 1000 });
       const promise = client.request('pha_getChains');
-      const assertion = expect(promise).rejects.toBeInstanceOf(LinkError);
+      const assertion = expect(promise).rejects.toMatchObject({ code: LinkErrorCode.Timeout });
       jest.advanceTimersByTime(1000);
       await assertion;
     } finally {
@@ -145,6 +146,22 @@ describe('LinkSessionClient robustness', () => {
     await expect(client.request('pha_getChains')).rejects.toMatchObject({
       code: LinkErrorCode.Disconnected,
       message: 'net down',
+    });
+  });
+
+  // A transport that knows why it failed says so with a LinkError, and the caller gets
+  // that code and its data, for example 5001 for a frame above the relay budget.
+  it('keeps the code of a LinkError that send() rejects with', async () => {
+    const transport = new MockTransport();
+    transport.send = () =>
+      Promise.reject(
+        new LinkError(LinkErrorCode.PayloadTooLarge, 'too big', { maxPayloadBytes: 1 })
+      );
+    const client = new LinkSessionClient(transport);
+
+    await expect(client.request('pha_getChains')).rejects.toMatchObject({
+      code: LinkErrorCode.PayloadTooLarge,
+      data: { maxPayloadBytes: 1 },
     });
   });
 
