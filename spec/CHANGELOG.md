@@ -155,6 +155,9 @@
   wallet.
 - Decision record 0001 no longer names wallets or the code of an SDK. Its decision is
   unchanged.
+- Decision record 0004 replaces the house rules of record 0000: a record is written only for a
+  decision that had real alternatives and would otherwise be reopened, so that the records
+  that matter stay easy to find. Record 0000 is marked superseded.
 
 ## 1.1 - 2026-09-30
 

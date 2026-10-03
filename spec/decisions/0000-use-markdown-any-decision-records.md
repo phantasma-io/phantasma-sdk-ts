@@ -1,5 +1,5 @@
 ---
-status: accepted
+status: superseded by ADR-0004
 date: 2026-09-30
 decision-makers: Phantasma Link maintainers
 consulted: wallet maintainers
