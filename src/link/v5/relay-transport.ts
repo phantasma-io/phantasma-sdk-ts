@@ -9,8 +9,9 @@
 // re-subscribes; publishes are tracked until the relay acks them and are re-sent after
 // a reconnect (the wallet de-duplicates by envelope id, spec §18.2, so at-least-once
 // is safe); frames above the relay's per-frame cap are chunked as
-// {msgId, seq, total, chunk} and reassembled before the session layer ever sees them
-// (spec §16). Keepalive needs nothing here: the relay SERVER pings, browsers auto-pong.
+// {msgId, seq, total, chunk}, sent one chunk at a time, and reassembled before the
+// session layer ever sees them (spec §16). Keepalive needs nothing here: the relay
+// SERVER pings, browsers auto-pong.
 
 import { LinkError, LinkErrorCode } from './errors.js';
 import { LinkTransport } from './transport.js';
@@ -24,6 +25,10 @@ export const DEFAULT_RELAY_URL = `wss://${DEFAULT_LINK_HOST}/relay`;
 /** Outgoing chunk threshold. The relay caps a whole frame at 1 MiB; this leaves room
  * for the publish envelope around the payload. */
 export const RELAY_CHUNK_BYTES = 900_000;
+
+/** The slowest uplink that the ack timeout of a publish allows for, in bytes per second: 16 KiB/s,
+ * a weak mobile connection. A whole chunk then takes about 55 s to leave the device. */
+const SLOW_UPLINK_BYTES_PER_S = 16 * 1024;
 
 // Reassembly bounds (spec §16: enforce total and per-message ceilings so a peer cannot
 // balloon our memory). 64 chunks x 900 KB covers the 32 MiB chain ceiling after base64.
@@ -42,7 +47,9 @@ export interface RelayTransportOptions {
   maxPayloadBytes?: number;
   /** Ceiling for one reassembled incoming message; default 64 MB of frame text. */
   maxAssembledBytes?: number;
-  /** How long to wait for the relay's ack of one publish; default 15 s. */
+  /** How long to wait for the relay's ack of one publish, beyond the time its frame needs to leave
+   * the device on a slow uplink of 16 KiB/s; default 15 s. Each chunk of a chunked frame is its
+   * own publish, and its timer starts when the chunk is handed to the socket. */
   publishAckTimeoutMs?: number;
   /** Reconnect backoff ladder; the last entry repeats. Default 0.5/1/2/5/15 s. */
   reconnectDelaysMs?: number[];
@@ -144,12 +151,15 @@ export class RelayTransport implements LinkTransport {
       );
     }
     const msgId = randomToken();
-    const publishes: Promise<void>[] = [];
+    // Chunks go out one at a time: the next one is handed to the socket after the relay
+    // acknowledged the previous one (spec §16). A socket queues whatever it is given,
+    // without backpressure. If every chunk were handed over at once, every ack timer
+    // would start at that moment, and on a slow uplink the timers of the later chunks
+    // would expire before those chunks had left the device.
     for (let seq = 0; seq < total; seq++) {
       const chunk = frame.slice(seq * this.maxPayloadBytes, (seq + 1) * this.maxPayloadBytes);
-      publishes.push(this.publish({ msgId, seq, total, chunk }));
+      await this.publish({ msgId, seq, total, chunk });
     }
-    await Promise.all(publishes);
   }
 
   onMessage(handler: (frame: string) => void): void {
@@ -231,13 +241,17 @@ export class RelayTransport implements LinkTransport {
   private publish(payload: unknown): Promise<void> {
     const id = `p${++this.publishSeq}`;
     const text = JSON.stringify({ op: 'publish', topic: this.topic, id, payload });
+    // The socket takes the text at once and sends it as fast as the uplink allows, so the timer
+    // also gives the frame the time it needs to leave the device.
+    const timeoutMs =
+      this.publishAckTimeoutMs + Math.ceil((text.length * 1000) / SLOW_UPLINK_BYTES_PER_S);
     return new Promise<void>((resolve, reject) => {
       // The ack timeout is the delivery guarantee's outer bound: it spans reconnect
       // attempts (the entry survives them), so it must comfortably exceed the ladder.
       const timer = setTimeout(() => {
         this.pending.delete(id);
         reject(new LinkError(LinkErrorCode.Disconnected, 'Relay did not acknowledge the publish'));
-      }, this.publishAckTimeoutMs);
+      }, timeoutMs);
       this.pending.set(id, { resolve, reject, timer, text });
       if (this.socket && this.socket.readyState === 1) {
         this.socket.send(text);

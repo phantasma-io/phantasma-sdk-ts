@@ -46,6 +46,11 @@ class FakeSocket implements WebSocketLike {
   }
 }
 
+/** Lets the transport's send loop run until it has handed the next chunk to the socket. */
+function settle(): Promise<void> {
+  return new Promise((resolve) => setImmediate(resolve));
+}
+
 function harness(options: Partial<ConstructorParameters<typeof RelayTransport>[0]> = {}) {
   const sockets: FakeSocket[] = [];
   const transport = new RelayTransport({
@@ -117,7 +122,7 @@ describe('RelayTransport', () => {
     expect(received).toEqual(['YES']);
   });
 
-  // Spec section 18 chunking: oversized frames split into {msgId, seq, total, chunk}
+  // Spec section 16 chunking: oversized frames split into {msgId, seq, total, chunk}
   // publishes, and incoming chunks reassemble (even out of order) into one frame.
   it('chunks oversized frames and reassembles incoming chunks', async () => {
     const { transport, sockets, received } = harness({ maxPayloadBytes: 10 });
@@ -126,17 +131,19 @@ describe('RelayTransport', () => {
 
     const frame = 'ABCDEFGHIJ0123456789xyz'; // 23 chars -> 3 chunks of <= 10
     const sendPromise = transport.send(frame);
+    // The relay acknowledges each chunk; the next one goes out after the ack.
+    for (let i = 1; i <= 3; i++) {
+      await settle();
+      socket.receive({ op: 'ack', topic: 'top-1', id: socket.sentJson()[i].id });
+    }
+    await expect(sendPromise).resolves.toBeUndefined();
+
     const publishes = socket.sentJson().slice(1);
     expect(publishes).toHaveLength(3);
     const chunks = publishes.map((p) => p.payload as Record<string, unknown>);
     expect(chunks.map((c) => c.seq)).toEqual([0, 1, 2]);
     expect(chunks.every((c) => c.msgId === chunks[0].msgId)).toBe(true);
     expect(chunks.map((c) => c.chunk).join('')).toBe(frame);
-
-    for (const p of publishes) {
-      socket.receive({ op: 'ack', topic: 'top-1', id: p.id });
-    }
-    await expect(sendPromise).resolves.toBeUndefined();
 
     // Incoming reassembly, deliberately out of order.
     socket.receive({
@@ -150,6 +157,51 @@ describe('RelayTransport', () => {
       payload: { msgId: 'm1', seq: 0, total: 2, chunk: 'HELLO ' },
     });
     expect(received).toEqual(['HELLO WORLD']);
+  });
+
+  // A chunk leaves only after the relay acknowledged the one before it, so the socket
+  // never holds more than one chunk of a message that is still waiting for its ack.
+  it('sends the next chunk only after the previous one is acknowledged', async () => {
+    const { transport, sockets } = harness({ maxPayloadBytes: 10 });
+    const socket = sockets[0];
+    socket.open();
+
+    const sendPromise = transport.send('ABCDEFGHIJ0123456789xyz'); // 3 chunks
+    await settle();
+    expect(socket.sentJson()).toHaveLength(2); // the subscribe and chunk 0, nothing more
+
+    socket.receive({ op: 'ack', topic: 'top-1', id: socket.sentJson()[1].id });
+    await settle();
+    expect(socket.sentJson()).toHaveLength(3);
+    expect((socket.sentJson()[2].payload as Record<string, unknown>).seq).toBe(1);
+
+    socket.receive({ op: 'ack', topic: 'top-1', id: socket.sentJson()[2].id });
+    await settle();
+    expect((socket.sentJson()[3].payload as Record<string, unknown>).seq).toBe(2);
+    socket.receive({ op: 'ack', topic: 'top-1', id: socket.sentJson()[3].id });
+    await expect(sendPromise).resolves.toBeUndefined();
+  });
+
+  // The ack timer of a chunk starts when that chunk is sent. A slow link that needs most
+  // of the timeout for every chunk still delivers the whole frame. If every chunk were
+  // sent at once, the timers of chunks 1 and 2 would expire at 1000 ms.
+  it('times each chunk from its own send', async () => {
+    jest.useFakeTimers();
+    try {
+      const { transport, sockets } = harness({ maxPayloadBytes: 10, publishAckTimeoutMs: 1000 });
+      const socket = sockets[0];
+      socket.open();
+
+      const sendPromise = transport.send('ABCDEFGHIJ0123456789xyz'); // 3 chunks
+      sendPromise.catch(() => {}); // observed below; avoid an unhandled rejection
+      for (let i = 1; i <= 3; i++) {
+        await jest.advanceTimersByTimeAsync(900); // each chunk takes 900 ms to arrive
+        socket.receive({ op: 'ack', topic: 'top-1', id: socket.sentJson()[i].id });
+      }
+      await expect(sendPromise).resolves.toBeUndefined();
+    } finally {
+      jest.useRealTimers();
+    }
   });
 
   // Reassembly is bounded: a stream exceeding the configured ceiling is discarded
@@ -210,8 +262,32 @@ describe('RelayTransport', () => {
       sockets[0].open();
       const sendPromise = transport.send('LOST');
       sendPromise.catch(() => {}); // observed below; avoid an unhandled rejection
-      jest.advanceTimersByTime(1001);
+      jest.advanceTimersByTime(1010); // 1000 ms and the few ms that 80 characters need to leave
       await expect(sendPromise).rejects.toThrow(/acknowledge/);
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  // A large frame needs time to leave the device before the relay can acknowledge it: on a slow
+  // uplink of 16 KiB/s a frame of 160 000 characters takes about 10 s. The timer allows for that
+  // time on top of the configured timeout.
+  it('gives a large frame the time it needs to leave the device', async () => {
+    jest.useFakeTimers();
+    try {
+      const { transport, sockets } = harness({ publishAckTimeoutMs: 1000 });
+      const socket = sockets[0];
+      socket.open();
+      const sendPromise = transport.send('x'.repeat(160_000));
+      sendPromise.catch(() => {}); // observed below; avoid an unhandled rejection
+      jest.advanceTimersByTime(10_000);
+      socket.receive({ op: 'ack', topic: 'top-1.dapp', id: socket.sentJson()[1].id });
+      await expect(sendPromise).resolves.toBeUndefined();
+
+      const lost = transport.send('y'.repeat(160_000));
+      lost.catch(() => {});
+      jest.advanceTimersByTime(11_000);
+      await expect(lost).rejects.toThrow(/acknowledge/);
     } finally {
       jest.useRealTimers();
     }
