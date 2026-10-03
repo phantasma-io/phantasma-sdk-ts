@@ -22,6 +22,8 @@ type ScriptLoadValue = unknown;
 export class ScriptBuilder {
   _labelLocations: { [id: string]: number } = {};
   _jumpLocations: { [id: number]: string } = {};
+  /** The offsets in `_jumpLocations` that a CALL reserved. Every other offset belongs to a jump. */
+  private _callOffsets = new Set<number>();
 
   public str: string;
 
@@ -46,16 +48,50 @@ export class ScriptBuilder {
   public beginScript() {
     this.str = '';
     this.writer = new PBinaryWriter();
+    // A builder can be reused for the next script. Without this, the jumps of the previous script
+    // would be written into the new one at their old offsets, and its labels would resolve the new
+    // script's jumps.
+    this._labelLocations = {};
+    this._jumpLocations = {};
+    this._callOffsets = new Set<number>();
     return this;
   }
 
   public getScript(): string {
-    return bytesToHex(this.writer.toUint8Array());
+    return bytesToHex(this.resolveJumps());
   }
 
   public endScript(): string {
     this.emit(Opcode.RET);
-    return bytesToHex(this.writer.toUint8Array()).toUpperCase();
+    return bytesToHex(this.resolveJumps()).toUpperCase();
+  }
+
+  /**
+   * Returns the script bytes with every jump target written into the two bytes its emit call
+   * reserved. Offsets are byte positions, and labels match without regard to case, as in the C#
+   * SDK. A jump to a label the script never defines throws: its target would stay 0, and the jump
+   * would run the script again from its start.
+   */
+  private resolveJumps(): Uint8Array {
+    const script = new Uint8Array(this.writer.toUint8Array());
+    for (const [offsetText, label] of Object.entries(this._jumpLocations)) {
+      const target = this._labelLocations[label.toLowerCase()];
+      if (target === undefined) {
+        throw new Error('Could not find label: ' + label);
+      }
+      const offset = Number(offsetText);
+      // The chain reads every target from two bytes. A jump target is read as a signed number,
+      // so the chain refuses one of 0x8000 or more. A call target may use all 16 bits.
+      const limit = this._callOffsets.has(offset) ? 0xffff : 0x7fff;
+      if (target > limit) {
+        throw new Error(
+          `Label offset ${target} is above ${limit}, the largest target allowed here`
+        );
+      }
+      script[offset] = target & 0xff;
+      script[offset + 1] = (target >> 8) & 0xff;
+    }
+    return script;
   }
 
   public emit(opcode: Opcode, bytes?: number[]): this {
@@ -343,7 +379,7 @@ export class ScriptBuilder {
 
   public emitLabel(label: string): this {
     this.emit(Opcode.NOP);
-    this._labelLocations[label] = this.str.length;
+    this._labelLocations[label.toLowerCase()] = this.writer.length;
     return this;
   }
 
@@ -363,7 +399,7 @@ export class ScriptBuilder {
       this.appendByte(reg);
     }
 
-    const ofs = this.str.length;
+    const ofs = this.writer.length;
     this.appendUShort(0);
     this._jumpLocations[ofs] = label;
     return this;
@@ -374,13 +410,14 @@ export class ScriptBuilder {
       throw new Error('Invalid number of registers');
     }
 
-    let ofs = this.str.length; //(int)stream.Position;
-    ofs += 2;
+    // The target follows the opcode and the register count.
+    const ofs = this.writer.length + 2;
     this.emit(Opcode.CALL);
     this.appendByte(regCount);
     this.appendUShort(0);
 
     this._jumpLocations[ofs] = label;
+    this._callOffsets.add(ofs);
     return this;
   }
 
@@ -389,8 +426,8 @@ export class ScriptBuilder {
       throw new Error('Opcode is not a conditional jump');
     }
 
-    let ofs = this.str.length;
-    ofs += 2;
+    // The target follows the opcode and the source register.
+    const ofs = this.writer.length + 2;
 
     this.emit(opcode);
     this.appendByte(src_reg);
