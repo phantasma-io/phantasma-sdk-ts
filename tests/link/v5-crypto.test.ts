@@ -58,6 +58,32 @@ describe('v5 encoding (base64 / base64url)', () => {
     expect(() => base64ToBytes('A')).toThrow();
     expect(() => base64ToBytes('====')).not.toThrow(); // all padding -> empty
     expect(() => base64ToBytes('Zm9v!')).toThrow();
+    expect(() => base64ToBytes('Zm 9v')).toThrow();
+    // A character above U+00FF is outside the alphabet as well; it must not decode as zero
+    // bits. Eight characters, so the length alone cannot make the input fail.
+    expect(() => base64ToBytes('Zm9vYm\u20acy')).toThrow('Invalid base64 character');
+  });
+
+  // Node's own base64 is an independent reference: both alphabets, every padding case,
+  // and every length up to 300 bytes.
+  it('matches the Node base64 codec in both alphabets', () => {
+    for (let len = 0; len <= 300; len++) {
+      const bytes = nacl.randomBytes(len);
+      const standard = Buffer.from(bytes).toString('base64');
+      const urlSafe = Buffer.from(bytes).toString('base64url');
+      expect(bytesToBase64(bytes)).toBe(standard);
+      expect(bytesToBase64Url(bytes)).toBe(urlSafe);
+      expect(Buffer.from(base64ToBytes(standard)).equals(Buffer.from(bytes))).toBe(true);
+      expect(Buffer.from(base64UrlToBytes(urlSafe)).equals(Buffer.from(bytes))).toBe(true);
+    }
+  });
+
+  // A transaction at the chain maximum, 32 MiB, round-trips exactly.
+  it('round-trips 32 MiB', () => {
+    const bytes = nacl.randomBytes(32 * 1024 * 1024);
+    const text = bytesToBase64(bytes);
+    expect(text).toBe(Buffer.from(bytes).toString('base64'));
+    expect(Buffer.from(base64ToBytes(text)).equals(Buffer.from(bytes))).toBe(true);
   });
 });
 
