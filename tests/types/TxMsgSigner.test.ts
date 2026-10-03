@@ -139,6 +139,43 @@ describe('TxMsgSigner with several witnesses', () => {
     expect(decoded.witnesses).toHaveLength(3);
   });
 
+  it('refuses a native transfer amount the chain cannot accept', async () => {
+    // The chain reads a native transfer amount as a signed 64-bit value that must be above zero, so
+    // zero and 2^63 fail on chain while 1 and the int64 maximum do not. Every signing path refuses
+    // the first two. A bigint can also be negative, which the same check refuses.
+    const int64Max = (1n << 63n) - 1n;
+    const plain = (amount: bigint): TxMsg => {
+      const msg = new TxMsg(TxTypes.TransferFungible, 1n, 1n, 0n, payerPub, SmallString.empty);
+      msg.msg = new TxMsgTransferFungible(ownerPub, 1n, amount);
+      return msg;
+    };
+    const withPayer = (amount: bigint): TxMsg => {
+      const msg = gasPayerTransfer();
+      (msg.msg as TxMsgTransferFungibleGasPayer).amount = amount;
+      return msg;
+    };
+
+    expect(() => TxMsgSigner.sign(plain(int64Max + 1n), PAYER)).toThrow('int64 maximum');
+    expect(() => TxMsgSigner.signWithKeys(withPayer(int64Max + 1n), [PAYER, OWNER])).toThrow(
+      'int64 maximum'
+    );
+    await expect(
+      TxMsgSigner.signWith(plain(int64Max + 1n), [new DeferredSigner(PAYER)])
+    ).rejects.toThrow('int64 maximum');
+
+    expect(() => TxMsgSigner.sign(plain(0n), PAYER)).toThrow('above zero');
+    expect(() => TxMsgSigner.sign(plain(-1n), PAYER)).toThrow('above zero');
+    expect(() => TxMsgSigner.signWithKeys(withPayer(0n), [PAYER, OWNER])).toThrow('above zero');
+    await expect(TxMsgSigner.signWith(plain(0n), [new DeferredSigner(PAYER)])).rejects.toThrow(
+      'above zero'
+    );
+
+    expect(TxMsgSigner.sign(plain(int64Max), PAYER).witnesses).toHaveLength(1);
+    expect(TxMsgSigner.signWithKeys(withPayer(int64Max), [PAYER, OWNER]).witnesses).toHaveLength(2);
+    expect(TxMsgSigner.sign(plain(1n), PAYER).witnesses).toHaveLength(1);
+    expect(TxMsgSigner.signWithKeys(withPayer(1n), [PAYER, OWNER]).witnesses).toHaveLength(2);
+  });
+
   it('still signs a single-witness message the historical way', () => {
     const native = new TxMsg(TxTypes.TransferFungible, 1n, 1n, 0n, payerPub, SmallString.empty);
     native.msg = new TxMsgTransferFungible(ownerPub, 1n, 1n);

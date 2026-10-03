@@ -31,8 +31,10 @@ export interface NativeTxParties extends TxLimits {
 export interface TransferFungibleParams extends NativeTxParties {
   to: Bytes32;
   tokenId: bigint;
-  /** Amount in the token's atoms, as a u64. A big-fungible token needs a script transfer
-   * instead. */
+  /** Amount in the token's atoms, as a u64. A big-fungible token moves this way too. The chain
+   * reads the amount as a signed 64-bit value, so it refuses zero and anything above the int64
+   * maximum. A larger amount needs a `Token.TransferFungible` module call or a script transfer,
+   * whose amounts are big integers. */
   amount: bigint;
 }
 

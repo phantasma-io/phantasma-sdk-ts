@@ -8,6 +8,8 @@ import { TxTypes } from '../../tx-types.js';
 import { Witness } from '../../witness.js';
 import { SignedTxMsg } from '../signed-tx-msg.js';
 import { TxMsg } from '../tx-msg.js';
+import { TxMsgTransferFungible } from '../tx-msg-transfer-fungible.js';
+import { TxMsgTransferFungibleGasPayer } from '../tx-msg-transfer-fungible-gas-payer.js';
 import { TxSigner } from './tx-signer.js';
 
 /** One envelope witness slot and the signer that fills it. */
@@ -19,7 +21,7 @@ interface WitnessSlot<S extends TxSigner> {
 export class TxMsgSigner {
   /** Signs a single-witness message with in-memory keys. */
   static sign(msg: TxMsg, key: PhantasmaKeys): SignedTxMsg {
-    assertPlanned(msg);
+    assertSignable(msg);
     const sig = new Bytes64(Ed25519Signature.generate(key, CarbonBlob.serialize(msg)).bytes);
 
     return new SignedTxMsg(msg, [new Witness(new Bytes32(key.publicKey), sig)]);
@@ -35,7 +37,7 @@ export class TxMsgSigner {
    * order. A Call takes the keys of every witness the contract will check.
    */
   static signWithKeys(msg: TxMsg, keys: PhantasmaKeys[]): SignedTxMsg {
-    assertPlanned(msg);
+    assertSignable(msg);
     const message = CarbonBlob.serialize(msg);
     const witnesses = witnessSlots(msg, keys).map(
       (slot) => new Witness(slot.address, new Bytes64(slot.signer.sign(message).bytes))
@@ -55,7 +57,7 @@ export class TxMsgSigner {
    * is asked once and its signature is reused.
    */
   static async signWith(msg: TxMsg, signers: TxSigner[]): Promise<SignedTxMsg> {
-    assertPlanned(msg);
+    assertSignable(msg);
     const message = CarbonBlob.serialize(msg);
     const signatures = new Map<string, Bytes64>();
     const witnesses: Witness[] = [];
@@ -76,13 +78,37 @@ export class TxMsgSigner {
   }
 }
 
-// A zero gas offer is never admissible, so it marks a message that was built and not planned.
-// Signing such a message would only produce a rejection. Plan it with `PhantasmaAPI.fees.plan` or
-// `planFees`, or set `maxGas` on purpose.
-function assertPlanned(msg: TxMsg): void {
+// Refuses, before anything is signed, a message the chain is certain to refuse.
+function assertSignable(msg: TxMsg): void {
+  // A zero gas offer is never admissible, so it marks a message that was built and not planned.
+  // Plan it with `PhantasmaAPI.fees.plan` or `planFees`, or set `maxGas` on purpose.
   if (msg.maxGas === 0n) {
     throw new Error('Transaction has no gas offer: plan its fees or set maxGas before signing');
   }
+  // A native fungible transfer carries its amount as a u64, and the chain reads it as a signed
+  // 64-bit value that must be above zero. Zero, and an amount of 2^63 or more, fail on chain for
+  // every fungible token, big-fungible ones included, and the failed transaction is billed. A larger
+  // amount needs a `Token.TransferFungible` module call or a script transfer.
+  const amount = nativeTransferAmount(msg);
+  if (amount !== undefined && amount <= 0n) {
+    throw new Error('Transfer amount must be above zero for a native transfer');
+  }
+  if (amount !== undefined && amount >= 1n << 63n) {
+    throw new Error(
+      `Transfer amount ${amount} is above the int64 maximum the chain accepts in a native transfer`
+    );
+  }
+}
+
+// Returns the amount of a native fungible transfer, and undefined for every other message.
+function nativeTransferAmount(msg: TxMsg): bigint | undefined {
+  if (msg.type === TxTypes.TransferFungible) {
+    return (msg.msg as TxMsgTransferFungible).amount;
+  }
+  if (msg.type === TxTypes.TransferFungible_GasPayer) {
+    return (msg.msg as TxMsgTransferFungibleGasPayer).amount;
+  }
+  return undefined;
 }
 
 function serialize(signed: SignedTxMsg): Uint8Array {
