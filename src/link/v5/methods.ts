@@ -1,9 +1,8 @@
 // Phantasma Link v5 - typed params/results for every `pha_*` method and event (spec §9.5).
 // Binary fields (tx bytes, scripts, signatures, messages) are base64 strings.
 
-import { ProofOfWork } from '../interfaces/proof-of-work.js';
 import { TxFormat, SignatureKind } from './protocol.js';
-import { LinkAccountV5, WalletInfo } from './capabilities.js';
+import { LinkAccountV5, WalletCapabilities } from './capabilities.js';
 
 export type Base64 = string;
 
@@ -34,15 +33,24 @@ export interface GetChainsResult {
 
 /** {@link LinkMethod.GetWalletInfo}. */
 export type GetWalletInfoParams = Record<string, never>;
-export type GetWalletInfoResult = WalletInfo;
+/** The result of {@link LinkMethod.GetWalletInfo}, field for field as spec §9.5 lists it. */
+export interface GetWalletInfoResult {
+  name: string;
+  version: string;
+  /** The capabilities granted to this session, the same object as in the connect result
+   * (spec §5, §9.5). */
+  capabilities: WalletCapabilities;
+  /** The RPC node URL the wallet is configured with. */
+  rpc: string;
+}
 
-/** {@link LinkMethod.SignMessage}: non-transaction-forgeable (spec §8). */
+/** {@link LinkMethod.SignMessage}: non-transaction-forgeable (spec §8). The wallet signs with
+ * the account's Ed25519 key only (spec §9.5). */
 export interface SignMessageParams {
   /** The message bytes to sign, base64. */
   message: Base64;
   /** Optional human-readable hint the wallet may show instead of raw bytes. */
   display?: string;
-  signatureKind?: SignatureKind;
 }
 export interface SignMessageResult {
   /** The signature, base64. */
@@ -53,13 +61,12 @@ export interface SignMessageResult {
 }
 
 /** Common fields for the two transaction methods. `format` selects the RPC endpoint
- * (spec §9.4); `pow` is meaningful only for `format: "script"` (spec §9.5). */
+ * (spec §9.4). The wallet signs the transaction exactly as built here (spec §9.5). */
 export interface TransactionParams {
   format: TxFormat;
   /** The serialized (unsigned) transaction bytes, base64. */
   tx: Base64;
   signatureKind?: SignatureKind;
-  pow?: ProofOfWork;
 }
 
 /** {@link LinkMethod.SignTransaction}: sign only, return the assembled signed tx. */
@@ -78,13 +85,15 @@ export interface SendTransactionResult {
 
 /** {@link LinkMethod.InvokeScript}: read-only VM invoke (no keys, no approval). */
 export interface InvokeScriptParams {
+  /** The name of a chain of the nexus, for example `main`. */
   chain: string;
   /** The raw VM script bytes, base64. */
   script: Base64;
 }
 export interface InvokeScriptResult {
-  /** Decoded VM result objects (hex/encoded values, as the node returns them). */
-  results: string[];
+  /** One VM result object per element, serialized as the chain serializes it, in base64
+   * (spec §9.5). */
+  results: Base64[];
 }
 
 // ----- Event payloads (wallet -> dApp) -----

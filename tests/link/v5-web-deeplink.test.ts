@@ -146,7 +146,7 @@ describe('PhantasmaLink5.webDeeplink', () => {
     expect(topic).toBe(env.record().topic);
     expect(envelope.method).toBe('pha_connect');
     expect(envelope.params?.dapp).toEqual(DAPP);
-    expect(envelope.params?.session).toBeUndefined(); // nothing to resume yet
+    expect(envelope.session).toBeUndefined(); // nothing to resume yet
 
     respond(env, key, envelope.id, CONNECT_RESULT);
     await expect(promise).resolves.toMatchObject({ session: { id: 'sess-1' } });
@@ -184,7 +184,8 @@ describe('PhantasmaLink5.webDeeplink', () => {
 
     const promise = client.connect();
     const { envelope } = unsealRequest(env.opened[1], key);
-    expect(envelope.params?.session).toBe('sess-1'); // resume rides by default
+    expect(envelope.session).toBe('sess-1'); // resume rides in the envelope by default
+    expect(envelope.params?.session).toBeUndefined();
     respond(env, key, envelope.id, CONNECT_RESULT);
     await expect(promise).resolves.toMatchObject({ session: { id: 'sess-1' } });
   });

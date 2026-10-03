@@ -350,11 +350,10 @@ export class PhantasmaLink5 {
       );
     }
     const params: ConnectParams = { dapp: identity, ...extra };
-    // Default to resuming the current session (spec §7). Always safe: a matching wallet
-    // resumes promptlessly, any mismatch silently falls back to a fresh consent prompt.
-    if (params.session === undefined && this.session.getSessionId() !== undefined) {
-      params.session = this.session.getSessionId();
-    }
+    // A held session id rides in the envelope `session` field of every request, this one
+    // included, so the wallet resumes it without a prompt (spec §4, §9.5). For a session that
+    // ended or that it does not know, a wallet runs the full approval over injected and
+    // loopback, and answers 5100 or 4100 over deeplink and relay.
     const result = await this.request<ConnectResult>(LinkMethod.Connect, params);
     this.adoptConnectResult(result);
     return result;

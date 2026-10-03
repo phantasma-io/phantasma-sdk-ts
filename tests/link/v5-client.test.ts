@@ -86,16 +86,18 @@ describe('PhantasmaLink5 (cohesive v5 client)', () => {
     await expect(promise).resolves.toEqual({ hash: '0xabc' });
   });
 
-  // Resume (spec §7): a stored session id rides in connect params so the wallet can skip the
-  // consent prompt; the client then adopts whatever session id the wallet returns.
-  it('forwards a resume session id and adopts the returned session', async () => {
+  // Resume (spec §4, §9.5): a stored session id rides in the envelope `session` field of the
+  // connect request, never in its params, so the wallet can skip the consent prompt; the client
+  // then adopts whatever session id the wallet returns.
+  it('sends a resume session id in the envelope and adopts the returned session', async () => {
     const transport = new MockTransport();
-    const client = new PhantasmaLink5(transport);
+    const client = new PhantasmaLink5(transport, { sessionId: 'old-sess' });
 
-    const promise = client.connect({ name: 'dApp', url: 'https://d.app' }, { session: 'old-sess' });
+    const promise = client.connect({ name: 'dApp', url: 'https://d.app' });
     const envelope = transport.lastEnvelope();
     expect(envelope.method).toBe('pha_connect');
-    expect(envelope.params?.session).toBe('old-sess');
+    expect(envelope.session).toBe('old-sess');
+    expect(envelope.params?.session).toBeUndefined();
 
     transport.inject(
       JSON.stringify({

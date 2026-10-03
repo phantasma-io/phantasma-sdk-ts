@@ -13,8 +13,9 @@ export interface DappMetadata {
   description?: string;
 }
 
-/** Per-transport maximum encrypted payload size, in bytes (spec §11). Lets a dApp check a
- * large (image-bearing) transaction against the wallet's real limit before sending. */
+/** Per transport, the size in bytes of the largest serialized transaction the wallet accepts
+ * in one request (spec §11). Lets a dApp check a large (image-bearing) transaction against the
+ * wallet's real limit before sending. */
 export interface MaxPayloadBytes {
   relay?: number;
   deeplink?: number;
@@ -22,16 +23,15 @@ export interface MaxPayloadBytes {
   injected?: number;
 }
 
-/** Wallet identity + node info (result of {@link LinkMethod.GetWalletInfo}). */
+/** The `wallet` block of the {@link ConnectResult}: which wallet answered (spec §5). */
 export interface WalletInfo {
   name: string;
   version: string;
   icon?: string;
-  /** The wallet's configured RPC node URL (informational; old `getPeer`). */
-  rpc?: string;
 }
 
-/** A token balance entry on an account (NFT ids included when present). */
+/** A token balance entry on an account. `ids` lists the NFT ids in `pha_getAccounts`; a connect
+ * result and `pha_sessionEstablished` leave them out, so that they fit a deeplink (spec §9.5). */
 export interface LinkBalance {
   symbol: string;
   value: string;
@@ -59,29 +59,27 @@ export interface WalletCapabilities {
   txFormats: TxFormat[];
   /** Supported signature schemes (spec §9.7). */
   signatureKinds: SignatureKind[];
-  /** Optional feature flags, e.g. `batch`, `events`. */
-  features?: string[];
+  /** The granted additive features (spec §5). This version of the protocol defines none, so a
+   * wallet sends `[]`. A dApp ignores a value it does not know. */
+  features: string[];
   maxPayloadBytes?: MaxPayloadBytes;
 }
 
 /** An established session (persistent on both sides; spec §7). */
 export interface Session {
   id: string;
-  /** Unix milliseconds at which the session expires (absent = until revoked). */
-  expiresAt?: number;
+  /** Unix milliseconds at which the lifetime the user picked ends, or `null` when the lifetime
+   * has no fixed end (spec §5). The inactivity expiry of spec §7 applies in addition. */
+  expiresAt: number | null;
 }
 
 /** Params of {@link LinkMethod.Connect}. The dApp requests a set of capabilities; the
  * wallet MAY grant a subset (spec §9.5 partial approval). */
 export interface ConnectParams {
   dapp: DappMetadata;
-  /** dApp ephemeral X25519 public key (base64), present on the custom-scheme ECDH path. */
-  pubkey?: string;
   chains?: string[];
   methods?: string[];
   features?: string[];
-  /** An existing session id to resume without a new prompt. */
-  session?: string;
 }
 
 /** Result of {@link LinkMethod.Connect}: the GRANTED capabilities + account + session. */
