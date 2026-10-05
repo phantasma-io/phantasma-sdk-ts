@@ -7,7 +7,7 @@ import {
 } from '../interfaces/index.js';
 import { bigIntToTwosComplementLE } from '../types/carbon-serialization.js';
 import { Address, PBinaryWriter, Serialization, Timestamp } from '../types/index.js';
-import { numberToByteArray, stringToUint8Array, bytesToHex } from '../utils/index.js';
+import { numberToByteArray, hexToBytes, bytesToHex } from '../utils/index.js';
 import { Opcode } from './opcode.js';
 import { VMObject } from './vm-object.js';
 import { VMType } from './vm-type.js';
@@ -669,9 +669,10 @@ export class ScriptBuilder {
     this.writer.writeUnsignedShort(ushort);
   }
 
+  /** Appends the bytes that `bytes` encodes in hex, without a length prefix. */
   appendHexEncoded(bytes: string): this {
     this.str += bytes;
-    this.writer.writeBytes(Array.from(stringToUint8Array(bytes)));
+    this.writer.writeBytes(Array.from(hexToBytes(bytes)));
     return this;
   }
 
