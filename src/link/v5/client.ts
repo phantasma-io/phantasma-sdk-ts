@@ -54,7 +54,9 @@ import {
 import {
   deriveSessionKey,
   generateEphemeralKeyPair,
+  openEnvelopeText,
   randomToken,
+  EncryptedFrame,
   EphemeralKeyPair,
 } from './session-crypto.js';
 
@@ -200,10 +202,18 @@ export class PhantasmaLink5 {
       ...options,
       topic,
       url: relayUrl,
-      onWalletKey: (publicKeyB64Url) => {
-        // Fires only when the wallet's hop arrives, long after `client` below exists.
-        const walletPublicKey = base64UrlToBytes(publicKeyB64Url);
-        client.session.setSessionKey(deriveSessionKey(walletPublicKey, pair.secretKey));
+      onWalletKey: (publicKeyB64Url, sealedFrame) => {
+        // Fires only when a wallet hop arrives, long after `client` below exists. The key is
+        // installed only when the hop's own sealed frame opens with it (spec §15).
+        try {
+          const walletPublicKey = base64UrlToBytes(publicKeyB64Url);
+          const key = deriveSessionKey(walletPublicKey, pair.secretKey);
+          openEnvelopeText(JSON.parse(sealedFrame) as EncryptedFrame, key);
+          client.session.setSessionKey(key);
+          return true;
+        } catch {
+          return false;
+        }
       },
     });
     const client = new PhantasmaLink5(transport, {

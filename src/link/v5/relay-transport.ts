@@ -70,10 +70,11 @@ export interface RelayTransportOptions {
   publishAckTimeoutMs?: number;
   /** Reconnect backoff ladder; the last entry repeats. Default 0.5/1/2/5/15 s. */
   reconnectDelaysMs?: number[];
-  /** ecdh pairing (spec §18.1): called ONCE with the wallet's ephemeral X25519 public key
-   * (base64url) when the key hop arrives; the caller derives the session key before any
-   * sealed frame embedded in the same payload is forwarded. */
-  onWalletKey?: (publicKeyB64Url: string) => void;
+  /** ecdh pairing (spec §18.1): called with the wallet's ephemeral X25519 public key
+   * (base64url) and the sealed frame of the same payload when a key hop arrives. Returns true
+   * when the frame opens with the key derived from that public key; the caller then installs
+   * the key, and the frame is forwarded. */
+  onWalletKey?: (publicKeyB64Url: string, sealedFrame: string) => boolean;
   /** Optional sink for diagnostics the transport cannot attribute to a caller - notably relay
    * `error` frames that match no in-flight publish (spec §16: clients MUST surface error frames,
    * not drop them). Defaults to console.warn; wire this to redirect or silence. */
@@ -126,7 +127,7 @@ export class RelayTransport implements LinkTransport {
   private socket?: WebSocketLike;
   private messageHandler?: (frame: string) => void;
   private closeHandler?: (reason?: string) => void;
-  private readonly onWalletKey?: (publicKeyB64Url: string) => void;
+  private readonly onWalletKey?: (publicKeyB64Url: string, sealedFrame: string) => boolean;
   private readonly log?: (message: string) => void;
   private walletKeySeen = false;
   private readonly pending = new Map<string, PendingPublish>();
@@ -316,16 +317,24 @@ export class RelayTransport implements LinkTransport {
           this.messageHandler?.(payload);
         } else if (payload && typeof payload === 'object') {
           const record = payload as Record<string, unknown>;
-          // ecdh key hop (spec §18.1): the wallet's public key plus the first sealed
+          // ecdh key hop (spec §15, §18.1): the wallet's public key plus the first sealed
           // envelope in one payload. The key callback runs FIRST so the session layer
           // can already open the embedded frame; repeats are ignored (one hop per
-          // pairing - a second wpk on a live channel is noise or forgery).
+          // pairing - a second wpk on a live channel is noise or forgery). A hop counts only
+          // when its sealed frame opens with the key it announces: a bare or malformed `wpk`
+          // from another holder of the topic must not bind a wrong key and lock out the real
+          // hop.
           if (typeof record.wpk === 'string') {
-            if (this.onWalletKey && !this.walletKeySeen) {
-              this.walletKeySeen = true;
-              this.onWalletKey(record.wpk);
-              if (typeof record.nonce === 'string' && typeof record.ct === 'string') {
-                this.messageHandler?.(JSON.stringify({ nonce: record.nonce, ct: record.ct }));
+            if (
+              this.onWalletKey &&
+              !this.walletKeySeen &&
+              typeof record.nonce === 'string' &&
+              typeof record.ct === 'string'
+            ) {
+              const sealedFrame = JSON.stringify({ nonce: record.nonce, ct: record.ct });
+              if (this.onWalletKey(record.wpk, sealedFrame)) {
+                this.walletKeySeen = true;
+                this.messageHandler?.(sealedFrame);
               }
             }
             return;

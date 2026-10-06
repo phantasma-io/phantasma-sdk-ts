@@ -510,6 +510,46 @@ describe('PhantasmaLink5.relayEcdh (custom-scheme pairing, key derived from the 
     await expect(promise).resolves.toMatchObject({ nexus: 'simnet' });
   });
 
+  // A hop whose sealed frame is missing or does not open must not bind a key: the real hop
+  // that follows still establishes the session (spec §15).
+  it('ignores a key hop without a frame that opens', () => {
+    const { client, sockets, keyPair } = buildEcdh();
+    const socket = sockets[0];
+    socket.open();
+    const topic = parsePairingUri(client.pairingUri!).topic;
+
+    const stranger = generateEphemeralKeyPair();
+    socket.receive({
+      op: 'deliver',
+      topic,
+      payload: { wpk: bytesToBase64Url(stranger.publicKey) },
+    });
+    socket.receive({
+      op: 'deliver',
+      topic,
+      payload: { wpk: 'not base64url!', nonce: 'AAAA', ct: 'AAAA' },
+    });
+    expect(client.account).toBeUndefined();
+
+    const walletPair = generateEphemeralKeyPair();
+    const derived = deriveSessionKey(keyPair.publicKey, walletPair.secretKey);
+    const sealedEvent = sealEnvelopeText(
+      JSON.stringify({
+        plv: PLV,
+        type: 'event',
+        event: 'pha_sessionEstablished',
+        data: CONNECT_RESULT,
+      }),
+      derived
+    );
+    socket.receive({
+      op: 'deliver',
+      topic,
+      payload: { wpk: bytesToBase64Url(walletPair.publicKey), ...sealedEvent },
+    });
+    expect(client.account?.address).toBe('P2KEcdh');
+  });
+
   // A second key hop must be ignored: the channel key is fixed at establishment, and a
   // late forged wpk must not be able to re-key a live session.
   it('ignores duplicate key hops and pre-key plaintext', () => {
