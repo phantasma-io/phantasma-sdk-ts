@@ -54,7 +54,7 @@ The reasons behind the protocol decisions are recorded under
 ```ts
 import { PhantasmaAPI } from 'phantasma-sdk-ts/public';
 
-const api = new PhantasmaAPI('http://localhost:5172/rpc', null, 'localnet');
+const api = new PhantasmaAPI('http://localhost:5172/rpc', null, 'simnet');
 const height = await api.getBlockHeight('main');
 const latestBlock = await api.getLatestBlock('main');
 
@@ -72,7 +72,7 @@ import { PhantasmaKeys, ScriptBuilder, Transaction } from 'phantasma-sdk-ts/publ
 
 const keys = PhantasmaKeys.generate();
 const script = new ScriptBuilder().beginScript().emitVarString('example').endScript();
-const tx = new Transaction('localnet', 'main', script, new Date(Date.now() + 5 * 60 * 1000), '');
+const tx = new Transaction('simnet', 'main', script, new Date(Date.now() + 5 * 60 * 1000), '');
 
 tx.signWithKeys(keys);
 
@@ -95,7 +95,7 @@ import {
   summarizeFeePlan,
 } from 'phantasma-sdk-ts/public';
 
-const api = new PhantasmaAPI('http://localhost:5172/rpc', null, 'localnet');
+const api = new PhantasmaAPI('http://localhost:5172/rpc', null, 'simnet');
 const keys = PhantasmaKeys.fromWIF(process.env.WIF!);
 const receiverPublicKey = new Uint8Array(32); // the recipient's 32-byte public key
 

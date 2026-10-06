@@ -3,7 +3,7 @@ import { PhantasmaKeys, ScriptBuilder, Transaction } from 'phantasma-sdk-ts/publ
 const keys = PhantasmaKeys.generate();
 const script = new ScriptBuilder().beginScript().emitVarString('example').endScript();
 const transaction = new Transaction(
-  'localnet',
+  'simnet',
   'main',
   script,
   new Date(Date.now() + 5 * 60 * 1000),

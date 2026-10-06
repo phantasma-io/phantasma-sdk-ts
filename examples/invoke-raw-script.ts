@@ -2,7 +2,7 @@ import { decodeVMObject, PhantasmaAPI, ScriptBuilder } from 'phantasma-sdk-ts/pu
 
 async function main(): Promise<void> {
   const rpcUrl = process.env.PHANTASMA_RPC_URL ?? 'http://localhost:5172/rpc';
-  const nexus = process.env.PHANTASMA_NEXUS ?? 'localnet';
+  const nexus = process.env.PHANTASMA_NEXUS ?? 'simnet';
   const chain = process.env.PHANTASMA_CHAIN ?? 'main';
 
   const api = new PhantasmaAPI(rpcUrl, null, nexus);

@@ -2,7 +2,7 @@ import { getTokenEventData, PhantasmaAPI } from 'phantasma-sdk-ts/public';
 
 async function main(): Promise<void> {
   const rpcUrl = process.env.PHANTASMA_RPC_URL ?? 'http://localhost:5172/rpc';
-  const nexus = process.env.PHANTASMA_NEXUS ?? 'localnet';
+  const nexus = process.env.PHANTASMA_NEXUS ?? 'simnet';
   const chain = process.env.PHANTASMA_CHAIN ?? 'main';
   const height = Number(process.env.PHANTASMA_BLOCK_HEIGHT ?? 1);
 
