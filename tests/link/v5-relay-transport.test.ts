@@ -462,8 +462,8 @@ describe('PhantasmaLink5.relayEcdh (custom-scheme pairing, key derived from the 
     expect(sockets[0].sentJson()).toEqual([{ op: 'subscribe', topic: pairing.topic }]);
   });
 
-  // The full fallback handshake (spec §20.1): wallet pub + sealed connect result in one
-  // payload; the client derives the key, adopts the session, and then talks sealed.
+  // The full fallback handshake (spec §15 step 3, §18.1): wallet pub + sealed connect result
+  // in one payload; the client derives the key, adopts the session, and then talks sealed.
   it('derives the session key from the wallet hop and adopts the pushed session', async () => {
     const { client, sockets, keyPair } = buildEcdh();
     const socket = sockets[0];

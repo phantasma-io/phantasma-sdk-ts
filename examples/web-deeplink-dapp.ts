@@ -1,4 +1,4 @@
-// Phantasma Link v5: a WEB dApp talking to the wallet over deeplink (spec §19).
+// Phantasma Link v5: a WEB dApp talking to the wallet over deeplink (spec §6.3, §15, §17).
 //
 // `PhantasmaLink5.webDeeplink()` bundles the per-dApp glue: it generates and persists the
 // pairing material (localStorage by default), exposes the pairing URI to show the user,
