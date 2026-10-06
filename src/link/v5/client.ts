@@ -9,6 +9,7 @@ import {
   LinkSessionClient,
   LinkSessionClientOptions,
   LinkEventHandler,
+  SendOptions,
   UnmatchedResponse,
 } from './transport.js';
 import {
@@ -37,9 +38,11 @@ import { InjectedTransport, InjectedTransportOptions } from './injected-transpor
 import {
   DeeplinkTransport,
   DeeplinkTransportOptions,
+  DEEPLINK_MAX_PAYLOAD_BYTES,
   DEEPLINK_REQUEST_TIMEOUT_MS,
 } from './deeplink.js';
 import { RelayTransport, RelayTransportOptions, DEFAULT_RELAY_URL } from './relay-transport.js';
+import { DeeplinkRelayTransport } from './deeplink-relay-transport.js';
 import { LinkError, LinkErrorCode } from './errors.js';
 import { buildPairingUri } from './pairing.js';
 import { base64DecodedLength, base64UrlToBytes } from './encoding.js';
@@ -182,10 +185,16 @@ export class PhantasmaLink5 {
     });
   }
 
-  /** Build a client over the deeplink transport (spec §17). The channel key from pairing is
-   * MANDATORY here: deeplink URLs are interceptable, so plaintext frames are never allowed. */
+  /** Build a client over the deeplink transport (spec §17), for a native app on the wallet's
+   * device. The channel key from pairing is MANDATORY here: deeplink URLs are interceptable, so
+   * plaintext frames are never allowed. With `relay` (the pairing's relay) a request that does
+   * not fit a URL goes over the relay (spec §6.3); without it such a request fails with 5001. */
   static deeplink(
-    options: DeeplinkTransportOptions & { sessionKey: Uint8Array; requestTimeoutMs?: number }
+    options: DeeplinkTransportOptions & {
+      sessionKey: Uint8Array;
+      requestTimeoutMs?: number;
+      relay?: Omit<RelayTransportOptions, 'topic' | 'onWalletKey'>;
+    }
   ): PhantasmaLink5 {
     if (!options.sessionKey || options.sessionKey.length !== 32) {
       throw new LinkError(
@@ -193,7 +202,12 @@ export class PhantasmaLink5 {
         'Deeplink requires the 32-byte pairing session key'
       );
     }
-    return new PhantasmaLink5(new DeeplinkTransport(options), {
+    const relay = options.relay;
+    const transport =
+      relay === undefined
+        ? new DeeplinkTransport(options)
+        : new DeeplinkRelayTransport({ ...options, relay, prefer: 'deeplink' });
+    return new PhantasmaLink5(transport, {
       sessionKey: options.sessionKey,
       // Deeplink round-trips include an app switch + human consent; see the constant.
       requestTimeoutMs: options.requestTimeoutMs ?? DEEPLINK_REQUEST_TIMEOUT_MS,
@@ -276,10 +290,13 @@ export class PhantasmaLink5 {
   }
 
   /**
-   * Build a ready-to-use client for a WEB dApp over the deeplink transport (spec §17),
-   * bundling the per-dApp glue: pairing material generation, the pairing URI, persistence
-   * (localStorage by default), restore + session resume across page loads, and intake of
-   * the response URLs the wallet opens back at the page (initial URL + `hashchange`).
+   * Build a ready-to-use client for a WEB dApp on the wallet's device (spec §6.3, §6.4, §17),
+   * bundling the per-dApp glue: pairing material generation, the pairing URI with its relay,
+   * persistence (localStorage by default), restore + session resume across page loads, and
+   * intake of the response URLs the wallet opens back at the page (initial URL + `hashchange`).
+   * Requests go over the relay, so answers reach the page without a reload, and the wake link
+   * brings the wallet app to the front; while the relay is not connected, a request that fits a
+   * URL goes over the deeplink instead.
    *
    * The factory itself never opens a URL: mobile browsers only allow app-opening
    * navigation from a user gesture. The dApp drives the hops - show {@link pairingUri}
@@ -301,9 +318,17 @@ export class PhantasmaLink5 {
       record = null;
     }
     if (!record) {
+      const relayUrl = options.relayUrl ?? DEFAULT_RELAY_URL;
+      if (!/^wss:\/\//i.test(relayUrl)) {
+        // Spec §15: a wallet refuses a pairing whose relay is not a wss:// URL.
+        throw new LinkError(LinkErrorCode.InvalidParams, 'relayUrl must be a wss:// URL');
+      }
       // Persist BEFORE any URL hop: opening the wallet may unload this page, and the
       // pairing key must already be on disk to decrypt responses after it comes back.
-      record = createWebDeeplinkRecord(options.callback ?? stripUrlFragment(hooks.pageUrl()));
+      record = createWebDeeplinkRecord(
+        options.callback ?? stripUrlFragment(hooks.pageUrl()),
+        relayUrl
+      );
       saveWebDeeplinkRecord(hooks.storage, hooks.storageKey, record);
     }
     // The record is the source of truth from here on (a snapshot for the closures below).
@@ -311,11 +336,13 @@ export class PhantasmaLink5 {
     const sessionKey = base64UrlToBytes(stored.key);
 
     const client = new PhantasmaLink5(
-      new DeeplinkTransport({
+      new DeeplinkRelayTransport({
         topic: stored.topic,
         opener: hooks.opener,
         walletBase: options.walletBase,
         log: options.log,
+        relay: { url: stored.relay, webSocketFactory: options.webSocketFactory },
+        prefer: 'relay',
       }),
       {
         dapp: options.dapp,
@@ -348,6 +375,7 @@ export class PhantasmaLink5 {
       topic: stored.topic,
       mode: 'sym',
       symKey: sessionKey,
+      relay: stored.relay,
       callback: stored.callback,
       meta: options.dapp,
       scheme: 'universal',
@@ -389,7 +417,11 @@ export class PhantasmaLink5 {
    * The web-deeplink factory wires this automatically; SPAs whose routing swallows
    * `hashchange` call it explicitly on route events. */
   deliverUrl(url: string): boolean {
-    return this.transport instanceof DeeplinkTransport && this.transport.deliverUrl(url);
+    return (
+      (this.transport instanceof DeeplinkTransport ||
+        this.transport instanceof DeeplinkRelayTransport) &&
+      this.transport.deliverUrl(url)
+    );
   }
 
   /** Take (and clear) a wallet response that arrived with no in-flight request to match it -
@@ -514,7 +546,14 @@ export class PhantasmaLink5 {
         )
       );
     }
-    return this.request<T>(method, params);
+    return this.request<T>(method, params, this.sendOptionsFor(size));
+  }
+
+  /** Spec §6.3: a payload above the wallet's deeplink limit goes over the relay. */
+  private sendOptionsFor(size: number): SendOptions {
+    const deeplinkLimit =
+      this.lastConnect?.capabilities.maxPayloadBytes?.deeplink ?? DEEPLINK_MAX_PAYLOAD_BYTES;
+    return { needsRelay: size > deeplinkLimit };
   }
 
   /** Read-only VM invoke (no keys, no approval). */
@@ -612,7 +651,7 @@ export class PhantasmaLink5 {
   // shapes are validated structurally at the envelope layer (§4); per-field validation can be
   // layered on later without changing call sites. `params` is `object` so typed param
   // interfaces (which lack an index signature) are accepted, then forwarded as a plain record.
-  private async request<T>(method: string, params?: object): Promise<T> {
+  private async request<T>(method: string, params?: object, options?: SendOptions): Promise<T> {
     // Spec §7: a session past its lifetime or the inactivity limit is over on this side too. On
     // a keyed channel the wallet dropped the pairing as well, so nothing would ever answer.
     if (
@@ -627,7 +666,8 @@ export class PhantasmaLink5 {
     try {
       const result = await this.session.request(
         method,
-        params as Record<string, unknown> | undefined
+        params as Record<string, unknown> | undefined,
+        options
       );
       this.noteAnswer(sentSession);
       return result as T;

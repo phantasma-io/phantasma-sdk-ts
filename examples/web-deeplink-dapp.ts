@@ -1,16 +1,19 @@
-// Phantasma Link v5: a WEB dApp talking to the wallet over deeplink (spec §6.3, §15, §17).
+// Phantasma Link v5: a WEB dApp on the phone that holds the wallet (spec §6.3, §6.4, §15, §17).
 //
 // `PhantasmaLink5.webDeeplink()` bundles the per-dApp glue: it generates and persists the
-// pairing material (localStorage by default), exposes the pairing URI to show the user,
-// restores the session across page loads, and consumes the response URLs the wallet opens
-// back at the page (initial URL + hashchange). In a real browser the one required option
-// is `dapp`; every platform hook is injectable, which is also what makes this example
-// runnable outside a browser.
+// pairing material with its relay (localStorage by default), exposes the pairing URI to show
+// the user, restores the session across page loads, and consumes the response URLs the wallet
+// opens back at the page (initial URL + hashchange). Requests go over the relay and the wake
+// link brings the wallet app to the front; while the relay is not connected, a request that
+// fits a URL goes over the deeplink. In a real browser the one required option is `dapp`;
+// every platform hook is injectable, which is also what makes this example runnable outside a
+// browser.
 //
 // UX contract on mobile: browsers only allow app-opening navigation from a user gesture,
 // so the factory NEVER opens URLs by itself. The flow is:
 //   1) first visit - render `client.pairingUri` as a link/QR; the user taps it, approves
-//      the pairing in the wallet, and switches back to the page;
+//      the pairing in the wallet, and switches back to the page, where the session arrives
+//      over the relay;
 //   2) any later gesture - call `connect()` (resumes the stored session promptlessly per
 //      spec §7; a pairing without a session yet gets the wallet's consent prompt) and the
 //      typed methods;
@@ -59,7 +62,7 @@ export async function onConnectClick(
   return client;
 }
 
-/** Click handler for a "Send" button: the money path over the same deeplink channel. */
+/** Click handler for a "Send" button: the money path over the same pairing. */
 export async function onSendClick(client: PhantasmaLink5, signedCarbonTxBase64: string) {
   return client.sendTransaction({ format: 'carbon', tx: signedCarbonTxBase64 });
 }

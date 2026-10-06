@@ -14,7 +14,9 @@ import {
   WEB_DEEPLINK_STORAGE_KEY,
 } from '../../src/link/v5/web-deeplink.js';
 import type { LinkTransport } from '../../src/link/v5/transport.js';
-import { base64UrlToBytes } from '../../src/link/v5/encoding.js';
+import { base64UrlToBytes, bytesToBase64 } from '../../src/link/v5/encoding.js';
+import { DEFAULT_RELAY_URL } from '../../src/link/v5/relay-transport.js';
+import { WebSocketLike } from '../../src/link/v5/loopback-transport.js';
 import {
   sealEnvelopeText,
   openEnvelopeText,
@@ -37,8 +39,36 @@ const CONNECT_RESULT = {
   session: { id: 'sess-1' },
 };
 
-/** Fake browser surface: storage, page URL, navigation events, opener - all observable.
- * This is the injected-hooks contract the factory promises to be testable against. */
+/** A relay socket double: it stays connecting until a test opens it, and the test plays the
+ * relay server. */
+class FakeRelaySocket implements WebSocketLike {
+  readyState = 0;
+  sent: string[] = [];
+  onopen: ((event: unknown) => void) | null = null;
+  onmessage: ((event: { data: unknown }) => void) | null = null;
+  onclose: ((event: { reason?: string; wasClean?: boolean }) => void) | null = null;
+  onerror: ((event: unknown) => void) | null = null;
+  constructor(public url: string) {}
+  send(data: string): void {
+    this.sent.push(data);
+  }
+  close(): void {
+    this.readyState = 3;
+  }
+  open(): void {
+    this.readyState = 1;
+    this.onopen?.({});
+  }
+  receive(value: unknown): void {
+    this.onmessage?.({ data: JSON.stringify(value) });
+  }
+  sentJson(): Array<{ op: string; topic?: string; id?: string; payload?: unknown }> {
+    return this.sent.map((text) => JSON.parse(text));
+  }
+}
+
+/** Fake browser surface: storage, page URL, navigation events, opener, relay sockets - all
+ * observable. This is the injected-hooks contract the factory promises to be testable against. */
 class FakeWebEnv {
   store = new Map<string, string>();
   opened: string[] = [];
@@ -46,6 +76,7 @@ class FakeWebEnv {
   href = 'https://dapp.example/app';
   changeHandlers = new Set<() => void>();
   unsubscribed = 0;
+  sockets: FakeRelaySocket[] = [];
 
   readonly storage = {
     getItem: (key: string) => this.store.get(key) ?? null,
@@ -73,7 +104,17 @@ class FakeWebEnv {
         this.replaced.push(url);
         this.href = url;
       },
+      webSocketFactory: (url) => {
+        const socket = new FakeRelaySocket(url);
+        this.sockets.push(socket);
+        return socket;
+      },
     };
+  }
+
+  /** The relay socket of the newest client. */
+  relay(): FakeRelaySocket {
+    return this.sockets[this.sockets.length - 1];
   }
 
   /** Simulate the wallet opening a URL at the page (the OS brings the tab back). */
@@ -482,6 +523,14 @@ describe('PhantasmaLink5.webDeeplink', () => {
     );
     await PhantasmaLink5.webDeeplink({ dapp: DAPP, ...env.options() });
     expect(env.record().topic).not.toBe('w');
+
+    // And a record without a relay: the wallet would publish the session where nobody listens.
+    env.storage.setItem(
+      WEB_DEEPLINK_STORAGE_KEY,
+      JSON.stringify({ ...regenerated, topic: 'x', relay: undefined })
+    );
+    await PhantasmaLink5.webDeeplink({ dapp: DAPP, ...env.options() });
+    expect(env.record().topic).not.toBe('x');
   });
 
   // ONE-TAP first connection (spec §17 step 3): right after the pairing approval the
@@ -580,5 +629,159 @@ describe('PhantasmaLink5.webDeeplink', () => {
     expect(env.opened[0].startsWith('https://wallet.example/app/v5/req#')).toBe(true);
     client.close();
     await expect(promise).rejects.toMatchObject({ name: 'LinkError' });
+  });
+});
+
+describe('PhantasmaLink5.webDeeplink over the relay', () => {
+  /** The wallet's side of the relay: a sealed envelope delivered on the pairing topic. */
+  function deliver(env: FakeWebEnv, key: Uint8Array, envelope: object): void {
+    const record = env.record();
+    const payload = JSON.stringify(
+      sealEnvelopeText(JSON.stringify({ plv: PLV, ...envelope }), key)
+    );
+    env.relay().receive({ op: 'deliver', topic: record.topic, payload });
+  }
+
+  /** The session the wallet publishes over the relay right after the pairing approval. */
+  function establish(
+    env: FakeWebEnv,
+    key: Uint8Array,
+    connectResult: object = CONNECT_RESULT
+  ): void {
+    deliver(env, key, {
+      type: 'event',
+      event: 'pha_sessionEstablished',
+      session: 'sess-1',
+      data: connectResult,
+    });
+  }
+
+  /** The publishes this page sent, opened with the pairing key. */
+  function published(env: FakeWebEnv, key: Uint8Array) {
+    return env
+      .relay()
+      .sentJson()
+      .filter((frame) => frame.op === 'publish')
+      .map((frame) => ({
+        id: frame.id as string,
+        envelope: JSON.parse(
+          openEnvelopeText(JSON.parse(frame.payload as string) as EncryptedFrame, key)
+        ) as { id: string; method: string; session?: string },
+      }));
+  }
+
+  // Spec §15: the pairing carries the relay, and the page subscribes to the topic at once, so
+  // that the session the wallet publishes after the approval reaches it.
+  it('pairs with a relay and subscribes to the topic', async () => {
+    const env = new FakeWebEnv();
+    const client = await PhantasmaLink5.webDeeplink({ dapp: DAPP, ...env.options() });
+    const record = env.record();
+    expect(record.relay).toBe(DEFAULT_RELAY_URL);
+    expect(parsePairingUri(client.pairingUri!).relay).toBe(DEFAULT_RELAY_URL);
+    expect(env.relay().url).toBe(DEFAULT_RELAY_URL);
+
+    env.relay().open();
+    expect(env.relay().sentJson()).toEqual([{ op: 'subscribe', topic: record.topic }]);
+    expect(env.opened).toEqual([]);
+  });
+
+  it('takes the session the wallet publishes over the relay', async () => {
+    const env = new FakeWebEnv();
+    const client = await PhantasmaLink5.webDeeplink({ dapp: DAPP, ...env.options() });
+    const key = base64UrlToBytes(env.record().key);
+    env.relay().open();
+
+    establish(env, key);
+    expect(client.account?.address).toBe('P2KTestAddr');
+    expect(env.record().sessionId).toBe('sess-1');
+    expect(env.opened).toEqual([]);
+  });
+
+  // Spec §6.3, §6.4: a web page sends over the relay, so the answer arrives without a reload,
+  // and the wake link brings the wallet app to the front.
+  it('sends a request over the relay and opens the wake link', async () => {
+    const env = new FakeWebEnv();
+    const client = await PhantasmaLink5.webDeeplink({ dapp: DAPP, ...env.options() });
+    const key = base64UrlToBytes(env.record().key);
+    env.relay().open();
+    establish(env, key);
+
+    const chains = client.getChains();
+    expect(env.opened).toEqual(['phantasma://v5/wake']);
+    const [request] = published(env, key);
+    expect(request.envelope.method).toBe('pha_getChains');
+    expect(request.envelope.session).toBe('sess-1');
+    env.relay().receive({ op: 'ack', id: request.id });
+    deliver(env, key, { id: request.envelope.id, result: { chains: [], current: '', nexus: 'x' } });
+    await expect(chains).resolves.toMatchObject({ nexus: 'x' });
+  });
+
+  // Spec §6.3: while the relay is not connected, a request that fits a URL takes the deeplink.
+  it('falls back to the deeplink while the relay is not connected', async () => {
+    const env = new FakeWebEnv();
+    const { client, key } = await connected(env);
+    expect(env.relay().readyState).toBe(0);
+
+    const chains = client.getChains();
+    expect(env.opened[1].startsWith('phantasma://v5/req#')).toBe(true);
+    respond(env, key, unsealRequest(env.opened[1], key).envelope.id, {
+      chains: [],
+      current: '',
+      nexus: 'x',
+    });
+    await expect(chains).resolves.toMatchObject({ nexus: 'x' });
+    expect(published(env, key)).toEqual([]);
+  });
+
+  // Spec §6.3: a transaction above the wallet's deeplink limit goes over the relay, also while
+  // the relay reconnects: it leaves when the socket opens.
+  it('sends a transaction above the deeplink limit over the relay', async () => {
+    const env = new FakeWebEnv();
+    const client = await PhantasmaLink5.webDeeplink({ dapp: DAPP, ...env.options() });
+    const key = base64UrlToBytes(env.record().key);
+    env.relay().open();
+    establish(env, key, {
+      ...CONNECT_RESULT,
+      capabilities: { ...CONNECT_RESULT.capabilities, maxPayloadBytes: { deeplink: 100 } },
+    });
+    // The socket drops; the reconnect is pending.
+    env.relay().readyState = 3;
+    env.relay().onclose?.({});
+
+    const signing = client.signTransaction({
+      format: 'carbon',
+      tx: bytesToBase64(new Uint8Array(200)),
+    });
+    expect(env.opened).toEqual(['phantasma://v5/wake']);
+    await new Promise((resolve) => setTimeout(resolve, 600)); // the first reconnect step
+    env.relay().open();
+    const [request] = published(env, key);
+    expect(request.envelope.method).toBe('pha_signTransaction');
+    env.relay().receive({ op: 'ack', id: request.id });
+    deliver(env, key, { id: request.envelope.id, result: { signedTx: 'AAEC' } });
+    await expect(signing).resolves.toEqual({ signedTx: 'AAEC' });
+  });
+
+  // When the relay refused the topic for good, a request that a deeplink cannot carry fails at
+  // once instead of opening the wallet for nothing.
+  it('fails a request too large for a deeplink when the relay is gone', async () => {
+    const env = new FakeWebEnv();
+    const client = await PhantasmaLink5.webDeeplink({ dapp: DAPP, ...env.options() });
+    const key = base64UrlToBytes(env.record().key);
+    env.relay().open();
+    establish(env, key);
+    env.relay().receive({ op: 'error', code: 'topic_limit', message: 'too many topics' });
+
+    await expect(
+      client.signTransaction({ format: 'carbon', tx: bytesToBase64(new Uint8Array(20_000)) })
+    ).rejects.toMatchObject({ code: LinkErrorCode.Disconnected });
+    expect(env.opened).toEqual([]);
+  });
+
+  it('refuses a relay that is not a wss:// URL', async () => {
+    const env = new FakeWebEnv();
+    await expect(
+      PhantasmaLink5.webDeeplink({ dapp: DAPP, ...env.options(), relayUrl: 'ws://relay.example' })
+    ).rejects.toMatchObject({ code: LinkErrorCode.InvalidParams });
   });
 });

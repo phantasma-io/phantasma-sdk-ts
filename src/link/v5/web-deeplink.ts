@@ -1,9 +1,10 @@
-// Phantasma Link v5 - web-dApp deeplink glue (spec §15/§17). A web page that talks to the
-// wallet over deeplink needs the same few pieces every time: pairing material (topic +
-// session key), a pairing URI to show, persistence that survives the page being unloaded
-// while the wallet is in the foreground, and intake of the response URLs the wallet opens
-// back at the page. This module holds those pieces; the orchestration is the
-// `PhantasmaLink5.webDeeplink()` factory (client.ts), NOT a separate wrapper class.
+// Phantasma Link v5 - glue for a web dApp on the wallet's phone (spec §6.3, §6.4, §15, §17). Such
+// a page talks to the wallet over the relay and the deeplink of one pairing and needs the same few
+// pieces every time: pairing material (topic + session key), a pairing URI to show, persistence
+// that survives the page being unloaded while the wallet is in the foreground, and intake of the
+// response URLs the wallet opens back at the page. This module holds those pieces; the
+// orchestration is the `PhantasmaLink5.webDeeplink()` factory (client.ts), NOT a separate wrapper
+// class.
 //
 // Everything platform-specific is injectable so the flow is fully testable without a
 // browser; the defaults bind to the real browser surface (localStorage, location.href,
@@ -11,6 +12,7 @@
 
 import { LinkError, LinkErrorCode } from './errors.js';
 import { DappMetadata, ConnectResult } from './capabilities.js';
+import { WebSocketFactory } from './loopback-transport.js';
 import { bytesToBase64Url, base64UrlToBytes } from './encoding.js';
 import { generateSessionKey, randomToken, SESSION_KEY_LENGTH } from './session-crypto.js';
 
@@ -43,8 +45,14 @@ export interface WebDeeplinkOptions {
   /** Replaces the page URL after a response fragment is consumed (history.replaceState by
    * default) so reload/back does not re-deliver it and ciphertext leaves the address bar. */
   replaceUrl?: (url: string) => void;
-  /** Wallet base for request URLs (DeeplinkTransport); default the `phantasma://` scheme. */
+  /** Wallet base for request and wake URLs (DeeplinkTransport); default the `phantasma://`
+   * scheme. */
   walletBase?: string;
+  /** Relay of new pairings, a `wss://` URL; default the public relay. A stored pairing keeps the
+   * relay it was made with. */
+  relayUrl?: string;
+  /** WebSocket implementation for the relay; default the global WebSocket. */
+  webSocketFactory?: WebSocketFactory;
   /** Universal-link host for the pairing URI; default `link.phantasma.info`. */
   host?: string;
   /** Where the wallet opens responses. Default: the current page URL without its fragment.
@@ -74,6 +82,8 @@ export interface WebDeeplinkRecord {
   key: string;
   /** Response callback URL the wallet opens; fixed at pairing consent. */
   callback: string;
+  /** The pairing's relay, a `wss://` URL; fixed at pairing consent. */
+  relay: string;
   /** Established session id (spec §7), set after a successful connect. */
   sessionId?: string;
   /** Cache of the last ConnectResult so a reloaded page can show the account without a
@@ -182,12 +192,13 @@ export function stripUrlFragment(url: string): string {
 }
 
 /** Generate fresh pairing material for a new channel (spec §15: 32-byte topic + key). */
-export function createWebDeeplinkRecord(callback: string): WebDeeplinkRecord {
+export function createWebDeeplinkRecord(callback: string, relay: string): WebDeeplinkRecord {
   return {
     v: 1,
     topic: randomToken(32),
     key: bytesToBase64Url(generateSessionKey()),
     callback,
+    relay,
   };
 }
 
@@ -218,6 +229,10 @@ export function loadWebDeeplinkRecord(
     return null;
   }
   if (typeof record.callback !== 'string' || record.callback.length === 0) {
+    return null;
+  }
+  // Spec §15: a pairing's relay is a wss:// URL; a record without one predates the relay path.
+  if (typeof record.relay !== 'string' || !/^wss:\/\//i.test(record.relay)) {
     return null;
   }
   if (record.sessionId !== undefined && typeof record.sessionId !== 'string') {

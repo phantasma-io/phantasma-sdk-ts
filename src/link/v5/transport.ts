@@ -32,12 +32,19 @@ export type TransportKind = 'injected' | 'loopback' | 'deeplink' | 'relay';
  * after the timeout is told apart from an answer to a request of an earlier page load. */
 const REQUEST_MEMORY_MS = 10 * 60 * 1000;
 
+/** What a request asks of the transport that carries it. */
+export interface SendOptions {
+  /** The request carries a payload larger than the wallet takes over a deeplink (spec §6.3,
+   * §11). A transport that can choose sends it over the relay. */
+  needsRelay?: boolean;
+}
+
 /** A duplex channel that carries opaque frame strings between dApp and wallet. */
 export interface LinkTransport {
   /** Which transport this is. The client uses it to find the wallet's size limit for this
    * transport (spec §11). A custom transport may leave it out. */
   readonly kind?: TransportKind;
-  send(frame: string): void | Promise<void>;
+  send(frame: string, options?: SendOptions): void | Promise<void>;
   onMessage(handler: (frame: string) => void): void;
   onClose?(handler: (reason?: string) => void): void;
   close(): void;
@@ -159,7 +166,11 @@ export class LinkSessionClient {
   }
 
   /** Send a request and await its result. Rejects with {@link LinkError}. */
-  request(method: string, params?: Record<string, unknown>): Promise<unknown> {
+  request(
+    method: string,
+    params?: Record<string, unknown>,
+    options?: SendOptions
+  ): Promise<unknown> {
     if (this.closed) {
       return Promise.reject(
         new LinkError(
@@ -210,7 +221,7 @@ export class LinkSessionClient {
     // reach.
     let sent: void | Promise<void>;
     try {
-      sent = this.transport.send(this.encodeOutgoing(envelope));
+      sent = this.transport.send(this.encodeOutgoing(envelope), options);
     } catch (err) {
       // A refusal at once (a deeplink above the URL budget, a closed transport) settles this
       // request like a later rejection; otherwise its timer would fire on a promise nobody holds.

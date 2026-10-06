@@ -193,6 +193,11 @@ export class RelayTransport implements LinkTransport {
     this.closeHandler = handler;
   }
 
+  /** True while the socket to the relay is open. */
+  get isOpen(): boolean {
+    return !this.closed && this.socket?.readyState === 1;
+  }
+
   close(): void {
     this.shutDown('Relay transport closed');
   }

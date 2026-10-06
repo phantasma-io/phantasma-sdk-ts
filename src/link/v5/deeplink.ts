@@ -42,6 +42,13 @@ export function buildRequestUrl(walletBase: string, topic: string, frame: string
   return `${base}v5/req#t=${encodeURIComponent(topic)}&f=${bytesToBase64Url(utf8ToBytes(frame))}`;
 }
 
+/** Build the wake link (spec §6.4, §17). It carries nothing: it only brings the wallet app to
+ * the front, so that the wallet reconnects to the relay and reads its pairings' mailboxes. */
+export function buildWakeUrl(walletBase: string): string {
+  const base = walletBase.endsWith('/') ? walletBase : `${walletBase}/`;
+  return `${base}v5/wake`;
+}
+
 /** Parse a dApp->wallet request URL; null when the URL is not a v5 request deeplink. */
 export function parseRequestUrl(url: string): DeeplinkUrls | null {
   const hashIndex = url.indexOf('#');
@@ -65,6 +72,12 @@ export function parseResponseUrl(url: string): DeeplinkUrls | null {
     return null;
   }
   return parseFragment(url.slice(hashIndex + 1), true);
+}
+
+/** Length of the `f` value of a request URL that carries `frame`. The frame is ASCII, so its
+ * base64url text is 4/3 of its length. */
+function encodedFrameChars(frame: string): number {
+  return Math.ceil((frame.length * 4) / 3);
 }
 
 function parseFragment(fragment: string, requirePlvMarker: boolean): DeeplinkUrls | null {
@@ -127,15 +140,20 @@ export class DeeplinkTransport implements LinkTransport {
     this.log = options.log;
   }
 
+  /** Whether `frame` fits the URL budget of a request (spec §6.3). */
+  fits(frame: string): boolean {
+    return encodedFrameChars(frame) <= this.urlBudgetChars;
+  }
+
   send(frame: string): void {
     if (this.closed) {
       throw new LinkError(LinkErrorCode.Disconnected, 'Deeplink transport is closed');
     }
     // Spec §6.3: a request whose `f` value exceeds the URL budget never goes out as a URL,
     // because the OS or the browser may cut it. This transport has no relay to fall back to,
-    // so it refuses with 5001; a client with a relay pairing sends such a request there.
-    // The frame is ASCII, so its base64url text is 4/3 of its length.
-    const encodedChars = Math.ceil((frame.length * 4) / 3);
+    // so it refuses with 5001; a pairing with a relay sends such a request there
+    // (DeeplinkRelayTransport).
+    const encodedChars = encodedFrameChars(frame);
     if (encodedChars > this.urlBudgetChars) {
       throw new LinkError(
         LinkErrorCode.PayloadTooLarge,
@@ -144,6 +162,14 @@ export class DeeplinkTransport implements LinkTransport {
       );
     }
     this.opener(buildRequestUrl(this.walletBase, this.topic, frame));
+  }
+
+  /** Opens the wake link at the wallet (spec §6.4). */
+  wake(): void {
+    if (this.closed) {
+      throw new LinkError(LinkErrorCode.Disconnected, 'Deeplink transport is closed');
+    }
+    this.opener(buildWakeUrl(this.walletBase));
   }
 
   onMessage(handler: (frame: string) => void): void {
