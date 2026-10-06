@@ -3,7 +3,7 @@
 // typed `pha_*` methods are all part of this one client. Build it directly with any transport,
 // or use the `loopback()` factory for the desktop case.
 
-import { LinkMethod, LinkEvent, MAX_TX_BYTES } from './protocol.js';
+import { LinkMethod, LinkEvent, MAX_TX_BYTES, SESSION_IDLE_TTL_MS } from './protocol.js';
 import {
   LinkTransport,
   LinkSessionClient,
@@ -59,6 +59,7 @@ import {
   EncryptedFrame,
   EphemeralKeyPair,
 } from './session-crypto.js';
+import { isWalletAnswer, walletAnswerError } from './wallet-answer.js';
 
 /** Options for {@link PhantasmaLink5}. */
 export interface PhantasmaLink5Options extends LinkSessionClientOptions {
@@ -68,6 +69,10 @@ export interface PhantasmaLink5Options extends LinkSessionClientOptions {
    * connect/resume, `undefined` when the session ends. Lets an embedder persist session state
    * (the web-deeplink factory stores it; a custom host could keep it elsewhere). */
   onSessionChange?: (connect: ConnectResult | undefined) => void;
+  /** How long a session may go without an answer from the wallet before the client ends it, in
+   * milliseconds (spec §7); default {@link SESSION_IDLE_TTL_MS}. Every session ends by inactivity,
+   * so anything but a positive finite number is refused with `-32602`. */
+  idleTtlMs?: number;
 }
 
 /** Wallet answers that say the session the request carried no longer lives (spec §7). */
@@ -85,12 +90,12 @@ const PAIRING_ENDED = 'The session ended, and its pairing with it; pair again';
  * methods then forward to the wallet and return validated-by-contract results. Events
  * (account/chain/session changes) are delivered via {@link onEvent}.
  *
- * The client ends a session it holds on {@link disconnect} and {@link forgetSession}, and when
- * the wallet says the session ended (an event, or `5100`/`5101`/`4100` to a request made in it;
- * spec §7). A client with a channel key (deeplink, relay) ends its pairing with the session
- * (spec §18.3): the key is dropped, the client closes ({@link isClosed}) and later requests fail
- * with `4900`, so build a new client to pair again. Injected and loopback have no pairing and
- * stay open.
+ * The client ends a session it holds on {@link disconnect} and {@link forgetSession}, when the
+ * wallet says the session ended (an event, or `5100`/`5101`/`4100` to a request made in it), and
+ * when the session's lifetime or the inactivity limit is over (spec §7). A client with a channel
+ * key (deeplink, relay) ends its pairing with the session (spec §18.3): the key is dropped, the
+ * client closes ({@link isClosed}) and later requests fail with `4900`, so build a new client to
+ * pair again. Injected and loopback have no pairing and stay open.
  */
 export class PhantasmaLink5 {
   private readonly transport: LinkTransport;
@@ -99,10 +104,15 @@ export class PhantasmaLink5 {
   private readonly onSessionChange?: (connect: ConnectResult | undefined) => void;
   // A channel key belongs to one pairing, and the pairing ends with its session (spec §18.3).
   private readonly keyed: boolean;
+  private readonly idleTtlMs: number;
   // Cleanup callbacks registered by factories (e.g. the web-deeplink URL listener);
   // run once on close() so a discarded client does not keep page hooks alive.
   private readonly disposers: Array<() => void> = [];
   private lastConnect?: ConnectResult;
+  // Unix milliseconds of the last answer from the wallet in the current session (spec §7).
+  private lastSeenAt?: number;
+  // Set by the web-deeplink factory to store lastSeenAt whenever it moves.
+  private onActivity?: () => void;
   private lastUnmatched?: UnmatchedResponse;
   private pairingUriValue?: string;
 
@@ -126,15 +136,13 @@ export class PhantasmaLink5 {
             : this.keyed
               ? this.session.getSessionId()
               : undefined;
-        this.noteAnswer(
-          sentSession,
-          response.ok ? undefined : LinkError.fromObject(response.error)
-        );
+        this.noteAnswer(sentSession, response.ok ? undefined : walletAnswerError(response.error));
       },
     });
     this.defaultDapp = options.dapp;
     this.onSessionChange = options.onSessionChange;
     this.keyed = options.sessionKey !== undefined || options.requireSessionKey === true;
+    this.idleTtlMs = readIdleTtl(options.idleTtlMs);
     // One-tap pairing (spec §15 step 3): the wallet may push the connect result as an
     // unsolicited event right after the pairing approval, instead of waiting for an
     // explicit pha_connect. Adopt it exactly like a connect result so the session is
@@ -282,8 +290,16 @@ export class PhantasmaLink5 {
    */
   static async webDeeplink(options: WebDeeplinkOptions): Promise<PhantasmaLink5> {
     const hooks = resolveWebDeeplinkHooks(options);
+    const idleTtlMs = readIdleTtl(options.idleTtlMs);
 
     let record = loadWebDeeplinkRecord(hooks.storage, hooks.storageKey);
+    if (
+      record?.sessionId !== undefined &&
+      sessionLapsed(record.lastConnect?.session.expiresAt, record.lastSeenAt, idleTtlMs)
+    ) {
+      // Spec §7, §18.3: the stored session is over, and its pairing key with it.
+      record = null;
+    }
     if (!record) {
       // Persist BEFORE any URL hop: opening the wallet may unload this page, and the
       // pairing key must already be on disk to decrypt responses after it comes back.
@@ -306,6 +322,7 @@ export class PhantasmaLink5 {
         sessionKey,
         sessionId: stored.sessionId,
         requestTimeoutMs: options.requestTimeoutMs ?? DEEPLINK_REQUEST_TIMEOUT_MS,
+        idleTtlMs,
         log: options.log,
         onSessionChange: (connect) => {
           if (connect === undefined) {
@@ -315,10 +332,15 @@ export class PhantasmaLink5 {
           }
           stored.sessionId = connect.session.id;
           stored.lastConnect = connect;
+          stored.lastSeenAt = client.lastSeenAt;
           saveWebDeeplinkRecord(hooks.storage, hooks.storageKey, stored);
         },
       }
     );
+    client.onActivity = () => {
+      stored.lastSeenAt = client.lastSeenAt;
+      saveWebDeeplinkRecord(hooks.storage, hooks.storageKey, stored);
+    };
 
     // The pairing URI is always available (idempotent to re-show); `sym` requires the
     // domain-verified universal link - a symmetric key never rides a custom scheme (§15).
@@ -335,6 +357,7 @@ export class PhantasmaLink5 {
     // Hop-free hydration: a reloaded page shows the cached account immediately; the next
     // real request (or a connect()) proves liveness and refreshes it.
     client.lastConnect = stored.lastConnect;
+    client.lastSeenAt = stored.lastSeenAt;
 
     const consumePageUrl = () => {
       const href = hooks.pageUrl();
@@ -429,6 +452,7 @@ export class PhantasmaLink5 {
    * the wallet-pushed {@link LinkEvent.SessionEstablished} one-tap pairing path). */
   private adoptConnectResult(result: ConnectResult): void {
     this.lastConnect = result;
+    this.lastSeenAt = Date.now();
     this.session.setSessionId(result.session.id);
     this.onSessionChange?.(result);
   }
@@ -561,19 +585,27 @@ export class PhantasmaLink5 {
   /** Drops the session state; the embedder hears `undefined` and deletes what it stored. */
   private clearSession(): void {
     this.lastConnect = undefined;
+    this.lastSeenAt = undefined;
     this.session.setSessionId(undefined);
     this.onSessionChange?.(undefined);
   }
 
-  /** Keeps the session in step with an answer from the wallet to a request made in
-   * `sentSession`: some errors say the session is over (spec §7). */
+  /** Keeps the session in step with the outcome of a request made in `sentSession`. Every answer
+   * from the wallet is activity (spec §7), an error answer too, and some errors say the session is
+   * over. An error the client reports itself (spec §10) is no answer and changes nothing. */
   private noteAnswer(sentSession: string | undefined, error?: unknown): void {
     if (sentSession === undefined || sentSession !== this.session.getSessionId()) {
       return;
     }
+    if (error !== undefined && !isWalletAnswer(error)) {
+      return;
+    }
     if (error instanceof LinkError && SESSION_ENDED_CODES.has(error.code)) {
       this.endSession();
+      return;
     }
+    this.lastSeenAt = Date.now();
+    this.onActivity?.();
   }
 
   // The wallet's result is `unknown` on the wire; we cast to the method's contract type. The
@@ -581,6 +613,14 @@ export class PhantasmaLink5 {
   // layered on later without changing call sites. `params` is `object` so typed param
   // interfaces (which lack an index signature) are accepted, then forwarded as a plain record.
   private async request<T>(method: string, params?: object): Promise<T> {
+    // Spec §7: a session past its lifetime or the inactivity limit is over on this side too. On
+    // a keyed channel the wallet dropped the pairing as well, so nothing would ever answer.
+    if (
+      this.session.getSessionId() !== undefined &&
+      sessionLapsed(this.lastConnect?.session.expiresAt, this.lastSeenAt, this.idleTtlMs)
+    ) {
+      this.endSession();
+    }
     // Everything up to the first await runs at once: the frame is sealed and sent before the
     // caller's next statement (disconnect() relies on it).
     const sentSession = this.session.getSessionId();
@@ -596,6 +636,34 @@ export class PhantasmaLink5 {
       throw error;
     }
   }
+}
+
+/** Returns the inactivity limit of the options, or throws `-32602` for a value that is no positive
+ * finite number: spec §7 ends every session by inactivity, and a limit of 0 would end it at the
+ * next request. */
+function readIdleTtl(value: number | undefined): number {
+  const idleTtlMs = value ?? SESSION_IDLE_TTL_MS;
+  if (typeof idleTtlMs !== 'number' || !Number.isFinite(idleTtlMs) || idleTtlMs <= 0) {
+    throw new LinkError(
+      LinkErrorCode.InvalidParams,
+      'idleTtlMs must be a positive number of milliseconds'
+    );
+  }
+  return idleTtlMs;
+}
+
+/** Whether a session is over by the client's clock (spec §7): its lifetime ended at `expiresAt`,
+ * or `idleTtlMs` passed since the last answer from the wallet. An unknown time sets no limit. */
+function sessionLapsed(
+  expiresAt: number | null | undefined,
+  lastSeenAt: number | undefined,
+  idleTtlMs: number
+): boolean {
+  const now = Date.now();
+  return (
+    (typeof expiresAt === 'number' && now >= expiresAt) ||
+    (lastSeenAt !== undefined && now - lastSeenAt >= idleTtlMs)
+  );
 }
 
 /** Returns the session id that an event's `data` names, or undefined. */

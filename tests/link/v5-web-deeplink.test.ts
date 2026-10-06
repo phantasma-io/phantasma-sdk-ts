@@ -1,13 +1,19 @@
+import { jest } from '@jest/globals';
 import { PhantasmaLink5 } from '../../src/link/v5/client.js';
 import { LinkError, LinkErrorCode } from '../../src/link/v5/errors.js';
-import { PLV, DEFAULT_LINK_HOST } from '../../src/link/v5/protocol.js';
+import { PLV, DEFAULT_LINK_HOST, SESSION_IDLE_TTL_MS } from '../../src/link/v5/protocol.js';
 import { parsePairingUri } from '../../src/link/v5/pairing.js';
-import { parseRequestUrl, buildResponseUrl } from '../../src/link/v5/deeplink.js';
+import {
+  parseRequestUrl,
+  buildResponseUrl,
+  DEEPLINK_REQUEST_TIMEOUT_MS,
+} from '../../src/link/v5/deeplink.js';
 import {
   WebDeeplinkOptions,
   WebDeeplinkRecord,
   WEB_DEEPLINK_STORAGE_KEY,
 } from '../../src/link/v5/web-deeplink.js';
+import type { LinkTransport } from '../../src/link/v5/transport.js';
 import { base64UrlToBytes } from '../../src/link/v5/encoding.js';
 import {
   sealEnvelopeText,
@@ -83,6 +89,13 @@ class FakeWebEnv {
   }
 }
 
+/** A transport that sends nothing anywhere, for checks of the client's options. */
+class FakeTransportForIdle implements LinkTransport {
+  send(): void {}
+  onMessage(): void {}
+  close(): void {}
+}
+
 /** "Wallet side" of a hop: unseal the request frame from the URL the client opened. */
 function unsealRequest(
   url: string,
@@ -108,11 +121,14 @@ function errorUrl(record: WebDeeplinkRecord, key: Uint8Array, id: string, code: 
 }
 
 /** Runs a first connect; resolves with the client and the pairing key. */
-async function connected(env: FakeWebEnv): Promise<{ client: PhantasmaLink5; key: Uint8Array }> {
+async function connected(
+  env: FakeWebEnv,
+  connectResult: unknown = CONNECT_RESULT
+): Promise<{ client: PhantasmaLink5; key: Uint8Array }> {
   const client = await PhantasmaLink5.webDeeplink({ dapp: DAPP, ...env.options() });
   const key = base64UrlToBytes(env.record().key);
   const connecting = client.connect();
-  respond(env, key, unsealRequest(env.opened[0], key).envelope.id, CONNECT_RESULT);
+  respond(env, key, unsealRequest(env.opened[0], key).envelope.id, connectResult);
   await connecting;
   return { client, key };
 }
@@ -249,6 +265,129 @@ describe('PhantasmaLink5.webDeeplink', () => {
     expect(env.opened).toHaveLength(1); // only the connect
   });
 
+  // Spec §7: a stored session without an answer for the inactivity limit is over; the factory
+  // does not resume it and pairs afresh. Every answer moves the limit.
+  it('expires a stored session by inactivity and slides it on every answer', async () => {
+    const start = Date.UTC(2026, 9, 1);
+    jest.useFakeTimers({ now: start });
+    try {
+      const env = new FakeWebEnv();
+      const { client, key } = await connected(env);
+      expect(env.record().lastSeenAt).toBe(start);
+
+      jest.setSystemTime(start + SESSION_IDLE_TTL_MS - 1);
+      const chains = client.getChains();
+      respond(env, key, unsealRequest(env.opened[1], key).envelope.id, {
+        chains: [],
+        current: '',
+        nexus: 'x',
+      });
+      await chains;
+      expect(env.record().lastSeenAt).toBe(start + SESSION_IDLE_TTL_MS - 1);
+      client.close();
+
+      // Past the first limit, within the slid one: the session resumes.
+      jest.setSystemTime(start + SESSION_IDLE_TTL_MS + 1000);
+      const resumed = await PhantasmaLink5.webDeeplink({ dapp: DAPP, ...env.options() });
+      expect(resumed.account?.address).toBe('P2KTestAddr');
+      const topic = env.record().topic;
+      resumed.close();
+
+      // A full limit after the last answer: a new pairing, no session.
+      jest.setSystemTime(start + 2 * SESSION_IDLE_TTL_MS - 1);
+      const fresh = await PhantasmaLink5.webDeeplink({ dapp: DAPP, ...env.options() });
+      expect(fresh.account).toBeUndefined();
+      expect(env.record().topic).not.toBe(topic);
+      expect(env.record().sessionId).toBeUndefined();
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  // Spec §7, §10: an error answer from the wallet is activity as well, even with a code that the
+  // client also reports itself (4900 from a locked wallet). A timeout is no answer.
+  // Spec §7: every session ends by inactivity. A limit of 0 would end the session at the next
+  // request, and Infinity would never end it.
+  it('refuses an inactivity limit that is no positive number', async () => {
+    for (const idleTtlMs of [0, -1, Number.NaN, Number.POSITIVE_INFINITY]) {
+      const env = new FakeWebEnv();
+      await expect(
+        PhantasmaLink5.webDeeplink({ dapp: DAPP, ...env.options(), idleTtlMs })
+      ).rejects.toMatchObject({ code: LinkErrorCode.InvalidParams });
+      expect(() => new PhantasmaLink5(new FakeTransportForIdle(), { idleTtlMs })).toThrow(
+        LinkError
+      );
+    }
+  });
+
+  it('slides the inactivity limit on an error answer, not on a timeout', async () => {
+    const start = Date.UTC(2026, 9, 1);
+    jest.useFakeTimers({ now: start });
+    try {
+      const env = new FakeWebEnv();
+      const { client, key } = await connected(env);
+
+      jest.setSystemTime(start + 1000);
+      const locked = client.getChains();
+      const { envelope } = unsealRequest(env.opened[1], key);
+      env.navigate(errorUrl(env.record(), key, envelope.id, LinkErrorCode.Disconnected));
+      await expect(locked).rejects.toMatchObject({ code: LinkErrorCode.Disconnected });
+      expect(env.record().lastSeenAt).toBe(start + 1000);
+
+      const unanswered = client.getChains();
+      jest.advanceTimersByTime(DEEPLINK_REQUEST_TIMEOUT_MS);
+      await expect(unanswered).rejects.toMatchObject({ code: LinkErrorCode.Timeout });
+      expect(env.record().lastSeenAt).toBe(start + 1000);
+      client.close();
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  // Spec §7: the lifetime the user picked ends the session at `expiresAt`.
+  it('does not resume a stored session past its expiresAt', async () => {
+    const start = Date.UTC(2026, 9, 1);
+    jest.useFakeTimers({ now: start });
+    try {
+      const env = new FakeWebEnv();
+      const hour = 60 * 60 * 1000;
+      const { client } = await connected(env, {
+        ...CONNECT_RESULT,
+        session: { id: 'sess-1', expiresAt: start + hour },
+      });
+      client.close();
+      const topic = env.record().topic;
+
+      jest.setSystemTime(start + hour);
+      const fresh = await PhantasmaLink5.webDeeplink({ dapp: DAPP, ...env.options() });
+      expect(fresh.account).toBeUndefined();
+      expect(env.record().topic).not.toBe(topic);
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  // A session that runs out while the page stays open ends at the next request: nothing is
+  // sent to a wallet that dropped the pairing, and the request fails at once.
+  it('ends the pairing when the session lapses in an open page', async () => {
+    const start = Date.UTC(2026, 9, 1);
+    jest.useFakeTimers({ now: start });
+    try {
+      const env = new FakeWebEnv();
+      const { client } = await connected(env);
+
+      jest.setSystemTime(start + SESSION_IDLE_TTL_MS);
+      await expect(client.getChains()).rejects.toMatchObject({
+        code: LinkErrorCode.Disconnected,
+      });
+      expect(env.opened).toHaveLength(1);
+      expect(client.isClosed).toBe(true);
+      expect(env.store.has(WEB_DEEPLINK_STORAGE_KEY)).toBe(false);
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
   // Spec §7: 5100, 5101 and 4100 to a request in the session mean the wallet ended it.
   it('ends the session and the pairing on a 5100 answer', async () => {
     const env = new FakeWebEnv();
@@ -321,6 +460,28 @@ describe('PhantasmaLink5.webDeeplink', () => {
     );
     await PhantasmaLink5.webDeeplink({ dapp: DAPP, ...env.options() });
     expect(env.record().topic).not.toBe('t');
+
+    // So is a session without the time of its last activity: it could never expire.
+    env.storage.setItem(
+      WEB_DEEPLINK_STORAGE_KEY,
+      JSON.stringify({ ...regenerated, topic: 'u', sessionId: 'sess-1' })
+    );
+    await PhantasmaLink5.webDeeplink({ dapp: DAPP, ...env.options() });
+    expect(env.record().topic).not.toBe('u');
+
+    // And a cached connect result without its session.
+    env.storage.setItem(
+      WEB_DEEPLINK_STORAGE_KEY,
+      JSON.stringify({
+        ...regenerated,
+        topic: 'w',
+        sessionId: 'sess-1',
+        lastSeenAt: Date.now(),
+        lastConnect: { account: {} },
+      })
+    );
+    await PhantasmaLink5.webDeeplink({ dapp: DAPP, ...env.options() });
+    expect(env.record().topic).not.toBe('w');
   });
 
   // ONE-TAP first connection (spec §17 step 3): right after the pairing approval the

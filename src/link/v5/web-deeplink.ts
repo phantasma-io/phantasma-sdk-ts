@@ -52,6 +52,10 @@ export interface WebDeeplinkOptions {
   callback?: string;
   /** Per-request timeout; the web default is 5 minutes (an app switch + human consent). */
   requestTimeoutMs?: number;
+  /** How long a session may go without an answer from the wallet before it ends, in
+   * milliseconds (spec §7); default 7 days. A stored session past it is not resumed. A value that
+   * is no positive finite number is refused with `-32602`. */
+  idleTtlMs?: number;
   /** Optional diagnostic sink for the deeplink lifecycle (return-URL matched / ignored, frame
    * drops, events received). METADATA ONLY - never the symKey or sealed payload. Default: no-op.
    * A host can wire this to surface why a deeplink return did or did not land. */
@@ -75,6 +79,9 @@ export interface WebDeeplinkRecord {
   /** Cache of the last ConnectResult so a reloaded page can show the account without a
    * URL hop; refreshed by every successful connect. */
   lastConnect?: ConnectResult;
+  /** Unix milliseconds of the last answer from the wallet in the session, for the inactivity
+   * expiry of spec §7. Present whenever `sessionId` is. */
+  lastSeenAt?: number;
 }
 
 /** Resolved platform hooks (options merged with browser defaults). */
@@ -215,6 +222,20 @@ export function loadWebDeeplinkRecord(
   }
   if (record.sessionId !== undefined && typeof record.sessionId !== 'string') {
     return null;
+  }
+  // Without the time of its last activity a stored session could never expire (spec §7).
+  if (
+    record.sessionId !== undefined &&
+    (typeof record.lastSeenAt !== 'number' || !Number.isFinite(record.lastSeenAt))
+  ) {
+    return null;
+  }
+  // The cached connect result is read for its session's lifetime (spec §7).
+  if (record.lastConnect !== undefined) {
+    const session = (record.lastConnect as { session?: unknown } | null)?.session;
+    if (typeof session !== 'object' || session === null) {
+      return null;
+    }
   }
   // The key must decode to exactly one secretbox key, or nothing sealed with it could
   // ever be opened - regenerating the pairing is the only way forward.

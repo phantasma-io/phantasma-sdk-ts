@@ -12,6 +12,9 @@ export const DEFAULT_LINK_HOST = 'link.phantasma.info';
 /** The chain's largest transaction, in bytes: the size budget of the protocol (spec §1, §11). */
 export const MAX_TX_BYTES = 32 * 1024 * 1024;
 
+/** Default inactivity limit of a session, in milliseconds: 7 days (spec §7). */
+export const SESSION_IDLE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+
 /** Request methods (dApp -> wallet). Namespaced `pha_*`, EIP-1193-aligned (spec §9). */
 export const LinkMethod = {
   /** Pair or resume a session; returns the capability handshake + account + session. */

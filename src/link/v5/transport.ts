@@ -23,6 +23,7 @@ import {
   openEnvelopeText,
   randomToken,
 } from './session-crypto.js';
+import { walletAnswerError } from './wallet-answer.js';
 
 /** The transports of spec §6, named as in `maxPayloadBytes` (spec §5). */
 export type TransportKind = 'injected' | 'loopback' | 'deeplink' | 'relay';
@@ -311,7 +312,7 @@ export class LinkSessionClient {
     }
 
     if (isLinkErrorResponse(message)) {
-      pending.reject(LinkError.fromObject(message.error));
+      pending.reject(walletAnswerError(message.error));
     } else if (isLinkSuccessResponse(message)) {
       pending.resolve(message.result);
     } else {
