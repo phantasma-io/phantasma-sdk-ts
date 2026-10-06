@@ -208,7 +208,15 @@ export class LinkSessionClient {
     // A LinkError from the transport keeps its code: the transport knows the reason, as with
     // a frame too large for the relay (5001). Any other failure means the wallet is out of
     // reach.
-    Promise.resolve(this.transport.send(this.encodeOutgoing(envelope))).catch((err: unknown) => {
+    let sent: void | Promise<void>;
+    try {
+      sent = this.transport.send(this.encodeOutgoing(envelope));
+    } catch (err) {
+      // A refusal at once (a deeplink above the URL budget, a closed transport) settles this
+      // request like a later rejection; otherwise its timer would fire on a promise nobody holds.
+      sent = Promise.reject(err);
+    }
+    Promise.resolve(sent).catch((err: unknown) => {
       this.settleError(
         id,
         err instanceof LinkError

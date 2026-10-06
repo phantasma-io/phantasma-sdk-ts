@@ -165,6 +165,25 @@ describe('LinkSessionClient robustness', () => {
     });
   });
 
+  // A transport that refuses at once (a deeplink above the URL budget) settles the request
+  // with its error, and no timer is left to fire on a promise that nobody holds.
+  it('settles the pending request when send() throws', async () => {
+    jest.useFakeTimers();
+    try {
+      const transport = new MockTransport();
+      transport.send = () => {
+        throw new LinkError(LinkErrorCode.PayloadTooLarge, 'too long', { maxPayloadBytes: 3072 });
+      };
+      const client = new LinkSessionClient(transport, { requestTimeoutMs: 1000 });
+
+      const request = client.request('pha_getChains');
+      await expect(request).rejects.toMatchObject({ code: LinkErrorCode.PayloadTooLarge });
+      expect(jest.getTimerCount()).toBe(0);
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
   // One throwing event handler must not prevent other handlers from receiving the event.
   it('isolates exceptions thrown by event handlers', () => {
     const transport = new MockTransport();
