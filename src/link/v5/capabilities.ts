@@ -13,9 +13,9 @@ export interface DappMetadata {
   description?: string;
 }
 
-/** Per transport, the size in bytes of the largest serialized transaction the wallet accepts
- * in one request (spec §11). Lets a dApp check a large (image-bearing) transaction against the
- * wallet's real limit before sending. */
+/** Per transport, the size in bytes of the largest payload the wallet accepts in one request
+ * (spec §11): the serialized transaction, the message to sign or the script. Lets a dApp check a
+ * large (image-bearing) transaction against the wallet's real limit before sending. */
 export interface MaxPayloadBytes {
   relay?: number;
   deeplink?: number;

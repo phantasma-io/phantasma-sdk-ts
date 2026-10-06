@@ -45,6 +45,7 @@ function defaultWebSocketFactory(url: string): WebSocketLike {
 /** A {@link LinkTransport} over a local WebSocket to the wallet. Sends are buffered until the
  * socket opens, then flushed, so callers can issue requests immediately after construction. */
 export class LoopbackTransport implements LinkTransport {
+  readonly kind = 'loopback';
   private readonly socket: WebSocketLike;
   private messageHandler?: (frame: string) => void;
   private closeHandler?: (reason?: string) => void;

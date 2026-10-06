@@ -96,6 +96,7 @@ export interface DeeplinkTransportOptions {
  * transport's topic to the session client.
  */
 export class DeeplinkTransport implements LinkTransport {
+  readonly kind = 'deeplink';
   private readonly topic: string;
   private readonly opener: (url: string) => void;
   private readonly walletBase: string;

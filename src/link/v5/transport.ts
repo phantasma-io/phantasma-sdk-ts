@@ -24,8 +24,14 @@ import {
   randomToken,
 } from './session-crypto.js';
 
+/** The transports of spec §6, named as in `maxPayloadBytes` (spec §5). */
+export type TransportKind = 'injected' | 'loopback' | 'deeplink' | 'relay';
+
 /** A duplex channel that carries opaque frame strings between dApp and wallet. */
 export interface LinkTransport {
+  /** Which transport this is. The client uses it to find the wallet's size limit for this
+   * transport (spec §11). A custom transport may leave it out. */
+  readonly kind?: TransportKind;
   send(frame: string): void | Promise<void>;
   onMessage(handler: (frame: string) => void): void;
   onClose?(handler: (reason?: string) => void): void;

@@ -48,6 +48,16 @@ export function bytesToBase64(bytes: Uint8Array): string {
   return ASCII_DECODER.decode(out);
 }
 
+/** Returns the number of bytes that the base64 text `input` decodes to, without decoding it.
+ * Padding is optional. */
+export function base64DecodedLength(input: string): number {
+  let dataChars = input.length;
+  while (dataChars > 0 && input.charCodeAt(dataChars - 1) === PAD) {
+    dataChars--;
+  }
+  return Math.floor((dataChars * 3) / 4);
+}
+
 /** Decode standard or url-safe base64 (padding optional) to bytes. Throws on invalid input
  * so a malformed frame fails loudly rather than silently producing garbage. */
 export function base64ToBytes(input: string): Uint8Array {

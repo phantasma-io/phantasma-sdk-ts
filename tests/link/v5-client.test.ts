@@ -1,7 +1,8 @@
 import { PhantasmaLink5 } from '../../src/link/v5/client.js';
 import { LoopbackTransport, WebSocketLike } from '../../src/link/v5/loopback-transport.js';
 import { LinkTransport } from '../../src/link/v5/transport.js';
-import { PLV } from '../../src/link/v5/protocol.js';
+import { PLV, MAX_TX_BYTES } from '../../src/link/v5/protocol.js';
+import { LinkErrorCode } from '../../src/link/v5/errors.js';
 
 /** In-memory transport: captures outgoing plaintext envelopes, lets a test inject responses. */
 class MockTransport implements LinkTransport {
@@ -25,6 +26,11 @@ class MockTransport implements LinkTransport {
   } {
     return JSON.parse(this.sent[this.sent.length - 1]);
   }
+}
+
+/** The same mock, named as a loopback transport so the client applies the loopback limit. */
+class KindMockTransport extends MockTransport {
+  readonly kind = 'loopback';
 }
 
 describe('PhantasmaLink5 (cohesive v5 client)', () => {
@@ -374,6 +380,71 @@ describe('PhantasmaLink5 (cohesive v5 client)', () => {
 
     client.close();
     await expect(client.getChains()).rejects.toMatchObject({ name: 'LinkError' });
+  });
+
+  // Spec §11: a payload above the limit the wallet advertised for this transport (a
+  // transaction, a message to sign or a script) fails with 5001 before anything is sent, and
+  // the error carries the limit.
+  it('refuses a payload above the advertised limit before sending', async () => {
+    const transport = new KindMockTransport();
+    const client = new PhantasmaLink5(transport);
+    const connecting = client.connect({ name: 'dApp', url: 'https://d.app' });
+    transport.inject(
+      JSON.stringify({
+        plv: PLV,
+        id: transport.lastEnvelope().id,
+        result: {
+          wallet: { name: 'W', version: '1' },
+          capabilities: {
+            plvVersions: [5],
+            methods: [],
+            chains: [],
+            txFormats: [],
+            signatureKinds: [],
+            features: [],
+            maxPayloadBytes: { loopback: 3 },
+          },
+          account: { address: 'P2K...' },
+          session: { id: 'sess-1', expiresAt: null },
+        },
+      })
+    );
+    await connecting;
+    const sentBefore = transport.sent.length;
+
+    await expect(
+      client.signTransaction({ format: 'script', tx: 'AAAAAA==' })
+    ).rejects.toMatchObject({ code: LinkErrorCode.PayloadTooLarge, data: { maxPayloadBytes: 3 } });
+    await expect(
+      client.sendTransaction({ format: 'script', tx: 'AAAAAA==' })
+    ).rejects.toMatchObject({ code: LinkErrorCode.PayloadTooLarge });
+    await expect(client.signMessage({ message: 'AAAAAA==' })).rejects.toMatchObject({
+      code: LinkErrorCode.PayloadTooLarge,
+      data: { maxPayloadBytes: 3 },
+    });
+    await expect(client.invokeScript({ chain: 'main', script: 'AAAAAA==' })).rejects.toMatchObject({
+      code: LinkErrorCode.PayloadTooLarge,
+    });
+    expect(transport.sent.length).toBe(sentBefore);
+
+    const fitting = client.signTransaction({ format: 'script', tx: 'AAAA' }); // 3 bytes fit
+    expect(transport.sent.length).toBe(sentBefore + 1);
+    transport.inject(
+      JSON.stringify({ plv: PLV, id: transport.lastEnvelope().id, result: { signedTx: 'AAAA' } })
+    );
+    await expect(fitting).resolves.toEqual({ signedTx: 'AAAA' });
+  });
+
+  // Without a connect result the chain maximum of 32 MiB still applies (spec §11).
+  it('refuses a transaction above the chain maximum', async () => {
+    const transport = new KindMockTransport();
+    const client = new PhantasmaLink5(transport);
+    const tx = 'A'.repeat(4 * Math.ceil((MAX_TX_BYTES + 3) / 3));
+    await expect(client.sendTransaction({ format: 'carbon', tx })).rejects.toMatchObject({
+      code: LinkErrorCode.PayloadTooLarge,
+      data: { maxPayloadBytes: MAX_TX_BYTES },
+    });
+    expect(transport.sent).toHaveLength(0);
   });
 
   // The loopback factory builds a working client over an injected WebSocket.

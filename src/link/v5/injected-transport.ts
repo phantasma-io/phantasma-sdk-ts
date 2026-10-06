@@ -66,6 +66,7 @@ export interface InjectedTransportOptions {
  * reports to the caller as `4900` (spec §6.1).
  */
 export class InjectedTransport implements LinkTransport {
+  readonly kind = 'injected';
   private readonly provider: PhantasmaLinkProvider;
   private messageHandler?: (frame: string) => void;
   private closeHandler?: (reason?: string) => void;

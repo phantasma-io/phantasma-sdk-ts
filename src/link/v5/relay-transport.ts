@@ -15,7 +15,7 @@
 
 import { LinkError, LinkErrorCode } from './errors.js';
 import { LinkTransport } from './transport.js';
-import { DEFAULT_LINK_HOST } from './protocol.js';
+import { DEFAULT_LINK_HOST, MAX_TX_BYTES } from './protocol.js';
 import { WebSocketLike, WebSocketFactory } from './loopback-transport.js';
 import { randomToken } from './session-crypto.js';
 
@@ -29,9 +29,6 @@ export const RELAY_CHUNK_BYTES = 900_000;
 /** The slowest uplink that the ack timeout of a publish allows for, in bytes per second: 16 KiB/s,
  * a weak mobile connection. A whole chunk then takes about 55 s to leave the device. */
 const SLOW_UPLINK_BYTES_PER_S = 16 * 1024;
-
-/** The largest transaction the relay carries: the chain maximum (spec §11). */
-const MAX_TX_BYTES = 32 * 1024 * 1024;
 
 /** Room for the envelope around the transaction: the method, the ids, the other params,
  * and the signatures that a signed transaction adds. */
@@ -117,6 +114,7 @@ function defaultWebSocketFactory(url: string): WebSocketLike {
  * about a relay error that refuses this transport's subscription.
  */
 export class RelayTransport implements LinkTransport {
+  readonly kind = 'relay';
   private readonly topic: string;
   private readonly url: string;
   private readonly factory: WebSocketFactory;

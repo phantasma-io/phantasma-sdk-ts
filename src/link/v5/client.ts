@@ -3,7 +3,7 @@
 // typed `pha_*` methods are all part of this one client. Build it directly with any transport,
 // or use the `loopback()` factory for the desktop case.
 
-import { LinkMethod, LinkEvent } from './protocol.js';
+import { LinkMethod, LinkEvent, MAX_TX_BYTES } from './protocol.js';
 import {
   LinkTransport,
   LinkSessionClient,
@@ -42,7 +42,7 @@ import {
 import { RelayTransport, RelayTransportOptions, DEFAULT_RELAY_URL } from './relay-transport.js';
 import { LinkError, LinkErrorCode } from './errors.js';
 import { buildPairingUri } from './pairing.js';
-import { base64UrlToBytes } from './encoding.js';
+import { base64DecodedLength, base64UrlToBytes } from './encoding.js';
 import {
   WebDeeplinkOptions,
   resolveWebDeeplinkHooks,
@@ -380,22 +380,60 @@ export class PhantasmaLink5 {
   }
 
   signMessage(params: SignMessageParams): Promise<SignMessageResult> {
-    return this.request<SignMessageResult>(LinkMethod.SignMessage, params);
+    return this.requestWithPayload<SignMessageResult>(
+      LinkMethod.SignMessage,
+      params,
+      params.message
+    );
   }
 
   /** Sign a transaction without broadcasting; the dApp submits the returned signed tx. */
   signTransaction(params: SignTransactionParams): Promise<SignTransactionResult> {
-    return this.request<SignTransactionResult>(LinkMethod.SignTransaction, params);
+    return this.requestWithPayload<SignTransactionResult>(
+      LinkMethod.SignTransaction,
+      params,
+      params.tx
+    );
   }
 
   /** Sign AND broadcast a transaction via the format's RPC endpoint. */
   sendTransaction(params: SendTransactionParams): Promise<SendTransactionResult> {
-    return this.request<SendTransactionResult>(LinkMethod.SendTransaction, params);
+    return this.requestWithPayload<SendTransactionResult>(
+      LinkMethod.SendTransaction,
+      params,
+      params.tx
+    );
+  }
+
+  /** Sends a request that carries a payload in base64: a transaction, a message or a script.
+   * Spec §11: the client refuses a payload above the chain maximum or above the limit the
+   * wallet advertised for this transport with `5001` before sending, so the dApp gets a clear
+   * error instead of a failure somewhere on the way. Without a connect result or a transport
+   * kind only the chain maximum applies. */
+  private requestWithPayload<T>(method: string, params: object, payload: string): Promise<T> {
+    const size = base64DecodedLength(payload);
+    const kind = this.transport.kind;
+    const advertised = kind ? this.lastConnect?.capabilities.maxPayloadBytes?.[kind] : undefined;
+    const limit = advertised === undefined ? MAX_TX_BYTES : Math.min(advertised, MAX_TX_BYTES);
+    if (size > limit) {
+      return Promise.reject(
+        new LinkError(
+          LinkErrorCode.PayloadTooLarge,
+          `${method}: payload of ${size} bytes exceeds the limit of ${limit} bytes`,
+          { maxPayloadBytes: limit }
+        )
+      );
+    }
+    return this.request<T>(method, params);
   }
 
   /** Read-only VM invoke (no keys, no approval). */
   invokeScript(params: InvokeScriptParams): Promise<InvokeScriptResult> {
-    return this.request<InvokeScriptResult>(LinkMethod.InvokeScript, params);
+    return this.requestWithPayload<InvokeScriptResult>(
+      LinkMethod.InvokeScript,
+      params,
+      params.script
+    );
   }
 
   async disconnect(): Promise<DisconnectResult> {

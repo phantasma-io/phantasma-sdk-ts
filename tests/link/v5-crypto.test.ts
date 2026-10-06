@@ -3,6 +3,7 @@ import nacl from 'tweetnacl';
 import {
   bytesToBase64,
   base64ToBytes,
+  base64DecodedLength,
   bytesToBase64Url,
   base64UrlToBytes,
   utf8ToBytes,
@@ -26,6 +27,14 @@ import {
 import { LinkError } from '../../src/link/v5/errors.js';
 
 describe('v5 encoding (base64 / base64url)', () => {
+  // The size check of spec §11 counts the decoded bytes without decoding: padded, unpadded and
+  // empty text must give the same count as a real decode.
+  it('counts the decoded length of base64 text', () => {
+    for (const text of ['', 'AAAA', 'AAAAAA==', 'AAAAAAA=', 'AAAAAA', 'AAAAAAA', 'Zm9vYmFy']) {
+      expect(base64DecodedLength(text)).toBe(base64ToBytes(text).length);
+    }
+  });
+
   // Round-trips must be exact for the byte ranges the channel actually carries.
   it('round-trips arbitrary bytes through standard base64', () => {
     for (let len = 0; len < 40; len++) {
