@@ -102,17 +102,21 @@ export class PhantasmaLink5 {
     // unsolicited event right after the pairing approval, instead of waiting for an
     // explicit pha_connect. Adopt it exactly like a connect result so the session is
     // live (and persisted via onSessionChange) the moment the event arrives.
-    this.session.onEvent((event, data) => {
+    this.session.onEvent((event, data, session) => {
       if (event === LinkEvent.SessionEstablished && isConnectResult(data)) {
         this.adoptConnectResult(data);
       } else if (event === LinkEvent.SessionDeleted || event === LinkEvent.SessionExpired) {
-        // The wallet tore this session down (user revoke / LRU evict / idle expiry) and notified us
+        // The wallet tore a session down (user revoke / LRU evict / idle expiry) and notified us
         // over the channel. Drop our session so a reload cannot resume a dead one: forgetSession
         // clears lastConnect + the session id and fires onSessionChange(undefined), which also drops
-        // the persisted web-deeplink record. The deleted id rides the envelope `session` field, not
-        // `data` (the wallet sends data:{}), so no payload is needed - the frame already decrypted
-        // with this session's channel key, which authenticates it as ours.
-        this.forgetSession();
+        // the persisted web-deeplink record. The ended id rides the envelope `session` field or
+        // `data.session` (spec §9.5). A notice for another session (an older one on the same
+        // channel) must not drop the live one; a notice that names no session is ours, because
+        // it decrypted with this channel's key.
+        const ended = session ?? sessionOf(data);
+        if (ended === undefined || ended === this.session.getSessionId()) {
+          this.forgetSession();
+        }
       }
     });
   }
@@ -485,6 +489,15 @@ export class PhantasmaLink5 {
       params as Record<string, unknown> | undefined
     ) as Promise<T>;
   }
+}
+
+/** Returns the session id that an event's `data` names, or undefined. */
+function sessionOf(data: unknown): string | undefined {
+  if (data && typeof data === 'object') {
+    const value = (data as { session?: unknown }).session;
+    return typeof value === 'string' ? value : undefined;
+  }
+  return undefined;
 }
 
 /** Structural check for a wallet-pushed connect result before adopting it as session state.

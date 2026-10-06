@@ -366,6 +366,47 @@ describe('PhantasmaLink5 (cohesive v5 client)', () => {
     expect(changes[1]).toBeUndefined();
   });
 
+  // A notice about another session (an older one on the same channel) must not drop the live
+  // session; the notice for the live id does (spec §9.5).
+  it('keeps the live session on a notice about another session', async () => {
+    const transport = new MockTransport();
+    const client = new PhantasmaLink5(transport, { sessionId: 'live' });
+    const answer = () =>
+      transport.inject(
+        JSON.stringify({
+          plv: PLV,
+          id: transport.lastEnvelope().id,
+          result: { chains: [], current: '', nexus: 'x' },
+        })
+      );
+    transport.inject(
+      JSON.stringify({
+        plv: PLV,
+        type: 'event',
+        event: 'pha_sessionExpired',
+        session: 'old',
+        data: { session: 'old' },
+      })
+    );
+    const first = client.getChains();
+    expect(transport.lastEnvelope().session).toBe('live');
+    answer();
+    await first;
+
+    transport.inject(
+      JSON.stringify({
+        plv: PLV,
+        type: 'event',
+        event: 'pha_sessionExpired',
+        data: { session: 'live' },
+      })
+    );
+    const second = client.getChains();
+    expect(transport.lastEnvelope().session).toBeUndefined();
+    answer();
+    await second;
+  });
+
   // Events reach subscribers through the client facade, and close() makes further calls fail.
   it('forwards events and fails fast after close', async () => {
     const transport = new MockTransport();
