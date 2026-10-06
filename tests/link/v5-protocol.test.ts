@@ -10,6 +10,7 @@ import {
 import { LinkError, LinkErrorCode } from '../../src/link/v5/errors.js';
 import { PLV } from '../../src/link/v5/protocol.js';
 import { buildPairingUri, parsePairingUri, PairingParams } from '../../src/link/v5/pairing.js';
+import { bytesToBase64Url } from '../../src/link/v5/encoding.js';
 
 describe('v5 envelope encode/decode', () => {
   // A request envelope must survive a JSON round-trip and be recognized as a request.
@@ -87,7 +88,7 @@ describe('v5 pairing URI', () => {
       topic: 'topic-123',
       mode: 'sym',
       symKey,
-      relay: 'link.phantasma.info',
+      relay: 'wss://link.phantasma.info/relay',
       meta: { name: 'dApp', url: 'https://d.app' },
     });
     expect(uri.startsWith('https://link.phantasma.info/v5/pair#')).toBe(true);
@@ -95,6 +96,7 @@ describe('v5 pairing URI', () => {
     const parsed: PairingParams = parsePairingUri(uri);
     expect(parsed.version).toBe(PLV);
     expect(parsed.topic).toBe('topic-123');
+    expect(parsed.relay).toBe('wss://link.phantasma.info/relay');
     expect(parsed.mode).toBe('sym');
     expect(Array.from(parsed.symKey!)).toEqual(Array.from(symKey));
     expect(parsed.meta?.name).toBe('dApp');
@@ -115,6 +117,24 @@ describe('v5 pairing URI', () => {
     expect(() =>
       buildPairingUri({ topic: 't', mode: 'sym', symKey: new Uint8Array(32), scheme: 'scheme' })
     ).toThrow(LinkError);
+  });
+
+  // Spec §15: a wallet refuses a secret in a custom-scheme URL even when a dApp built one by hand.
+  it('rejects a custom-scheme pairing URI that carries a symmetric key', () => {
+    const sk = bytesToBase64Url(new Uint8Array(32));
+    expect(() => parsePairingUri(`phantasma://v5/pair#v=5&t=x&sk=${sk}`)).toThrow(LinkError);
+  });
+
+  // Spec §15: the relay is a wss:// URL; a plain ws:// relay would expose the topic and the frames.
+  it('rejects a pairing URI whose relay is not a wss URL', () => {
+    const base = 'https://link.phantasma.info/v5/pair#v=5&t=x&sk=AA&relay=';
+    expect(() => parsePairingUri(`${base}${encodeURIComponent('ws://relay.example')}`)).toThrow(
+      LinkError
+    );
+    expect(() => parsePairingUri(`${base}relay.example`)).toThrow(LinkError);
+    expect(parsePairingUri(`${base}${encodeURIComponent('wss://relay.example')}`).relay).toBe(
+      'wss://relay.example'
+    );
   });
 
   it('rejects a pairing URI with the wrong version', () => {

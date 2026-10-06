@@ -89,7 +89,9 @@ export function buildPairingUri(input: BuildPairingUriInput): string {
   return `${base}#${params.toString()}`;
 }
 
-/** Parse a pairing URI (universal-link or custom-scheme) into {@link PairingParams}. */
+/** Parse a pairing URI (universal-link or custom-scheme) into {@link PairingParams}. Refuses
+ * what spec §15 tells a wallet to refuse: a `relay` that is not a `wss://` URL, and a
+ * symmetric key in a `phantasma://` URL, which a scheme-squatting app could read. */
 export function parsePairingUri(uri: string): PairingParams {
   const hashIndex = uri.indexOf('#');
   if (hashIndex < 0) {
@@ -111,6 +113,9 @@ export function parsePairingUri(uri: string): PairingParams {
   }
 
   const relay = params.get('relay') ?? undefined;
+  if (relay !== undefined && !/^wss:\/\//i.test(relay)) {
+    throw new LinkError(LinkErrorCode.InvalidRequest, 'Pairing relay must be a wss:// URL');
+  }
   const callback = params.get('cb') ?? undefined;
 
   let meta: DappMetadata | undefined;
@@ -126,6 +131,12 @@ export function parsePairingUri(uri: string): PairingParams {
   const sk = params.get('sk');
   const pk = params.get('pk');
   if (sk) {
+    if (/^phantasma:/i.test(uri)) {
+      throw new LinkError(
+        LinkErrorCode.InvalidRequest,
+        'A custom-scheme pairing URI must not carry a symmetric key'
+      );
+    }
     return { version, topic, relay, callback, mode: 'sym', symKey: base64UrlToBytes(sk), meta };
   }
   if (pk) {
