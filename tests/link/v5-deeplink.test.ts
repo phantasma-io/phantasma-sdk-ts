@@ -7,7 +7,7 @@ import {
   DeeplinkTransport,
 } from '../../src/link/v5/deeplink.js';
 import { PhantasmaLink5 } from '../../src/link/v5/client.js';
-import { LinkError } from '../../src/link/v5/errors.js';
+import { LinkError, LinkErrorCode } from '../../src/link/v5/errors.js';
 import { PLV } from '../../src/link/v5/protocol.js';
 import {
   generateSessionKey,
@@ -92,6 +92,32 @@ describe('DeeplinkTransport', () => {
     transport.close();
     expect(() => transport.send('x')).toThrow(LinkError);
     expect(transport.deliverUrl(buildResponseUrl('https://d.app/', 't', 'F'))).toBe(false);
+  });
+
+  // Spec §6.3: a request whose `f` value would exceed the URL budget is refused with 5001
+  // and never opened, because an OS or a browser may cut a long URL. A request at the budget
+  // still goes out.
+  it('refuses a request above the URL budget without opening it', () => {
+    const opened: string[] = [];
+    const transport = new DeeplinkTransport({
+      topic: 't',
+      opener: (url) => opened.push(url),
+      urlBudgetChars: 8,
+    });
+    let thrown: unknown;
+    try {
+      transport.send('1234567'); // 7 characters encode to 10
+    } catch (err) {
+      thrown = err;
+    }
+    expect(thrown).toMatchObject({
+      code: LinkErrorCode.PayloadTooLarge,
+      data: { maxUrlChars: 8 },
+    });
+    expect(opened).toHaveLength(0);
+
+    transport.send('123456'); // 6 characters encode to exactly 8
+    expect(opened).toHaveLength(1);
   });
 });
 

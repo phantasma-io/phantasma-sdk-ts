@@ -23,6 +23,13 @@ export const WALLET_SCHEME_BASE = 'phantasma://';
  * would expire the money path while the user is still reading the wallet's Send screen. */
 export const DEEPLINK_REQUEST_TIMEOUT_MS = 300000;
 
+/** Default URL budget for the `f` value of a request URL, in characters (spec §6.3). */
+export const DEEPLINK_URL_BUDGET_CHARS = 8192;
+
+/** Default `maxPayloadBytes.deeplink`: the largest payload whose request fits the default URL
+ * budget, because the payload is encoded three times on this path (spec §11). */
+export const DEEPLINK_MAX_PAYLOAD_BYTES = 3072;
+
 export interface DeeplinkUrls {
   topic: string;
   frame: string;
@@ -84,6 +91,9 @@ export interface DeeplinkTransportOptions {
   opener: (url: string) => void;
   /** Wallet base; defaults to the custom scheme {@link WALLET_SCHEME_BASE}. */
   walletBase?: string;
+  /** Largest `f` value of a request URL, in characters; default
+   * {@link DEEPLINK_URL_BUDGET_CHARS}. */
+  urlBudgetChars?: number;
   /** Optional diagnostic sink for inbound response URLs: whether a delivered URL matched this
    * channel's topic or was ignored (foreign topic / not a v5 response). METADATA ONLY - never the
    * sealed `f` payload. Default: no-op. */
@@ -100,6 +110,7 @@ export class DeeplinkTransport implements LinkTransport {
   private readonly topic: string;
   private readonly opener: (url: string) => void;
   private readonly walletBase: string;
+  private readonly urlBudgetChars: number;
   private readonly log?: (message: string) => void;
   private messageHandler?: (frame: string) => void;
   private closeHandler?: (reason?: string) => void;
@@ -112,12 +123,25 @@ export class DeeplinkTransport implements LinkTransport {
     this.topic = options.topic;
     this.opener = options.opener;
     this.walletBase = options.walletBase ?? WALLET_SCHEME_BASE;
+    this.urlBudgetChars = options.urlBudgetChars ?? DEEPLINK_URL_BUDGET_CHARS;
     this.log = options.log;
   }
 
   send(frame: string): void {
     if (this.closed) {
       throw new LinkError(LinkErrorCode.Disconnected, 'Deeplink transport is closed');
+    }
+    // Spec §6.3: a request whose `f` value exceeds the URL budget never goes out as a URL,
+    // because the OS or the browser may cut it. This transport has no relay to fall back to,
+    // so it refuses with 5001; a client with a relay pairing sends such a request there.
+    // The frame is ASCII, so its base64url text is 4/3 of its length.
+    const encodedChars = Math.ceil((frame.length * 4) / 3);
+    if (encodedChars > this.urlBudgetChars) {
+      throw new LinkError(
+        LinkErrorCode.PayloadTooLarge,
+        `Request of ${encodedChars} characters exceeds the deeplink budget of ${this.urlBudgetChars}`,
+        { maxUrlChars: this.urlBudgetChars }
+      );
     }
     this.opener(buildRequestUrl(this.walletBase, this.topic, frame));
   }
