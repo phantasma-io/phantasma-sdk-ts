@@ -76,14 +76,6 @@ export function stringToUint8Array(str: string): Uint8Array {
   return result;
 }
 
-export function hexStringToUint8Array(str: string): Uint8Array {
-  const result = new Uint8Array(str.length);
-  for (let i = 0; i < str.length; i++) {
-    result[i] = str.charCodeAt(i).toString(16).charCodeAt(0);
-  }
-  return result;
-}
-
 export function arrayNumberToUint8Array(arr: number[]): Uint8Array {
   const result = new Uint8Array(arr.length);
   for (let i = 0; i < arr.length; i++) {

@@ -243,7 +243,6 @@ export {
   encodeBase16,
   formatUnits,
   getDifficulty,
-  hexStringToUint8Array,
   hexToBytes,
   isReservedIdentifier,
   isValidIdentifier,
