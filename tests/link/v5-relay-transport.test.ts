@@ -108,6 +108,57 @@ describe('RelayTransport', () => {
     });
   });
 
+  // A refused subscription (topic_limit, no publish id) means that no answer can ever arrive
+  // on this topic: the transport ends, every request in flight fails with 4900, and the
+  // session layer learns the reason (spec §16).
+  it('ends the transport when the relay refuses the subscription', async () => {
+    const { transport, sockets } = harness({ log: () => {} });
+    const closed: Array<string | undefined> = [];
+    transport.onClose((reason) => closed.push(reason));
+    const socket = sockets[0];
+    socket.open();
+
+    const sendPromise = transport.send('FRAME-1');
+    socket.receive({ op: 'error', code: 'topic_limit', message: 'Too many topics' });
+    await expect(sendPromise).rejects.toMatchObject({ code: LinkErrorCode.Disconnected });
+    expect(closed).toHaveLength(1);
+    expect(closed[0]).toContain('topic_limit');
+    await expect(transport.send('FRAME-2')).rejects.toMatchObject({
+      code: LinkErrorCode.Disconnected,
+    });
+  });
+
+  // Any other error without a publish id (here the rate limit) fails the publishes in flight
+  // with 4900, so they are not re-sent into the same limit; the transport stays usable.
+  it('fails the publishes in flight on a relay error without a publish id', async () => {
+    const { transport, sockets } = harness({ log: () => {} });
+    const socket = sockets[0];
+    socket.open();
+
+    const sendPromise = transport.send('FRAME-1');
+    socket.receive({ op: 'error', code: 'rate_limited', message: 'Inbound frame rate exceeded' });
+    await expect(sendPromise).rejects.toMatchObject({ code: LinkErrorCode.Disconnected });
+
+    const next = transport.send('FRAME-2');
+    socket.receive({ op: 'ack', topic: 'top-1', id: 'p2' });
+    await expect(next).resolves.toBeUndefined();
+  });
+
+  // An error that names a publish this transport no longer waits for (it timed out, or it was
+  // re-sent after a reconnect and acknowledged) is logged and fails nothing in flight.
+  it('fails nothing in flight on an error for a publish it no longer waits for', async () => {
+    const logged: string[] = [];
+    const { transport, sockets } = harness({ log: (message) => logged.push(message) });
+    const socket = sockets[0];
+    socket.open();
+
+    const sendPromise = transport.send('FRAME-1');
+    socket.receive({ op: 'error', code: 'hold_limit', message: 'Held bytes', id: 'p99' });
+    socket.receive({ op: 'ack', topic: 'top-1.dapp', id: 'p1' });
+    await expect(sendPromise).resolves.toBeUndefined();
+    expect(logged).toEqual(['relay error code=hold_limit: Held bytes']);
+  });
+
   // Frames published before the socket opened must go out right after the subscribe.
   it('queues publishes until open, then flushes after the subscribe', async () => {
     const { transport, sockets } = harness();

@@ -113,7 +113,8 @@ function defaultWebSocketFactory(url: string): WebSocketLike {
  * {@link LinkTransport} over the Phantasma Link relay. `send` resolves once the relay
  * acknowledged the publish (or rejects on timeout/close); incoming `deliver` frames are
  * surfaced to the session client after chunk reassembly. Transient socket drops are
- * absorbed by reconnection - the session layer only learns about an explicit close().
+ * absorbed by reconnection. The session layer learns only about an explicit close() and
+ * about a relay error that refuses this transport's subscription.
  */
 export class RelayTransport implements LinkTransport {
   private readonly topic: string;
@@ -194,6 +195,12 @@ export class RelayTransport implements LinkTransport {
   }
 
   close(): void {
+    this.shutDown('Relay transport closed');
+  }
+
+  /** Stops the transport for good: no reconnect, every pending publish fails with `reason`,
+   * and the session layer learns the reason once. */
+  private shutDown(reason: string): void {
     if (this.closed) {
       return;
     }
@@ -201,15 +208,15 @@ export class RelayTransport implements LinkTransport {
     if (this.reconnectTimer) {
       clearTimeout(this.reconnectTimer);
     }
-    this.rejectAllPending('Relay transport closed');
+    this.rejectAllPending(reason);
     try {
       this.socket?.close();
     } catch {
       // Closing an already-closed socket is harmless.
     }
     // The session layer learns about closure exactly once, and only for an explicit
-    // close - transient drops are hidden behind reconnection.
-    this.closeHandler?.('Relay transport closed');
+    // close or a fatal relay error - transient drops are hidden behind reconnection.
+    this.closeHandler?.(reason);
   }
 
   // --- connection lifecycle -------------------------------------------------------
@@ -355,13 +362,26 @@ export class RelayTransport implements LinkTransport {
           return;
         }
         // No publish matches this error (e.g. a subscribe refusal like topic_limit, which carries
-        // no publish id). Spec §16 requires clients to surface error frames, not drop them - a
-        // silent drop is exactly what let a refused subscribe hang. We do NOT force a close here
-        // (a fatal error is followed by the server closing, which the reconnect path handles);
-        // surfacing keeps the failure visible instead of invisible.
+        // no publish id). Spec §16 requires clients to surface error frames and to fail the
+        // affected session or operation, never to drop them - a silent drop is exactly what let a
+        // refused subscribe hang.
         const code = (frame as { code?: unknown }).code;
         const detail = `relay error${typeof code !== 'undefined' ? ` code=${String(code)}` : ''}${typeof message === 'string' ? `: ${message}` : ''}`;
         (this.log ?? ((m: string) => console.warn(`[phantasma-link relay] ${m}`)))(detail);
+        if (typeof frame.id === 'string') {
+          // The error refuses a publish that no longer waits here: one that timed out, or one of a
+          // socket before a reconnect. The publishes in flight are not its subject.
+          return;
+        }
+        if (code === 'topic_limit') {
+          // The relay refused this topic, so no answer can ever arrive on it: end the transport,
+          // and every request in flight fails with 4900.
+          this.shutDown(detail);
+        } else {
+          // Any other error ends this connection on the relay side. The publishes in flight fail
+          // now with 4900; re-sending them after the reconnect would meet the same refusal.
+          this.rejectAllPending(detail);
+        }
         return;
       }
       default:
