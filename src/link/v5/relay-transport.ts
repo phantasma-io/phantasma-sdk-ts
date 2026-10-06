@@ -198,6 +198,27 @@ export class RelayTransport implements LinkTransport {
     return !this.closed && this.socket?.readyState === 1;
   }
 
+  /** Connects now when the socket is neither open nor connecting, instead of waiting for the
+   * next step of the backoff. A wallet calls it when the wake link brings it to the front (spec
+   * §6.4, §17); publishes that wait for an ack go out on the new socket. */
+  reconnect(): void {
+    const socket = this.socket;
+    if (this.closed || (socket !== undefined && socket.readyState <= 1)) {
+      return;
+    }
+    if (this.reconnectTimer) {
+      clearTimeout(this.reconnectTimer);
+      this.reconnectTimer = undefined;
+    }
+    if (socket !== undefined) {
+      // A late close event of the old socket must not schedule another connection.
+      socket.onclose = null;
+      socket.onmessage = null;
+      socket.onopen = null;
+    }
+    this.connect();
+  }
+
   close(): void {
     this.shutDown('Relay transport closed');
   }

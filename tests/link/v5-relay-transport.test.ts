@@ -68,6 +68,47 @@ function harness(options: Partial<ConstructorParameters<typeof RelayTransport>[0
 }
 
 describe('RelayTransport', () => {
+  // Spec §6.4, §17: a wallet woken by the wake link connects at once instead of waiting for
+  // the backoff, and what still waits for an ack goes out on the new socket.
+  it('reconnects at once on request', () => {
+    jest.useFakeTimers();
+    try {
+      const { transport, sockets } = harness();
+      sockets[0].open();
+      void transport.send('pending').catch(() => undefined);
+      sockets[0].drop();
+      expect(sockets).toHaveLength(1);
+
+      transport.reconnect();
+      expect(sockets).toHaveLength(2);
+      sockets[1].open();
+      expect(sockets[1].sentJson().map((frame) => frame.op)).toEqual(['subscribe', 'publish']);
+      transport.reconnect(); // open: nothing to do
+      jest.advanceTimersByTime(60_000); // the cancelled backoff step never fires
+      expect(sockets).toHaveLength(2);
+      transport.close();
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  it('ignores the late close of the socket that a reconnect replaced', () => {
+    jest.useFakeTimers();
+    try {
+      const { transport, sockets } = harness();
+      sockets[0].open();
+      sockets[0].readyState = 2; // closing, its close event still to come
+      transport.reconnect();
+      expect(sockets).toHaveLength(2);
+      sockets[0].onclose?.({});
+      jest.advanceTimersByTime(60_000);
+      expect(sockets).toHaveLength(2);
+      transport.close();
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
   // The transport must announce itself on the topic the moment the socket opens, and a
   // publish resolves only when the relay acks it (the delivery guarantee callers rely on).
   it('subscribes on open and resolves sends on ack', async () => {
