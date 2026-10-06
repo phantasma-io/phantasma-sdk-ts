@@ -130,6 +130,45 @@ describe('PhantasmaLink.signCarbonTxAndBroadcast', () => {
   });
 });
 
+describe('PhantasmaLink.getPeer', () => {
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  // Wallets answer `{ peer: <url> }`; the callback gets the URL, not the answer object.
+  it('passes the wallet RPC URL to the callback', () => {
+    const link = new PhantasmaLink('test', false);
+    jest
+      .spyOn(asTestLink(link), 'sendLinkRequest')
+      .mockImplementation((_request: string, callback: LinkCallback) => {
+        callback({ success: true, peer: 'http://localhost:5172/rpc' });
+      });
+    const onPeer = jest.fn();
+    const onError = jest.fn();
+
+    link.getPeer(onPeer, onError);
+
+    expect(onPeer).toHaveBeenCalledWith('http://localhost:5172/rpc');
+    expect(onError).not.toHaveBeenCalled();
+  });
+
+  it('reports an answer without a peer as an error', () => {
+    const link = new PhantasmaLink('test', false);
+    jest
+      .spyOn(asTestLink(link), 'sendLinkRequest')
+      .mockImplementation((_request: string, callback: LinkCallback) => {
+        callback({ success: true });
+      });
+    const onPeer = jest.fn();
+    const onError = jest.fn();
+
+    link.getPeer(onPeer, onError);
+
+    expect(onPeer).not.toHaveBeenCalled();
+    expect(onError).toHaveBeenCalled();
+  });
+});
+
 describe('PhantasmaLink.signTx', () => {
   afterEach(() => {
     jest.restoreAllMocks();

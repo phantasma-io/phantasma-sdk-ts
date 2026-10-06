@@ -510,12 +510,13 @@ export class PhantasmaLink {
 
   getPeer(callback: (result: string) => void, onErrorCallback: () => void) {
     this.onError = onErrorCallback; //Sets Error Callback Function
-    // Send the peer query to the connected wallet.
+    // Ask the connected wallet for its RPC node; wallets answer `{ peer: <url> }`.
     this.sendLinkRequest('getPeer/', (result) => {
-      if (result.success) {
-        this.onMessage('Peer Query,: ' + result);
+      const peer = (result as { peer?: unknown }).peer;
+      if (result.success && typeof peer === 'string') {
+        this.onMessage('Peer Query: ' + peer);
         if (callback) {
-          callback(String(result));
+          callback(peer);
         }
       } else {
         if (onErrorCallback) {
