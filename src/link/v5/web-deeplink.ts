@@ -58,7 +58,8 @@ export interface WebDeeplinkOptions {
   log?: (message: string) => void;
 }
 
-/** The persisted pairing/session state of one web dApp <-> wallet deeplink channel. */
+/** The persisted pairing/session state of one web dApp <-> wallet deeplink channel. The whole
+ * record is deleted when the session ends: the pairing key goes with it (spec §18.3). */
 export interface WebDeeplinkRecord {
   /** Record format version (for forward migration of stored state). */
   v: 1;
@@ -72,7 +73,7 @@ export interface WebDeeplinkRecord {
   /** Established session id (spec §7), set after a successful connect. */
   sessionId?: string;
   /** Cache of the last ConnectResult so a reloaded page can show the account without a
-   * URL hop; refreshed by every successful connect, dropped on disconnect. */
+   * URL hop; refreshed by every successful connect. */
   lastConnect?: ConnectResult;
 }
 

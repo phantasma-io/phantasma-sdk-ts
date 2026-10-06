@@ -1,5 +1,5 @@
 import { PhantasmaLink5 } from '../../src/link/v5/client.js';
-import { LinkError } from '../../src/link/v5/errors.js';
+import { LinkError, LinkErrorCode } from '../../src/link/v5/errors.js';
 import { PLV, DEFAULT_LINK_HOST } from '../../src/link/v5/protocol.js';
 import { parsePairingUri } from '../../src/link/v5/pairing.js';
 import { parseRequestUrl, buildResponseUrl } from '../../src/link/v5/deeplink.js';
@@ -100,6 +100,23 @@ function respond(env: FakeWebEnv, key: Uint8Array, id: string, result: unknown):
   env.navigate(buildResponseUrl(record.callback, record.topic, frame));
 }
 
+/** A sealed error answer as the wallet's callback URL. */
+function errorUrl(record: WebDeeplinkRecord, key: Uint8Array, id: string, code: number): string {
+  const envelope = JSON.stringify({ plv: PLV, id, error: { code, message: 'Session expired' } });
+  const frame = JSON.stringify(sealEnvelopeText(envelope, key));
+  return buildResponseUrl(record.callback, record.topic, frame);
+}
+
+/** Runs a first connect; resolves with the client and the pairing key. */
+async function connected(env: FakeWebEnv): Promise<{ client: PhantasmaLink5; key: Uint8Array }> {
+  const client = await PhantasmaLink5.webDeeplink({ dapp: DAPP, ...env.options() });
+  const key = base64UrlToBytes(env.record().key);
+  const connecting = client.connect();
+  respond(env, key, unsealRequest(env.opened[0], key).envelope.id, CONNECT_RESULT);
+  await connecting;
+  return { client, key };
+}
+
 describe('PhantasmaLink5.webDeeplink', () => {
   // First run: pairing material is generated and persisted BEFORE any hop, the pairing URI
   // is a sym universal link carrying that exact material, and nothing auto-opens.
@@ -190,28 +207,101 @@ describe('PhantasmaLink5.webDeeplink', () => {
     await expect(promise).resolves.toMatchObject({ session: { id: 'sess-1' } });
   });
 
-  // Disconnect ends the session on both sides but keeps the pairing channel: the next
-  // connect needs a fresh consent, not a re-pair.
-  it('clears the persisted session on disconnect but keeps the pairing', async () => {
+  // Spec §18.3: the pairing key goes with the session. Disconnect deletes the stored record
+  // before the wallet hop (which may unload the page), the client closes once the answer is in,
+  // and the next factory call pairs afresh.
+  it('ends the pairing with the session on disconnect', async () => {
     const env = new FakeWebEnv();
-    const client = await PhantasmaLink5.webDeeplink({ dapp: DAPP, ...env.options() });
-    const key = base64UrlToBytes(env.record().key);
-
-    const connecting = client.connect();
-    respond(env, key, unsealRequest(env.opened[0], key).envelope.id, CONNECT_RESULT);
-    await connecting;
+    const { client, key } = await connected(env);
     const paired = env.record();
 
     const disconnecting = client.disconnect();
-    respond(env, key, unsealRequest(env.opened[1], key).envelope.id, {});
+    expect(env.store.has(WEB_DEEPLINK_STORAGE_KEY)).toBe(false);
+    const { envelope } = unsealRequest(env.opened[1], key);
+    expect(envelope.method).toBe('pha_disconnect');
+    expect(envelope.session).toBe('sess-1');
+    // The wallet answers on the old channel; the page still takes the answer.
+    const frame = JSON.stringify(
+      sealEnvelopeText(JSON.stringify({ plv: PLV, id: envelope.id, result: {} }), key)
+    );
+    env.navigate(buildResponseUrl(paired.callback, paired.topic, frame));
     await disconnecting;
 
-    const record = env.record();
-    expect(record.sessionId).toBeUndefined();
-    expect(record.lastConnect).toBeUndefined();
-    expect(record.topic).toBe(paired.topic); // pairing survives
-    expect(record.key).toBe(paired.key);
     expect(client.account).toBeUndefined();
+    expect(client.isClosed).toBe(true);
+    await expect(client.getChains()).rejects.toMatchObject({ code: LinkErrorCode.Disconnected });
+    expect(env.opened).toHaveLength(2);
+
+    await PhantasmaLink5.webDeeplink({ dapp: DAPP, ...env.options() });
+    expect(env.record().topic).not.toBe(paired.topic);
+    expect(env.record().key).not.toBe(paired.key);
+  });
+
+  // forgetSession ends the session without a wallet hop, and the pairing with it.
+  it('ends the pairing on forgetSession without opening the wallet', async () => {
+    const env = new FakeWebEnv();
+    const { client } = await connected(env);
+
+    client.forgetSession();
+    expect(env.store.has(WEB_DEEPLINK_STORAGE_KEY)).toBe(false);
+    expect(client.isClosed).toBe(true);
+    await expect(client.getChains()).rejects.toMatchObject({ code: LinkErrorCode.Disconnected });
+    expect(env.opened).toHaveLength(1); // only the connect
+  });
+
+  // Spec §7: 5100, 5101 and 4100 to a request in the session mean the wallet ended it.
+  it('ends the session and the pairing on a 5100 answer', async () => {
+    const env = new FakeWebEnv();
+    const { client, key } = await connected(env);
+    const record = env.record();
+
+    const chains = client.getChains();
+    const { envelope } = unsealRequest(env.opened[1], key);
+    env.navigate(errorUrl(record, key, envelope.id, LinkErrorCode.SessionExpired));
+    await expect(chains).rejects.toMatchObject({ code: LinkErrorCode.SessionExpired });
+    expect(client.isClosed).toBe(true);
+    expect(env.store.has(WEB_DEEPLINK_STORAGE_KEY)).toBe(false);
+  });
+
+  // The wallet's notice that it ended the session ends the pairing here as well.
+  it('ends the pairing on a pha_sessionExpired notice', async () => {
+    const env = new FakeWebEnv();
+    const { client, key } = await connected(env);
+    const record = env.record();
+
+    const notice = JSON.stringify({
+      plv: PLV,
+      type: 'event',
+      event: 'pha_sessionExpired',
+      session: 'sess-1',
+      data: { session: 'sess-1' },
+    });
+    const frame = JSON.stringify(sealEnvelopeText(notice, key));
+    env.navigate(buildResponseUrl(record.callback, record.topic, frame));
+    expect(client.account).toBeUndefined();
+    expect(client.isClosed).toBe(true);
+    expect(env.store.has(WEB_DEEPLINK_STORAGE_KEY)).toBe(false);
+  });
+
+  // The page reloaded while the wallet was open, and the answer says the session is over: the
+  // factory pairs afresh and still hands the answer over.
+  it('pairs afresh when the answer in the page URL ends the session', async () => {
+    const env = new FakeWebEnv();
+    const { client, key } = await connected(env);
+    const record = env.record();
+    client.close();
+
+    env.href = errorUrl(record, key, 'lost-request', LinkErrorCode.SessionRevoked);
+    const fresh = await PhantasmaLink5.webDeeplink({ dapp: DAPP, ...env.options() });
+    expect(fresh.isClosed).toBe(false);
+    expect(fresh.account).toBeUndefined();
+    expect(env.record().topic).not.toBe(record.topic);
+    expect(fresh.takeUnmatchedResponse()).toMatchObject({
+      id: 'lost-request',
+      ok: false,
+      error: { code: LinkErrorCode.SessionRevoked },
+    });
+    expect(env.href).toBe(record.callback);
   });
 
   // Corrupt persisted state must never brick the dApp: it is discarded and a fresh

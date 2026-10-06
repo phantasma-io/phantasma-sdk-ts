@@ -27,6 +27,10 @@ import {
 /** The transports of spec §6, named as in `maxPayloadBytes` (spec §5). */
 export type TransportKind = 'injected' | 'loopback' | 'deeplink' | 'relay';
 
+/** How long a client remembers the session of a request it sent, so that an answer which comes
+ * after the timeout is told apart from an answer to a request of an earlier page load. */
+const REQUEST_MEMORY_MS = 10 * 60 * 1000;
+
 /** A duplex channel that carries opaque frame strings between dApp and wallet. */
 export interface LinkTransport {
   /** Which transport this is. The client uses it to find the wallet's size limit for this
@@ -79,6 +83,9 @@ export interface UnmatchedResponse {
   ok: boolean;
   result?: unknown;
   error?: unknown;
+  /** Present when this client sent the request and its answer came after the timeout: the
+   * session the request named, if it named one. Absent for a request of an earlier page load. */
+  request?: { session?: string };
 }
 
 /**
@@ -96,8 +103,13 @@ export class LinkSessionClient {
   private readonly onUnmatchedResponse?: (response: UnmatchedResponse) => void;
   private readonly log?: (message: string) => void;
   private readonly pending = new Map<string, Pending>();
+  // The session each request named, by request id, oldest first, with the time it was sent. A
+  // late answer of a request that timed out is then told apart from an answer to a request of
+  // an earlier page load.
+  private readonly sentIn = new Map<string, { session?: string; at: number }>();
   private readonly eventHandlers = new Set<LinkEventHandler>();
   private closed = false;
+  private closeReason?: string;
 
   constructor(transport: LinkTransport, options: LinkSessionClientOptions = {}) {
     this.transport = transport;
@@ -132,6 +144,11 @@ export class LinkSessionClient {
     this.sessionKey = key;
   }
 
+  /** True once the session client is closed: by {@link close} or by its transport. */
+  get isClosed(): boolean {
+    return this.closed;
+  }
+
   /** Subscribe to wallet->dApp events; returns an unsubscribe function. */
   onEvent(handler: LinkEventHandler): () => void {
     this.eventHandlers.add(handler);
@@ -144,7 +161,10 @@ export class LinkSessionClient {
   request(method: string, params?: Record<string, unknown>): Promise<unknown> {
     if (this.closed) {
       return Promise.reject(
-        new LinkError(LinkErrorCode.Disconnected, 'Phantasma Link transport is closed')
+        new LinkError(
+          LinkErrorCode.Disconnected,
+          this.closeReason ?? 'Phantasma Link transport is closed'
+        )
       );
     }
     // The ecdh flow forbids plaintext: until the wallet's key hop arrives there is no
@@ -181,6 +201,7 @@ export class LinkSessionClient {
       }
       this.pending.set(id, pending);
     });
+    this.rememberRequest(id, this.sessionId);
 
     // Send after registering the pending entry so a synchronous transport error settles it.
     // A LinkError from the transport keeps its code: the transport knows the reason, as with
@@ -201,14 +222,18 @@ export class LinkSessionClient {
     return promise;
   }
 
-  /** Close the session, rejecting all in-flight requests. */
-  close(): void {
+  /** Close the session, rejecting all in-flight requests and later ones with `reason`. The
+   * channel key is dropped: nothing is sealed or opened after this. */
+  close(reason?: string): void {
     if (this.closed) {
       return;
     }
     this.closed = true;
+    this.closeReason = reason;
+    this.sessionKey = undefined;
+    // Reject before closing the transport, whose close notice would reject with its own reason.
+    this.rejectAll(reason ?? 'Phantasma Link transport closed');
     this.transport.close();
-    this.rejectAll('Phantasma Link transport closed');
   }
 
   private encodeOutgoing(message: LinkMessage): string {
@@ -238,6 +263,10 @@ export class LinkSessionClient {
   }
 
   private handleFrame(frame: string): void {
+    // A closed client has no key, and a frame must never be read as plaintext for want of one.
+    if (this.closed) {
+      return;
+    }
     let message: LinkMessage;
     try {
       message = this.decodeIncoming(frame);
@@ -258,6 +287,8 @@ export class LinkSessionClient {
     if (typeof id !== 'string') {
       return;
     }
+    const request = this.sentIn.get(id);
+    this.sentIn.delete(id);
     const pending = this.pending.get(id);
     if (!pending) {
       // No in-flight request matches this id. On deeplink this means the page reloaded while
@@ -265,10 +296,11 @@ export class LinkSessionClient {
       // the answer to the optional sink instead of dropping it; same-page flows always have a
       // pending entry, so this path is reload-only.
       if (this.onUnmatchedResponse) {
+        const sent = request === undefined ? {} : { request: { session: request.session } };
         if (isLinkErrorResponse(message)) {
-          this.onUnmatchedResponse({ id, ok: false, error: message.error });
+          this.onUnmatchedResponse({ id, ok: false, error: message.error, ...sent });
         } else if (isLinkSuccessResponse(message)) {
-          this.onUnmatchedResponse({ id, ok: true, result: message.result });
+          this.onUnmatchedResponse({ id, ok: true, result: message.result, ...sent });
         }
       }
       return;
@@ -287,6 +319,18 @@ export class LinkSessionClient {
         new LinkError(LinkErrorCode.InternalError, 'Malformed Phantasma Link response')
       );
     }
+  }
+
+  /** Remembers the session that request `id` named, for as long as its answer may come. */
+  private rememberRequest(id: string, session: string | undefined): void {
+    const now = Date.now();
+    for (const [sent, entry] of this.sentIn) {
+      if (now - entry.at < REQUEST_MEMORY_MS) {
+        break;
+      }
+      this.sentIn.delete(sent);
+    }
+    this.sentIn.set(id, { session, at: now });
   }
 
   private emitEvent(message: LinkEventMessage): void {

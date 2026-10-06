@@ -145,12 +145,11 @@ describe('PhantasmaLink5.deeplink (encrypted end-to-end over a fake OS hop)', ()
         settled = true;
       });
 
-      jest.advanceTimersByTime(299_000); // the old 60 s default would have fired long ago
-      await Promise.resolve();
+      // The async variants also settle the promise chain the fired timer starts.
+      await jest.advanceTimersByTimeAsync(299_000); // the old 60 s default would have fired long ago
       expect(settled).toBe(false);
 
-      jest.advanceTimersByTime(2_000); // past 300 s - now it must time out
-      await Promise.resolve();
+      await jest.advanceTimersByTimeAsync(2_000); // past 300 s - now it must time out
       expect(settled).toBe(true);
       await expect(promise).rejects.toThrow(/timed out/);
     } finally {

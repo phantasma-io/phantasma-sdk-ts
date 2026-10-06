@@ -65,21 +65,40 @@ export interface PhantasmaLink5Options extends LinkSessionClientOptions {
   /** Default dApp identity used by {@link PhantasmaLink5.connect} when none is passed. */
   dapp?: DappMetadata;
   /** Notified on session-state changes: the {@link ConnectResult} after every successful
-   * connect/resume, `undefined` after disconnect. Lets an embedder persist session state
+   * connect/resume, `undefined` when the session ends. Lets an embedder persist session state
    * (the web-deeplink factory stores it; a custom host could keep it elsewhere). */
   onSessionChange?: (connect: ConnectResult | undefined) => void;
 }
+
+/** Wallet answers that say the session the request carried no longer lives (spec §7). */
+const SESSION_ENDED_CODES: ReadonlySet<number> = new Set([
+  LinkErrorCode.SessionExpired,
+  LinkErrorCode.SessionRevoked,
+  LinkErrorCode.Unauthorized,
+]);
+
+/** Why requests fail on a client whose pairing ended with its session (spec §18.3). */
+const PAIRING_ENDED = 'The session ended, and its pairing with it; pair again';
 
 /**
  * The v5 client. `connect()` runs the capability handshake and stores the session; the typed
  * methods then forward to the wallet and return validated-by-contract results. Events
  * (account/chain/session changes) are delivered via {@link onEvent}.
+ *
+ * The client ends a session it holds on {@link disconnect} and {@link forgetSession}, and when
+ * the wallet says the session ended (an event, or `5100`/`5101`/`4100` to a request made in it;
+ * spec §7). A client with a channel key (deeplink, relay) ends its pairing with the session
+ * (spec §18.3): the key is dropped, the client closes ({@link isClosed}) and later requests fail
+ * with `4900`, so build a new client to pair again. Injected and loopback have no pairing and
+ * stay open.
  */
 export class PhantasmaLink5 {
   private readonly transport: LinkTransport;
   private readonly session: LinkSessionClient;
   private readonly defaultDapp?: DappMetadata;
   private readonly onSessionChange?: (connect: ConnectResult | undefined) => void;
+  // A channel key belongs to one pairing, and the pairing ends with its session (spec §18.3).
+  private readonly keyed: boolean;
   // Cleanup callbacks registered by factories (e.g. the web-deeplink URL listener);
   // run once on close() so a discarded client does not keep page hooks alive.
   private readonly disposers: Array<() => void> = [];
@@ -91,15 +110,31 @@ export class PhantasmaLink5 {
     this.transport = transport;
     // Capture responses that arrive with no in-flight request (the deeplink page reloaded
     // mid-flow). The web-deeplink factory delivers any such response during construction, so a
-    // caller can recover it via takeUnmatchedResponse() right after building the client.
+    // caller can recover it via takeUnmatchedResponse() right after building the client. Its
+    // request went out in the session this client holds, the only one of its channel.
     this.session = new LinkSessionClient(transport, {
       ...options,
       onUnmatchedResponse: (response) => {
         this.lastUnmatched = response;
+        // The session the request went out in: the one it named, when this client sent it. A
+        // request of an earlier page load went out on this channel's pairing, which carries one
+        // session (spec §18.3). Over injected and loopback such an answer ends no session, because
+        // a later session of the same page must not end on the answer to an older one.
+        const sentSession =
+          response.request !== undefined
+            ? response.request.session
+            : this.keyed
+              ? this.session.getSessionId()
+              : undefined;
+        this.noteAnswer(
+          sentSession,
+          response.ok ? undefined : LinkError.fromObject(response.error)
+        );
       },
     });
     this.defaultDapp = options.dapp;
     this.onSessionChange = options.onSessionChange;
+    this.keyed = options.sessionKey !== undefined || options.requireSessionKey === true;
     // One-tap pairing (spec §15 step 3): the wallet may push the connect result as an
     // unsolicited event right after the pairing approval, instead of waiting for an
     // explicit pha_connect. Adopt it exactly like a connect result so the session is
@@ -109,15 +144,13 @@ export class PhantasmaLink5 {
         this.adoptConnectResult(data);
       } else if (event === LinkEvent.SessionDeleted || event === LinkEvent.SessionExpired) {
         // The wallet tore a session down (user revoke / LRU evict / idle expiry) and notified us
-        // over the channel. Drop our session so a reload cannot resume a dead one: forgetSession
-        // clears lastConnect + the session id and fires onSessionChange(undefined), which also drops
-        // the persisted web-deeplink record. The ended id rides the envelope `session` field or
-        // `data.session` (spec §9.5). A notice for another session (an older one on the same
-        // channel) must not drop the live one; a notice that names no session is ours, because
-        // it decrypted with this channel's key.
+        // over the channel, so it ends here too and a reload cannot resume a dead one. The ended
+        // id rides the envelope `session` field or `data.session` (spec §9.5). A notice for
+        // another session (an older one on the same channel) must not end the live one; a notice
+        // that names no session is ours, because it decrypted with this channel's key.
         const ended = session ?? sessionOf(data);
         if (ended === undefined || ended === this.session.getSessionId()) {
-          this.forgetSession();
+          this.endSession();
         }
       }
     });
@@ -244,6 +277,8 @@ export class PhantasmaLink5 {
    * navigation from a user gesture. The dApp drives the hops - show {@link pairingUri}
    * (link/QR) for the one-time pairing consent, then call {@link connect} and the typed
    * methods from click handlers; an established session resumes promptlessly (spec §7).
+   * The stored pairing goes with its session (spec §18.3): once the session ends, the
+   * client closes and the next factory call pairs afresh.
    */
   static async webDeeplink(options: WebDeeplinkOptions): Promise<PhantasmaLink5> {
     const hooks = resolveWebDeeplinkHooks(options);
@@ -273,8 +308,12 @@ export class PhantasmaLink5 {
         requestTimeoutMs: options.requestTimeoutMs ?? DEEPLINK_REQUEST_TIMEOUT_MS,
         log: options.log,
         onSessionChange: (connect) => {
-          // Session layer only - the pairing material stays valid across disconnects.
-          stored.sessionId = connect?.session.id;
+          if (connect === undefined) {
+            // Spec §18.3: the pairing key goes with the session.
+            hooks.storage.removeItem(hooks.storageKey);
+            return;
+          }
+          stored.sessionId = connect.session.id;
           stored.lastConnect = connect;
           saveWebDeeplinkRecord(hooks.storage, hooks.storageKey, stored);
         },
@@ -308,6 +347,13 @@ export class PhantasmaLink5 {
     // A response may already sit in the page URL (the wallet's callback navigation
     // cold-loaded this page); consume it before subscribing to changes.
     consumePageUrl();
+    if (client.isClosed) {
+      // That response ended the session, and the pairing with it: pair afresh, and keep the
+      // response for takeUnmatchedResponse().
+      const fresh = await PhantasmaLink5.webDeeplink(options);
+      fresh.lastUnmatched = client.lastUnmatched;
+      return fresh;
+    }
     const unsubscribe = hooks.onUrlChange?.(consumePageUrl);
     if (unsubscribe) {
       client.disposers.push(unsubscribe);
@@ -337,6 +383,12 @@ export class PhantasmaLink5 {
    * {@link webDeeplink}); render it as a link/QR for the one-time wallet pairing consent. */
   get pairingUri(): string | undefined {
     return this.pairingUriValue;
+  }
+
+  /** True once the client is closed: by {@link close}, by its transport, or because its
+   * pairing ended with the session. A closed client fails every request with `4900`. */
+  get isClosed(): boolean {
+    return this.session.isClosed;
   }
 
   /** The account from the last successful {@link connect}, if any. */
@@ -450,24 +502,29 @@ export class PhantasmaLink5 {
     );
   }
 
+  /** End the session: tell the wallet (`pha_disconnect`) and end it on this side, whatever the
+   * wallet answers. A client with a channel key closes once the answer is in (spec §18.3). */
   async disconnect(): Promise<DisconnectResult> {
-    const result = await this.request<DisconnectResult>(LinkMethod.Disconnect);
-    // The wallet dropped the session; clear local state so later requests do not carry a
-    // dead session id (and embedders can erase their persisted copy).
-    this.lastConnect = undefined;
-    this.session.setSessionId(undefined);
-    this.onSessionChange?.(undefined);
-    return result;
+    const answer = this.request<DisconnectResult>(LinkMethod.Disconnect);
+    // The request above is already sealed and sent. Clear the session before the answer: on
+    // deeplink the hop to the wallet may unload this page, and the stored session and key must
+    // be gone by then.
+    this.clearSession();
+    try {
+      return await answer;
+    } finally {
+      if (this.keyed) {
+        this.shutDown(PAIRING_ENDED);
+      }
+    }
   }
 
-  /** Drop the local (and persisted) session WITHOUT notifying the wallet. Use when a wallet
-   * round-trip is undesirable - notably deeplink, where pha_disconnect would navigate to the
-   * wallet and reload this page, so the cleanup after the request never runs and the session
-   * would resume on the next load. The wallet's side lapses on its own session TTL (spec §7). */
+  /** End the session on this side WITHOUT notifying the wallet. Use when a wallet round-trip is
+   * undesirable - notably deeplink, where pha_disconnect would navigate to the wallet and reload
+   * this page. The wallet's side lapses on its own session TTL (spec §7). A client with a channel
+   * key closes (spec §18.3). */
   forgetSession(): void {
-    this.lastConnect = undefined;
-    this.session.setSessionId(undefined);
-    this.onSessionChange?.(undefined);
+    this.endSession();
   }
 
   /** Subscribe to wallet->dApp events; returns an unsubscribe function. */
@@ -477,6 +534,10 @@ export class PhantasmaLink5 {
 
   /** Close the underlying transport and reject any in-flight requests. */
   close(): void {
+    this.shutDown();
+  }
+
+  private shutDown(reason?: string): void {
     // Release factory-registered hooks first (e.g. the web page-URL listener) so nothing
     // can deliver into a closing client; disposers must never block the close itself.
     for (const dispose of this.disposers.splice(0)) {
@@ -486,18 +547,54 @@ export class PhantasmaLink5 {
         // A failing disposer must not prevent the transport from closing.
       }
     }
-    this.session.close();
+    this.session.close(reason);
+  }
+
+  /** Ends the session on this side; a client with a channel key ends its pairing with it. */
+  private endSession(): void {
+    this.clearSession();
+    if (this.keyed) {
+      this.shutDown(PAIRING_ENDED);
+    }
+  }
+
+  /** Drops the session state; the embedder hears `undefined` and deletes what it stored. */
+  private clearSession(): void {
+    this.lastConnect = undefined;
+    this.session.setSessionId(undefined);
+    this.onSessionChange?.(undefined);
+  }
+
+  /** Keeps the session in step with an answer from the wallet to a request made in
+   * `sentSession`: some errors say the session is over (spec §7). */
+  private noteAnswer(sentSession: string | undefined, error?: unknown): void {
+    if (sentSession === undefined || sentSession !== this.session.getSessionId()) {
+      return;
+    }
+    if (error instanceof LinkError && SESSION_ENDED_CODES.has(error.code)) {
+      this.endSession();
+    }
   }
 
   // The wallet's result is `unknown` on the wire; we cast to the method's contract type. The
   // shapes are validated structurally at the envelope layer (§4); per-field validation can be
   // layered on later without changing call sites. `params` is `object` so typed param
   // interfaces (which lack an index signature) are accepted, then forwarded as a plain record.
-  private request<T>(method: string, params?: object): Promise<T> {
-    return this.session.request(
-      method,
-      params as Record<string, unknown> | undefined
-    ) as Promise<T>;
+  private async request<T>(method: string, params?: object): Promise<T> {
+    // Everything up to the first await runs at once: the frame is sealed and sent before the
+    // caller's next statement (disconnect() relies on it).
+    const sentSession = this.session.getSessionId();
+    try {
+      const result = await this.session.request(
+        method,
+        params as Record<string, unknown> | undefined
+      );
+      this.noteAnswer(sentSession);
+      return result as T;
+    } catch (error) {
+      this.noteAnswer(sentSession, error);
+      throw error;
+    }
   }
 }
 

@@ -12,7 +12,10 @@
 //   1) first visit - render `client.pairingUri` as a link/QR; the user taps it, approves
 //      the pairing in the wallet, and switches back to the page;
 //   2) any later gesture - call `connect()` (resumes the stored session promptlessly per
-//      spec §7, or falls back to a fresh consent in the wallet) and the typed methods.
+//      spec §7; a pairing without a session yet gets the wallet's consent prompt) and the
+//      typed methods;
+//   3) once the session ends (disconnect, expiry, revoke), the pairing ends with it (spec
+//      §18.3): the client is closed, and a new one from the factory shows a new pairing URI.
 
 import { PhantasmaLink5 } from 'phantasma-sdk-ts/link/v5';
 
@@ -39,12 +42,21 @@ export async function onPageLoad(ui: WebDappUi): Promise<PhantasmaLink5> {
   return client;
 }
 
-/** Click handler for a "Connect" button: resume or freshly consent, then use the session. */
-export async function onConnectClick(client: PhantasmaLink5, ui: WebDappUi): Promise<void> {
+/** Click handler for a "Connect" button: resume or freshly consent, then use the session.
+ * Returns the client to keep using: a new one when the session (and its pairing) had ended. */
+export async function onConnectClick(
+  client: PhantasmaLink5,
+  ui: WebDappUi
+): Promise<PhantasmaLink5> {
+  if (client.isClosed) {
+    return onPageLoad(ui);
+  }
   // The dApp identity was set in the factory options, so connect() needs no arguments;
-  // an established session resumes promptlessly, otherwise the wallet prompts the user.
+  // an established session resumes promptlessly, and a pairing without a session yet gets
+  // the wallet's consent prompt. An ended session fails the call and closes the client.
   const result = await client.connect();
   ui.showAccount(result.account.address);
+  return client;
 }
 
 /** Click handler for a "Send" button: the money path over the same deeplink channel. */

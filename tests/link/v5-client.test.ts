@@ -203,6 +203,7 @@ describe('PhantasmaLink5 (cohesive v5 client)', () => {
     await disconnecting;
 
     expect(client.account).toBeUndefined();
+    expect(client.isClosed).toBe(false); // no pairing to end without a channel key
     const after = client.getChains();
     expect(transport.lastEnvelope().session).toBeUndefined(); // dead id no longer sent
     transport.inject(
@@ -407,7 +408,99 @@ describe('PhantasmaLink5 (cohesive v5 client)', () => {
     await second;
   });
 
-  // Events reach subscribers through the client facade, and close() makes further calls fail.
+  // Spec §7: 4100 to a request made in the session means the wallet no longer keeps it, so the
+  // client drops it; 4100 to a request without a session leaves nothing to drop.
+  it('drops the session on a 4100 answer to a request made in it', async () => {
+    const transport = new MockTransport();
+    const changes: unknown[] = [];
+    const client = new PhantasmaLink5(transport, {
+      sessionId: 'gone',
+      onSessionChange: (c) => changes.push(c),
+    });
+    const refuse = () =>
+      transport.inject(
+        JSON.stringify({
+          plv: PLV,
+          id: transport.lastEnvelope().id,
+          error: { code: LinkErrorCode.Unauthorized, message: 'No valid session' },
+        })
+      );
+
+    const first = client.getChains();
+    expect(transport.lastEnvelope().session).toBe('gone');
+    refuse();
+    await expect(first).rejects.toMatchObject({ code: LinkErrorCode.Unauthorized });
+    expect(changes).toEqual([undefined]);
+
+    const second = client.getChains();
+    expect(transport.lastEnvelope().session).toBeUndefined();
+    refuse();
+    await expect(second).rejects.toMatchObject({ code: LinkErrorCode.Unauthorized });
+    expect(changes).toEqual([undefined]);
+    expect(client.isClosed).toBe(false);
+  });
+
+  // Spec §7: an answer that comes after the timeout belongs to the session its request named. A
+  // 5100 to a request of an ended session must not end the session that came after it, and an
+  // answer to a request this client never sent ends nothing over injected and loopback.
+  it('keeps a newer session on a late answer to a request of an older one', async () => {
+    const transport = new MockTransport();
+    const changes: unknown[] = [];
+    const client = new PhantasmaLink5(transport, {
+      sessionId: 'old',
+      requestTimeoutMs: 5,
+      onSessionChange: (connect) => changes.push(connect?.session.id),
+    });
+    const timedOut = client.getChains();
+    const oldRequest = transport.lastEnvelope().id;
+    await expect(timedOut).rejects.toMatchObject({ code: LinkErrorCode.Timeout });
+    transport.inject(
+      JSON.stringify({
+        plv: PLV,
+        type: 'event',
+        event: 'pha_sessionEstablished',
+        session: 'new',
+        data: {
+          wallet: { name: 'Wallet', version: '1.0' },
+          capabilities: {
+            plvVersions: [5],
+            methods: [],
+            chains: [],
+            txFormats: [],
+            signatureKinds: [],
+            features: [],
+          },
+          account: { address: 'P2KTest' },
+          session: { id: 'new', expiresAt: null },
+        },
+      })
+    );
+
+    const expired = (id: string) =>
+      transport.inject(
+        JSON.stringify({
+          plv: PLV,
+          id,
+          error: { code: LinkErrorCode.SessionExpired, message: 'Session expired' },
+        })
+      );
+    expired(oldRequest);
+    expect(client.takeUnmatchedResponse()).toMatchObject({
+      id: oldRequest,
+      request: { session: 'old' },
+    });
+    expired('sent-by-an-earlier-page');
+    expect(client.takeUnmatchedResponse()?.request).toBeUndefined();
+
+    expect(changes).toEqual(['new']);
+    expect(client.account?.address).toBe('P2KTest');
+    void client.getChains().catch(() => undefined);
+    expect(transport.lastEnvelope().session).toBe('new');
+    client.close();
+  });
+
+  // Events reach subscribers through the client facade, and close() makes further calls fail
+  // and stops delivery.
   it('forwards events and fails fast after close', async () => {
     const transport = new MockTransport();
     const client = new PhantasmaLink5(transport);
@@ -420,7 +513,12 @@ describe('PhantasmaLink5 (cohesive v5 client)', () => {
     expect(events).toEqual(['pha_accountsChanged']);
 
     client.close();
+    expect(client.isClosed).toBe(true);
     await expect(client.getChains()).rejects.toMatchObject({ name: 'LinkError' });
+    transport.inject(
+      JSON.stringify({ plv: PLV, type: 'event', event: 'pha_chainChanged', data: {} })
+    );
+    expect(events).toEqual(['pha_accountsChanged']);
   });
 
   // Spec §11: a payload above the limit the wallet advertised for this transport (a
