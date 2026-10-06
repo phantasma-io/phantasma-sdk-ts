@@ -104,7 +104,9 @@ export class PBinaryReader {
     return this.readBigInteger().toString();
   }
 
-  public readSignatureV2(): Signature | null {
+  /** Reads a signature as `PBinaryWriter.writeSignature` writes it: the kind byte, then the
+   * signature bytes. Returns null for `SignatureKind.None`. */
+  public readSignature(): Signature | null {
     const kind = this.readByte() as SignatureKind;
     const signature: Signature = new Ed25519Signature();
     signature.kind = kind;
@@ -116,29 +118,6 @@ export class PBinaryReader {
       case SignatureKind.Ed25519:
         const len = this.readVarInt();
         signature.bytes = new Uint8Array(this.readBytes(len));
-        break;
-      case SignatureKind.ECDSA:
-        this.readByte();
-        signature.bytes = stringToUint8Array(this.readString());
-        break;
-      default:
-        throw new Error(`read signature: unsupported kind ${kind}`);
-    }
-
-    return signature;
-  }
-
-  public readSignature(): Signature | null {
-    const kind = this.readByte() as SignatureKind;
-    const signature: Signature = new Ed25519Signature();
-    signature.kind = kind;
-    switch (kind) {
-      case SignatureKind.None:
-        return null;
-
-      case SignatureKind.Ed25519:
-        const len = this.readVarInt();
-        signature.bytes = stringToUint8Array(this.read(len));
         break;
       case SignatureKind.ECDSA:
         this.readByte();

@@ -196,7 +196,7 @@ export class Transaction implements ISerializable {
 
     const sigCount = reader.readVarInt();
     for (let i = 0; i < sigCount; i++) {
-      const sig = reader.readSignatureV2();
+      const sig = reader.readSignature();
       if (sig !== null) {
         this.signatures.push(sig);
       }
