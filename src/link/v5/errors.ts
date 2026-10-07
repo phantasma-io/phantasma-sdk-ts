@@ -22,6 +22,10 @@ export const LinkErrorCode = {
   CapabilityNotSupported: 5004,
   /** No answer from the wallet before the client's timeout; the user may still be deciding. */
   Timeout: 5005,
+  /** The session's account is not the account selected in the wallet (spec §7). The session
+   * stays; `data.address` names its account, so the dApp can ask the user to select it and send
+   * the request again. */
+  AccountNotSelected: 5006,
   SessionExpired: 5100,
   SessionRevoked: 5101,
 } as const;

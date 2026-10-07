@@ -456,6 +456,40 @@ describe('PhantasmaLink5 (cohesive v5 client)', () => {
     expect(client.isClosed).toBe(false);
   });
 
+  // Spec §7: 5006 means that the user has another account selected in the wallet. The session
+  // lives on, so the client keeps it and sends the next request in it again.
+  it('keeps the session on a 5006 answer', async () => {
+    const transport = new MockTransport();
+    const changes: unknown[] = [];
+    const client = new PhantasmaLink5(transport, {
+      sessionId: 'kept',
+      onSessionChange: (c) => changes.push(c),
+    });
+
+    const first = client.getChains();
+    transport.inject(
+      JSON.stringify({
+        plv: PLV,
+        id: transport.lastEnvelope().id,
+        error: {
+          code: LinkErrorCode.AccountNotSelected,
+          message: 'Select the account of this session',
+          data: { address: 'P2KTest' },
+        },
+      })
+    );
+    await expect(first).rejects.toMatchObject({
+      code: LinkErrorCode.AccountNotSelected,
+      data: { address: 'P2KTest' },
+    });
+    expect(changes).toEqual([]);
+
+    const second = client.getChains();
+    expect(transport.lastEnvelope().session).toBe('kept');
+    transport.inject(JSON.stringify({ plv: PLV, id: transport.lastEnvelope().id, result: {} }));
+    await second;
+  });
+
   // Spec §7: an answer that comes after the timeout belongs to the session its request named. A
   // 5100 to a request of an ended session must not end the session that came after it, and an
   // answer to a request this client never sent ends nothing over injected and loopback.
