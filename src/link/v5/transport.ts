@@ -213,11 +213,14 @@ export class LinkSessionClient {
     }
 
     const id = randomToken();
+    // The send time travels sealed with the request. A copy of the request carries the same
+    // time, so a wallet can refuse to sign it without a prompt once it is old (spec §9.8).
     const envelope: LinkRequest = {
       plv: PLV,
       id,
       method,
       ...(this.sessionId ? { session: this.sessionId } : {}),
+      sentAt: Date.now(),
       ...(params ? { params } : {}),
     };
 

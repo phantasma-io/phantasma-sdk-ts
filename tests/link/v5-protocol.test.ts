@@ -61,6 +61,22 @@ describe('v5 envelope encode/decode', () => {
   });
 });
 
+describe('v5 request send time', () => {
+  // Spec §4: `sentAt` is Unix milliseconds. A request with another value is malformed; a request
+  // without it stays valid and only never qualifies for a signature without a prompt (§9.8).
+  it('accepts a numeric sentAt or none and refuses any other value', () => {
+    const request = (sentAt: string) =>
+      `{"plv":5,"id":"a","method":"pha_getChains"${sentAt === '' ? '' : `,"sentAt":${sentAt}`}}`;
+    expect((decodeEnvelope(request('1800000000000')) as LinkRequest).sentAt).toBe(
+      1_800_000_000_000
+    );
+    expect((decodeEnvelope(request('')) as LinkRequest).sentAt).toBeUndefined();
+    for (const value of ['"1800000000000"', 'null', '{}']) {
+      expect(() => decodeEnvelope(request(value))).toThrow(LinkError);
+    }
+  });
+});
+
 describe('v5 LinkError serialization', () => {
   // The wire object carries the numeric code so callers branch on it, not on text.
   it('omits data when undefined and preserves it otherwise', () => {

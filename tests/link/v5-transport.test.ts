@@ -64,6 +64,21 @@ describe('LinkSessionClient (plaintext / trusted-local transport)', () => {
     await expect(promise).rejects.toMatchObject({ code: LinkErrorCode.UserRejected });
   });
 
+  // Spec §4, §9.8: every request carries the time it was sent, so a wallet can tell an old copy
+  // of a request from a new one.
+  it('stamps each request with the time it was sent', () => {
+    const transport = new MockTransport();
+    const client = new LinkSessionClient(transport);
+    const before = Date.now();
+    void client.request('pha_getChains').catch(() => undefined);
+    const after = Date.now();
+    const sent = JSON.parse(transport.sent[0]) as { sentAt?: unknown };
+    expect(typeof sent.sentAt).toBe('number');
+    expect(sent.sentAt as number).toBeGreaterThanOrEqual(before);
+    expect(sent.sentAt as number).toBeLessThanOrEqual(after);
+    client.close();
+  });
+
   // Responses for an unknown id must be ignored without throwing.
   it('ignores responses with an unknown id', () => {
     const transport = new MockTransport();

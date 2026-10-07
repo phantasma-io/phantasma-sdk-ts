@@ -10,6 +10,10 @@ export interface LinkRequest {
   plv: typeof PLV;
   id: string;
   session?: string;
+  /** Unix milliseconds at which the dApp sent the request (spec §4). It travels sealed with the
+   * request, so a relay cannot change it. A wallet signs a transaction without a prompt only when
+   * the transaction expires at most 5 minutes after this time (spec §9.8). */
+  sentAt?: number;
   method: string;
   params?: Record<string, unknown>;
 }
@@ -103,6 +107,12 @@ export function decodeEnvelope(text: string): LinkMessage {
   }
 
   if (typeof record.method === 'string') {
+    if (
+      record.sentAt !== undefined &&
+      (typeof record.sentAt !== 'number' || !Number.isFinite(record.sentAt))
+    ) {
+      throw new LinkError(LinkErrorCode.InvalidRequest, 'Request `sentAt` must be a number');
+    }
     return parsed as LinkRequest;
   }
   if ('result' in record) {
