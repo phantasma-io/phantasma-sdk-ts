@@ -35,6 +35,13 @@ export const LinkMethod = {
   SendTransaction: 'pha_sendTransaction',
   /** Read-only VM invoke (no keys, no approval). */
   InvokeScript: 'pha_invokeScript',
+  /** Ask once for the permission to have some contract methods signed without a prompt
+   * (spec §9.8). */
+  RequestSigningPermission: 'pha_requestSigningPermission',
+  /** The session's signing permission, or null. */
+  GetSigningPermission: 'pha_getSigningPermission',
+  /** End the session's signing permission. */
+  RevokeSigningPermission: 'pha_revokeSigningPermission',
 } as const;
 export type LinkMethod = (typeof LinkMethod)[keyof typeof LinkMethod];
 
@@ -50,6 +57,9 @@ export const LinkEvent = {
    * it CAN open the callback (this is a reply to the pairing, not a spontaneous push).
    * `data` carries the same shape as a `pha_connect` result. */
   SessionEstablished: 'pha_sessionEstablished',
+  /** The session's signing permission changed (spec §9.8): it started, the wallet reserved gas
+   * against its budget, or it ended. `data.permission` is the permission in force, or null. */
+  SigningPermissionChanged: 'pha_signingPermissionChanged',
 } as const;
 export type LinkEvent = (typeof LinkEvent)[keyof typeof LinkEvent];
 

@@ -241,6 +241,22 @@ describe('PhantasmaLink5 (cohesive v5 client)', () => {
         method: 'pha_invokeScript',
         params: { chain: 'main', script: 'AA==' },
       },
+      {
+        run: () =>
+          client.requestSigningPermission({
+            calls: [{ contract: 'game1', methods: ['move'] }],
+            duration: 3600,
+          }),
+        method: 'pha_requestSigningPermission',
+        params: { calls: [{ contract: 'game1', methods: ['move'] }], duration: 3600 },
+      },
+      { run: () => client.getSigningPermission(), method: 'pha_getSigningPermission' },
+      { run: () => client.revokeSigningPermission(), method: 'pha_revokeSigningPermission' },
+      {
+        run: () => client.revokeSigningPermission({ id: 'p_1' }),
+        method: 'pha_revokeSigningPermission',
+        params: { id: 'p_1' },
+      },
       { run: () => client.disconnect(), method: 'pha_disconnect' },
     ];
 

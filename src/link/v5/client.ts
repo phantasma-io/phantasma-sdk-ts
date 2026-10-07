@@ -32,6 +32,11 @@ import {
   SendTransactionResult,
   InvokeScriptParams,
   InvokeScriptResult,
+  RequestSigningPermissionParams,
+  RequestSigningPermissionResult,
+  GetSigningPermissionResult,
+  RevokeSigningPermissionParams,
+  RevokeSigningPermissionResult,
 } from './methods.js';
 import { LoopbackTransport, LoopbackTransportOptions } from './loopback-transport.js';
 import { InjectedTransport, InjectedTransportOptions } from './injected-transport.js';
@@ -583,6 +588,31 @@ export class PhantasmaLink5 {
       params,
       params.script
     );
+  }
+
+  /** Ask the wallet once for the permission to sign the session's transactions that call only the
+   * given contract methods, without a prompt, for `duration` seconds (spec §9.8). The user approves
+   * it in one prompt; a rejection is `4001`. A new permission replaces the session's previous one. */
+  requestSigningPermission(
+    params: RequestSigningPermissionParams
+  ): Promise<RequestSigningPermissionResult> {
+    return this.request<RequestSigningPermissionResult>(
+      LinkMethod.RequestSigningPermission,
+      params
+    );
+  }
+
+  /** The session's signing permission in force, or null (spec §9.8). */
+  getSigningPermission(): Promise<GetSigningPermissionResult> {
+    return this.request<GetSigningPermissionResult>(LinkMethod.GetSigningPermission);
+  }
+
+  /** End the session's signing permission; succeeds without one (spec §9.8). Pass the `id` of the
+   * permission to end, so that a copy of this request delivered later cannot end a newer one. */
+  revokeSigningPermission(
+    params: RevokeSigningPermissionParams = {}
+  ): Promise<RevokeSigningPermissionResult> {
+    return this.request<RevokeSigningPermissionResult>(LinkMethod.RevokeSigningPermission, params);
   }
 
   /** End the session: tell the wallet (`pha_disconnect`) and end it on this side, whatever the

@@ -96,6 +96,72 @@ export interface InvokeScriptResult {
   results: Base64[];
 }
 
+// ----- Signing permission (spec §9.8) -----
+
+/** The methods of one contract that a signing permission lets the wallet sign without a prompt. */
+export interface SigningPermissionCall {
+  /** The contract name, as a script loads it. */
+  contract: string;
+  /** The method names. */
+  methods: string[];
+}
+
+/** {@link LinkMethod.RequestSigningPermission}. */
+export interface RequestSigningPermissionParams {
+  /** The name of the chain of the nexus whose contracts `calls` names; default `main`. */
+  chain?: string;
+  /** The contracts and their methods: 1 to 8 contracts, 1 to 32 methods each. */
+  calls: SigningPermissionCall[];
+  /** How long the permission lasts, in seconds: 60 to 86 400. */
+  duration: number;
+  /** The most gas the account may pay in total for the transactions signed under the permission:
+   * the sum of `price × limit` of their `AllowGas` calls, as a decimal string in the smallest
+   * unit of KCAL (`"10000000000"` is 1 KCAL). `"0"`, the default, means the account pays no gas
+   * under the permission, so only transactions whose gas another address pays are signed
+   * without a prompt. */
+  gasLimit?: string;
+}
+
+/** The signing permission of a session, as the wallet holds it. */
+export interface SigningPermission {
+  /** The wallet's id of the permission. */
+  id: string;
+  /** The chain whose contracts `calls` names. */
+  chain: string;
+  calls: SigningPermissionCall[];
+  /** The end of the permission, Unix milliseconds. */
+  expiresAt: number;
+  /** The gas budget of the account, as granted: a decimal string in the smallest unit of KCAL. */
+  gasLimit: string;
+  /** The gas reserved so far by the transactions signed under the permission that the account
+   * pays: the sum of their `price × limit`, the most each can cost, as a decimal string in the
+   * smallest unit of KCAL. The chain usually charges less, and the reservation stays
+   * (spec §9.8). */
+  gasReserved: string;
+}
+export interface RequestSigningPermissionResult {
+  permission: SigningPermission;
+}
+
+/** {@link LinkMethod.GetSigningPermission}. */
+export type GetSigningPermissionParams = Record<string, never>;
+export interface GetSigningPermissionResult {
+  /** The permission in force, or null. */
+  permission: SigningPermission | null;
+}
+
+/** {@link LinkMethod.RevokeSigningPermission}: idempotent - a session without a permission still
+ * succeeds. */
+export interface RevokeSigningPermissionParams {
+  /** The id of the permission to end (spec §9.5). The wallet ends the session's permission only
+   * when it has this id, so a copy of an old revoke delivered later cannot end a newer permission.
+   * Without it, the permission in force ends. */
+  id?: string;
+}
+export interface RevokeSigningPermissionResult {
+  ok: true;
+}
+
 // ----- Event payloads (wallet -> dApp) -----
 
 export interface AccountsChangedData {
@@ -106,4 +172,9 @@ export interface ChainChangedData {
 }
 export interface SessionLifecycleData {
   session: string;
+}
+/** {@link LinkEvent.SigningPermissionChanged}. */
+export interface SigningPermissionChangedData {
+  /** The permission in force, or null when it ended. */
+  permission: SigningPermission | null;
 }
