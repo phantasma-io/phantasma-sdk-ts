@@ -81,11 +81,14 @@ describe('v5 LinkError serialization', () => {
 });
 
 describe('v5 pairing URI', () => {
+  // A topic of the form spec §15 gives `t`: 32 bytes in base64url, 43 characters.
+  const TOPIC = bytesToBase64Url(new Uint8Array(32).fill(3));
+
   // The symmetric (universal-link) path carries the session key in the fragment.
   it('round-trips a sym universal-link pairing', () => {
     const symKey = new Uint8Array(32).fill(5);
     const uri = buildPairingUri({
-      topic: 'topic-123',
+      topic: TOPIC,
       mode: 'sym',
       symKey,
       relay: 'wss://link.phantasma.info/relay',
@@ -95,7 +98,7 @@ describe('v5 pairing URI', () => {
 
     const parsed: PairingParams = parsePairingUri(uri);
     expect(parsed.version).toBe(PLV);
-    expect(parsed.topic).toBe('topic-123');
+    expect(parsed.topic).toBe(TOPIC);
     expect(parsed.relay).toBe('wss://link.phantasma.info/relay');
     expect(parsed.mode).toBe('sym');
     expect(Array.from(parsed.symKey!)).toEqual(Array.from(symKey));
@@ -105,29 +108,62 @@ describe('v5 pairing URI', () => {
   // The custom-scheme fallback carries only the dApp public key (no secret).
   it('round-trips an ecdh custom-scheme pairing', () => {
     const pk = new Uint8Array(32).fill(9);
-    const uri = buildPairingUri({ topic: 't', mode: 'ecdh', dappPublicKey: pk, scheme: 'scheme' });
+    const uri = buildPairingUri({
+      topic: TOPIC,
+      mode: 'ecdh',
+      dappPublicKey: pk,
+      scheme: 'scheme',
+    });
     expect(uri.startsWith('phantasma://v5/pair#')).toBe(true);
     const parsed = parsePairingUri(uri);
     expect(parsed.mode).toBe('ecdh');
     expect(Array.from(parsed.dappPublicKey!)).toEqual(Array.from(pk));
   });
 
+  // Spec §15: a wallet refuses a `t` that is not 32 bytes in base64url, and the dApp side
+  // refuses to build such a pairing.
+  it('refuses a topic that is not 32 bytes in base64url', () => {
+    const codeOf = (action: () => unknown): number | undefined => {
+      try {
+        action();
+        return undefined;
+      } catch (error) {
+        return (error as LinkError).code;
+      }
+    };
+    const uri = (topic: string) =>
+      `https://link.phantasma.info/v5/pair#v=5&t=${encodeURIComponent(topic)}&sk=AA`;
+    expect(parsePairingUri(uri(TOPIC)).topic).toBe(TOPIC);
+    for (const topic of [
+      TOPIC.slice(1),
+      `${TOPIC}A`,
+      `${TOPIC.slice(1)}=`,
+      `${TOPIC.slice(1)}.`,
+      'x'.repeat(122),
+    ]) {
+      expect(codeOf(() => parsePairingUri(uri(topic)))).toBe(LinkErrorCode.InvalidRequest);
+    }
+    expect(
+      codeOf(() => buildPairingUri({ topic: 'x', mode: 'sym', symKey: new Uint8Array(32) }))
+    ).toBe(LinkErrorCode.InvalidParams);
+  });
+
   // Security rule (spec §17/§20): never place a secret in a hijackable custom-scheme URL.
   it('refuses to put a symmetric key in a custom-scheme URL', () => {
     expect(() =>
-      buildPairingUri({ topic: 't', mode: 'sym', symKey: new Uint8Array(32), scheme: 'scheme' })
+      buildPairingUri({ topic: TOPIC, mode: 'sym', symKey: new Uint8Array(32), scheme: 'scheme' })
     ).toThrow(LinkError);
   });
 
   // Spec §15: a wallet refuses a secret in a custom-scheme URL even when a dApp built one by hand.
   it('rejects a custom-scheme pairing URI that carries a symmetric key', () => {
     const sk = bytesToBase64Url(new Uint8Array(32));
-    expect(() => parsePairingUri(`phantasma://v5/pair#v=5&t=x&sk=${sk}`)).toThrow(LinkError);
+    expect(() => parsePairingUri(`phantasma://v5/pair#v=5&t=${TOPIC}&sk=${sk}`)).toThrow(LinkError);
   });
 
   // Spec §15: the relay is a wss:// URL; a plain ws:// relay would expose the topic and the frames.
   it('rejects a pairing URI whose relay is not a wss URL', () => {
-    const base = 'https://link.phantasma.info/v5/pair#v=5&t=x&sk=AA&relay=';
+    const base = `https://link.phantasma.info/v5/pair#v=5&t=${TOPIC}&sk=AA&relay=`;
     expect(() => parsePairingUri(`${base}${encodeURIComponent('ws://relay.example')}`)).toThrow(
       LinkError
     );
@@ -138,9 +174,9 @@ describe('v5 pairing URI', () => {
   });
 
   it('rejects a pairing URI with the wrong version', () => {
-    expect(() => parsePairingUri('https://link.phantasma.info/v5/pair#v=4&t=x&sk=AA')).toThrow(
-      LinkError
-    );
+    expect(() =>
+      parsePairingUri(`https://link.phantasma.info/v5/pair#v=4&t=${TOPIC}&sk=AA`)
+    ).toThrow(LinkError);
   });
 
   // Malformed pairing URIs must fail loudly with LinkError, not half-parse.
@@ -149,9 +185,11 @@ describe('v5 pairing URI', () => {
     expect(() => parsePairingUri('https://link.phantasma.info/v5/pair#v=5&sk=AA')).toThrow(
       LinkError
     );
-    expect(() => parsePairingUri('https://link.phantasma.info/v5/pair#v=5&t=x')).toThrow(LinkError);
+    expect(() => parsePairingUri(`https://link.phantasma.info/v5/pair#v=5&t=${TOPIC}`)).toThrow(
+      LinkError
+    );
     expect(() =>
-      parsePairingUri('https://link.phantasma.info/v5/pair#v=5&t=x&sk=AA&meta=%%%')
+      parsePairingUri(`https://link.phantasma.info/v5/pair#v=5&t=${TOPIC}&sk=AA&meta=%%%`)
     ).toThrow(LinkError);
   });
 });

@@ -256,6 +256,17 @@ export class PhantasmaLink5 {
     const topic = options.topic ?? randomToken(32);
     const pair = options.keyPair ?? generateEphemeralKeyPair();
     const relayUrl = options.url ?? DEFAULT_RELAY_URL;
+    // Built before the transport: it refuses a topic of the wrong form before a socket opens.
+    const pairingUri = buildPairingUri({
+      topic,
+      mode: 'ecdh',
+      dappPublicKey: pair.publicKey,
+      relay: relayUrl,
+      meta: options.dapp,
+      // The whole point of ecdh is the hijackable custom scheme; a safe channel
+      // (universal link / QR) should use the simpler sym mode instead.
+      scheme: 'scheme',
+    });
 
     const transport = new RelayTransport({
       ...options,
@@ -281,16 +292,7 @@ export class PhantasmaLink5 {
       requireSessionKey: true,
       requestTimeoutMs: options.requestTimeoutMs ?? DEEPLINK_REQUEST_TIMEOUT_MS,
     });
-    client.pairingUriValue = buildPairingUri({
-      topic,
-      mode: 'ecdh',
-      dappPublicKey: pair.publicKey,
-      relay: relayUrl,
-      meta: options.dapp,
-      // The whole point of ecdh is the hijackable custom scheme; a safe channel
-      // (universal link / QR) should use the simpler sym mode instead.
-      scheme: 'scheme',
-    });
+    client.pairingUriValue = pairingUri;
     return client;
   }
 

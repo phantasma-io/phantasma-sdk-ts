@@ -15,6 +15,7 @@ import { DappMetadata, ConnectResult } from './capabilities.js';
 import { WebSocketFactory } from './loopback-transport.js';
 import { bytesToBase64Url, base64UrlToBytes } from './encoding.js';
 import { generateSessionKey, randomToken, SESSION_KEY_LENGTH } from './session-crypto.js';
+import { isPairingTopic } from './pairing.js';
 
 /** The subset of the Web Storage API the web-deeplink flow needs (localStorage-shaped). */
 export interface WebDeeplinkStorage {
@@ -233,7 +234,8 @@ export function loadWebDeeplinkRecord(
   if (record.v !== 1) {
     return null;
   }
-  if (typeof record.topic !== 'string' || record.topic.length === 0) {
+  // A wallet refuses a pairing whose topic has another form (spec §15).
+  if (typeof record.topic !== 'string' || !isPairingTopic(record.topic)) {
     return null;
   }
   if (typeof record.callback !== 'string' || record.callback.length === 0) {

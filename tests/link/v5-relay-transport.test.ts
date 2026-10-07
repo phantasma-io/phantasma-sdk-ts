@@ -527,6 +527,28 @@ describe('PhantasmaLink5.relayEcdh (custom-scheme pairing, key derived from the 
     return { client, sockets, keyPair };
   }
 
+  // The pairing URI is built before the transport, so a topic of the wrong form (spec §15)
+  // fails at once and no socket opens.
+  it('refuses a topic of the wrong form before it opens a socket', () => {
+    const sockets: FakeSocket[] = [];
+    let code: number | undefined;
+    try {
+      PhantasmaLink5.relayEcdh({
+        topic: 'short',
+        dapp: DAPP,
+        webSocketFactory: (url) => {
+          const socket = new FakeSocket(url);
+          sockets.push(socket);
+          return socket;
+        },
+      });
+    } catch (error) {
+      code = (error as LinkError).code;
+    }
+    expect(code).toBe(LinkErrorCode.InvalidParams);
+    expect(sockets).toHaveLength(0);
+  });
+
   // The hijackable custom scheme must carry NO secret, and the client must refuse to
   // speak (in either direction) until the wallet's key hop establishes the channel.
   it('puts only the public key in the URI and refuses to send before the key hop', async () => {

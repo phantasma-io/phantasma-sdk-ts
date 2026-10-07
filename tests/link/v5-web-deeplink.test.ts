@@ -14,7 +14,7 @@ import {
   WEB_DEEPLINK_STORAGE_KEY,
 } from '../../src/link/v5/web-deeplink.js';
 import type { LinkTransport } from '../../src/link/v5/transport.js';
-import { base64UrlToBytes, bytesToBase64 } from '../../src/link/v5/encoding.js';
+import { base64UrlToBytes, bytesToBase64, bytesToBase64Url } from '../../src/link/v5/encoding.js';
 import { DEFAULT_RELAY_URL } from '../../src/link/v5/relay-transport.js';
 import { WebSocketLike } from '../../src/link/v5/loopback-transport.js';
 import {
@@ -489,6 +489,8 @@ describe('PhantasmaLink5.webDeeplink', () => {
   // Corrupt persisted state must never brick the dApp: it is discarded and a fresh
   // pairing is generated (the only way forward without the original key).
   it('discards a corrupt stored record and re-pairs fresh', async () => {
+    // Topics of the right form that mark each stored record, so a regenerated record differs.
+    const tagged = (n: number) => bytesToBase64Url(new Uint8Array(32).fill(n));
     const env = new FakeWebEnv();
     env.storage.setItem(WEB_DEEPLINK_STORAGE_KEY, 'not json at all');
     await PhantasmaLink5.webDeeplink({ dapp: DAPP, ...env.options() });
@@ -499,40 +501,48 @@ describe('PhantasmaLink5.webDeeplink', () => {
     // A structurally valid record with a wrong-length key is equally unusable.
     env.storage.setItem(
       WEB_DEEPLINK_STORAGE_KEY,
-      JSON.stringify({ v: 1, topic: 't', key: 'AAAA', callback: 'https://dapp.example/app' })
+      JSON.stringify({ v: 1, topic: tagged(1), key: 'AAAA', callback: 'https://dapp.example/app' })
     );
     await PhantasmaLink5.webDeeplink({ dapp: DAPP, ...env.options() });
-    expect(env.record().topic).not.toBe('t');
+    expect(env.record().topic).not.toBe(tagged(1));
 
     // So is a session without the time of its last activity: it could never expire.
     env.storage.setItem(
       WEB_DEEPLINK_STORAGE_KEY,
-      JSON.stringify({ ...regenerated, topic: 'u', sessionId: 'sess-1' })
+      JSON.stringify({ ...regenerated, topic: tagged(2), sessionId: 'sess-1' })
     );
     await PhantasmaLink5.webDeeplink({ dapp: DAPP, ...env.options() });
-    expect(env.record().topic).not.toBe('u');
+    expect(env.record().topic).not.toBe(tagged(2));
 
     // And a cached connect result without its session.
     env.storage.setItem(
       WEB_DEEPLINK_STORAGE_KEY,
       JSON.stringify({
         ...regenerated,
-        topic: 'w',
+        topic: tagged(3),
         sessionId: 'sess-1',
         lastSeenAt: Date.now(),
         lastConnect: { account: {} },
       })
     );
     await PhantasmaLink5.webDeeplink({ dapp: DAPP, ...env.options() });
-    expect(env.record().topic).not.toBe('w');
+    expect(env.record().topic).not.toBe(tagged(3));
 
     // And a record without a relay: the wallet would publish the session where nobody listens.
     env.storage.setItem(
       WEB_DEEPLINK_STORAGE_KEY,
-      JSON.stringify({ ...regenerated, topic: 'x', relay: undefined })
+      JSON.stringify({ ...regenerated, topic: tagged(4), relay: undefined })
     );
     await PhantasmaLink5.webDeeplink({ dapp: DAPP, ...env.options() });
-    expect(env.record().topic).not.toBe('x');
+    expect(env.record().topic).not.toBe(tagged(4));
+
+    // And a topic of another form than spec §15 gives `t`: a wallet would refuse the pairing.
+    env.storage.setItem(
+      WEB_DEEPLINK_STORAGE_KEY,
+      JSON.stringify({ ...regenerated, topic: 'short' })
+    );
+    await PhantasmaLink5.webDeeplink({ dapp: DAPP, ...env.options() });
+    expect(env.record().topic).not.toBe('short');
   });
 
   // ONE-TAP first connection (spec §17 step 3): right after the pairing approval the

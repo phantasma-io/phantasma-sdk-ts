@@ -12,6 +12,15 @@ import { bytesToBase64Url, base64UrlToBytes, utf8ToBytes, bytesToUtf8 } from './
 
 export type PairingMode = 'sym' | 'ecdh';
 
+// Spec §15: `t` is 32 random bytes in base64url without padding.
+const PAIRING_TOPIC = /^[A-Za-z0-9_-]{43}$/;
+
+/** Returns true if `topic` has the form of a pairing topic: 32 bytes in base64url without
+ * padding, 43 characters (spec §15). The relay topics of a pairing are built from it (§16). */
+export function isPairingTopic(topic: string): boolean {
+  return PAIRING_TOPIC.test(topic);
+}
+
 /** Parsed pairing material. */
 export interface PairingParams {
   version: number;
@@ -44,9 +53,16 @@ export interface BuildPairingUriInput {
 }
 
 /** Build a pairing URI. Enforces the security rule that a symmetric key (a secret) must
- * NOT be placed in a hijackable custom-scheme URL (spec §15/§18). */
+ * NOT be placed in a hijackable custom-scheme URL (spec §15/§18), and refuses a topic that a
+ * wallet would refuse. */
 export function buildPairingUri(input: BuildPairingUriInput): string {
   const scheme = input.scheme ?? 'universal';
+  if (!isPairingTopic(input.topic)) {
+    throw new LinkError(
+      LinkErrorCode.InvalidParams,
+      'A pairing topic is 32 bytes in base64url (43 characters)'
+    );
+  }
 
   const params = new URLSearchParams();
   params.set('v', String(PLV));
@@ -90,8 +106,9 @@ export function buildPairingUri(input: BuildPairingUriInput): string {
 }
 
 /** Parse a pairing URI (universal-link or custom-scheme) into {@link PairingParams}. Refuses
- * what spec §15 tells a wallet to refuse: a `relay` that is not a `wss://` URL, and a
- * symmetric key in a `phantasma://` URL, which a scheme-squatting app could read. */
+ * what spec §15 tells a wallet to refuse: a topic that is not 32 bytes in base64url, a `relay`
+ * that is not a `wss://` URL, and a symmetric key in a `phantasma://` URL, which a
+ * scheme-squatting app could read. */
 export function parsePairingUri(uri: string): PairingParams {
   const hashIndex = uri.indexOf('#');
   if (hashIndex < 0) {
@@ -110,6 +127,15 @@ export function parsePairingUri(uri: string): PairingParams {
   const topic = params.get('t');
   if (!topic) {
     throw new LinkError(LinkErrorCode.InvalidRequest, 'Pairing URI is missing topic');
+  }
+  // Spec §15: `t` is the bearer capability of the pairing, and the relay topics are built from
+  // it. A longer one makes relay topics that a relay refuses, and the relay then closes the
+  // connection that a wallet shares between its pairings (§7).
+  if (!isPairingTopic(topic)) {
+    throw new LinkError(
+      LinkErrorCode.InvalidRequest,
+      'Pairing topic must be 32 bytes in base64url (43 characters)'
+    );
   }
 
   const relay = params.get('relay') ?? undefined;
