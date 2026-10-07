@@ -90,23 +90,31 @@ function readLoad(script: Uint8Array, pos: number): Load | undefined {
   };
 }
 
+/** Returns true if `text` can be a contract or method name in a script that readContractCalls
+ * reads: 1 to 255 printable ASCII characters without a space. */
+export function isCallName(text: string): boolean {
+  if (text.length === 0 || text.length > MAX_NAME_BYTES) {
+    return false;
+  }
+  for (let i = 0; i < text.length; i++) {
+    const code = text.charCodeAt(i);
+    if (code < 0x21 || code > 0x7e) {
+      return false;
+    }
+  }
+  return true;
+}
+
 /** Returns the text of a String value that holds a name, or undefined. */
 function readName(value: ScriptValue): string | undefined {
-  if (value.type !== VMType.String) {
+  // The length is checked before the bytes become characters, so a long literal is never spread.
+  if (value.type !== VMType.String || value.bytes.length > MAX_NAME_BYTES) {
     return undefined;
   }
-  const bytes = value.bytes;
-  if (bytes.length === 0 || bytes.length > MAX_NAME_BYTES) {
-    return undefined;
-  }
-  let text = '';
-  for (const byte of bytes) {
-    if (byte < 0x21 || byte > 0x7e) {
-      return undefined;
-    }
-    text += String.fromCharCode(byte);
-  }
-  return text;
+  // Every byte becomes one character, so a byte outside printable ASCII becomes a character that
+  // isCallName refuses.
+  const text = String.fromCharCode(...value.bytes);
+  return isCallName(text) ? text : undefined;
 }
 
 /** Returns true if the bytes at `pos` are `PUSH r0`. */

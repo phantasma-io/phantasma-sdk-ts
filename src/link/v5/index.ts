@@ -8,6 +8,7 @@ export * from './encoding.js';
 export * from './envelope.js';
 export * from './capabilities.js';
 export * from './methods.js';
+export * from './signing-permission.js';
 export * from './session-crypto.js';
 export * from './pairing.js';
 export * from './transport.js';
