@@ -86,6 +86,7 @@ Request:
   "plv": 5,
   "id": "f1c2…", // random, unique per request, at most 128 characters
   "session": "s_9a8b…", // omitted only on the very first connect/pair
+  "sentAt": 1767225600000, // when the dApp sent it, Unix ms
   "method": "pha_signTransaction",
   "params": {
     /* method-specific, named fields */
@@ -134,6 +135,10 @@ Rules:
   envelope shape.
 - A receiver ignores a field of an envelope, of `params`, of a result or of an event that it
   does not know, so that a later version can add one.
+- `sentAt` is the time at which the dApp sent the request, in Unix milliseconds. It travels
+  sealed with the request, so a relay cannot change it, and a copy of the request carries the
+  same value. A request without it stays valid; it only never gets a signature without a
+  prompt (§9.8).
 - Concurrency: requests are independent by `id`; a wallet MAY serialize UI prompts but
   MUST correlate responses by `id` (no global single-in-flight flag like v1-v4).
 
@@ -148,7 +153,7 @@ Wallet → dApp, the `pha_connect` result:
   "wallet": { "name": "Example Wallet", "version": "x.y.z", "icon": "https://…" },
   "capabilities": {
     "plvVersions": [5],
-    "methods": ["pha_connect","pha_disconnect","pha_getAccounts","pha_getChains","pha_getWalletInfo","pha_signMessage","pha_signTransaction","pha_sendTransaction","pha_invokeScript"],
+    "methods": ["pha_connect","pha_disconnect","pha_getAccounts","pha_getChains","pha_getWalletInfo","pha_signMessage","pha_signTransaction","pha_sendTransaction","pha_invokeScript","pha_requestSigningPermission","pha_getSigningPermission","pha_revokeSigningPermission"],
     "chains": ["phantasma:mainnet"],                       // CAIP-2-like ids; the network in use (§10)
     "txFormats": ["script","carbon"],                      // routes to SendRawTransaction / SendCarbonTransaction (§9.4)
     "signatureKinds": ["Ed25519","ECDSA"],
@@ -531,12 +536,20 @@ Read:
 - `pha_invokeScript` - read-only VM invoke (eth_call-like); Result: the VM result objects,
   serialized, in base64. (was `invokeScript` / `invokeRawScript`)
 
+Signing permission (§9.8):
+
+- `pha_requestSigningPermission` - ask once for the permission to have the transactions that
+  call only some contract methods signed without a prompt. Result: the permission.
+- `pha_getSigningPermission` - the session's permission, or `null`.
+- `pha_revokeSigningPermission` - end the session's permission.
+
 DROPPED in v5: `getN3Address`, `writeArchive`, and `multiSig` (the v1-v4 `multiSig` stub
 was non-functional).
 
 Events (wallet→dApp): `pha_accountsChanged`, `pha_chainChanged`, `pha_sessionDeleted`,
 `pha_sessionExpired`, `pha_sessionEstablished` (the §15 step-3 handshake completion: an
-unsolicited connect result pushed right after pairing approval; see §9.5).
+unsolicited connect result pushed right after pairing approval; see §9.5),
+`pha_signingPermissionChanged` (§9.8).
 
 ### 9.3 Legacy → v5 name map (for migration)
 
@@ -650,9 +663,30 @@ Each element of `results` is one VM result object as the chain serializes it, in
 own RPC can read via the wallet's node; a dApp that has RPC access can equally call the
 node directly.
 
+**`pha_requestSigningPermission`** - params `{ chain?:string, calls:[{ contract:string,
+methods:string[] }], duration:number, gasLimit?:string }`; result `{ permission }`. `chain`
+is the name of a chain of the nexus, default `main`. `duration` is in seconds. `gasLimit` is
+a decimal string, default `"0"`, in the unit of `price × limit` of `AllowGas` (§9.8): the
+smallest unit of KCAL, the chain's gas token, so `"10000000000"` is 1 KCAL. The checks, the
+prompt and the rules of use: §9.8.
+
+**`pha_getSigningPermission`** - params `{}`; result `{ permission }`, where `permission` is
+`null` when the session has none.
+
+**`pha_revokeSigningPermission`** - params `{ id? }`; result `{ ok:true }`. With `id`, the
+wallet ends the session's permission only when it has this id, so a late copy of an old revoke
+cannot end a newer permission; without it, the permission in force ends. Idempotent - a session
+without that permission still succeeds.
+
+The permission object is `{ id, chain, calls, expiresAt, gasLimit, gasReserved }`: the
+wallet's id, the granted chain and calls, the end in Unix milliseconds, and the gas budget and
+the gas reserved so far against it, both as decimal strings in the smallest unit of KCAL
+(§9.8).
+
 **Events** (wallet→dApp): `pha_accountsChanged{accounts}`, `pha_chainChanged{chain}`,
 `pha_sessionDeleted{session}`, `pha_sessionExpired{session}`,
-`pha_sessionEstablished{<pha_connect result>}`.
+`pha_sessionEstablished{<pha_connect result>}`, `pha_signingPermissionChanged{permission}`
+(the permission in force, or `null` when it ended).
 
 - Transport caveat: live events require a PERSISTENT transport (injected / loopback /
   relay subscription). A stateless deeplink-ping-pong session has no open channel, so it
@@ -698,6 +732,93 @@ Ed25519 only (§9.5).
 The value selects the key that signs the Phantasma payload. Native Ethereum/BSC RLP
 signing and broadcast is NOT part of v5.
 
+### 9.8 Signing permission
+
+A dApp that sends many small transactions, a game for example, can ask once for the
+permission to have them signed without a prompt. The wallet keeps the permission with the
+session. It signs a transaction request of that session without asking when the transaction
+does nothing but call the permitted contract methods. Every other request still gets the
+normal prompt. The reasons and the rejected options: decision record 0003 in
+`spec/decisions/`.
+
+The chain has no key delegation, so nothing but the wallet enforces a permission. The wallet
+sees which methods a transaction calls, never what those methods do. The user's signature
+covers the whole transaction, and a contract written to move the account's assets can do so
+inside a permitted method. A permission therefore trusts the site and the contracts it names,
+including every change their owners make to their code while the permission lasts and every
+contract they call. A wallet MAY grant permissions only for contracts it trusts, for example
+from a list it keeps.
+
+**Request.** `pha_requestSigningPermission` (§9.5). The wallet answers `-32602` and grants
+nothing when:
+
+- `calls` is empty or names more than 8 contracts, or names a contract twice;
+- a method list is empty, holds more than 32 names, or names a method twice;
+- a name is not 1 to 255 printable ASCII characters without a space;
+- a contract is one of the chain's built-in contracts: `gas`, `stake`, `account`, `block`,
+  `consensus`, `exchange`, `friends`, `governance`, `interop`, `mail`, `market`, `privacy`,
+  `ranking`, `relay`, `sale`, `storage`, `swap`, `token`, `validator`;
+- `duration` is not a whole number of seconds from 60 to 86 400;
+- `gasLimit` is not a decimal string of a number up to 2^63 - 1.
+
+**Prompt.** One approval shows the dApp and its origin as §7 describes them, the account, the
+network, the chain, each contract with its methods, how long the permission lasts (counted
+from the approval), and the gas: the most the account may pay in total, or that it pays none.
+It says plainly that the wallet will sign these calls without asking, that a contract can move
+the account's assets inside them, and that its owner can change its code while the permission
+lasts. A wallet MAY let the user shorten the duration. A rejection is `4001`.
+
+**Lifetime.** A session holds at most one permission; a granted request replaces the previous
+one. A permission ends at `expiresAt`, with its session (§7), on
+`pha_revokeSigningPermission`, and when the user revokes it in the wallet. The wallet keeps
+it, `gasReserved` included, for as long as the
+session lives, also across a restart. It pushes `pha_signingPermissionChanged` when a
+permission starts, when it adds gas to `gasReserved`, when the dApp or the user revokes it, and
+when the wallet finds that it ended, so a dApp always knows how much of the budget is left. A
+wallet on a phone may be asleep at `expiresAt`, so a dApp treats its permission as ended at
+`expiresAt` without waiting for the event.
+
+**Signing without a prompt.** The wallet signs a `pha_signTransaction` or
+`pha_sendTransaction` request of the session without a prompt only when all of the following
+hold. Otherwise the request gets the normal prompt; a locked wallet asks the user to unlock it
+first, or answers `4900` when it cannot ask (§10).
+
+1. The session's account is the wallet's current account (§7), the wallet is unlocked, and it
+   uses the network on which the user approved the permission (§10).
+2. `format` is `"script"`, and `signatureKind` is absent or `"Ed25519"`.
+3. The transaction is on the permission's chain and has not expired. It expires no later than
+   the permission ends, and no later than 5 minutes after the request's `sentAt` (§4). A
+   request without `sentAt` never qualifies.
+4. The script is exactly `gas.AllowGas(from, to, price, limit)`, one or more calls of
+   permitted methods, `gas.SpendGas(from)` and a closing `RET`, in the standard call form:
+   each call is a run of `LOAD r0 <value>` + `PUSH r0` pairs (the arguments, last first, then
+   the method name as a String), then `LOAD r0 <contract name as a String>`, `CTX r0 r1` and
+   `SWITCH r1`. A literal length uses one byte below 0xFD and the `0xFD` form above it. No
+   other opcode, register or byte is allowed, so the script calls no interop and no other
+   contract.
+5. Both gas calls name the same `from`: an address text (String), or the 34 address bytes
+   (Bytes, with or without the length byte 34 in front). `AllowGas` has four arguments,
+   `SpendGas` one. `price` and `limit` are non-negative Numbers or decimal Strings.
+6. When `from` is the account, `price × limit` fits in `gasLimit - gasReserved`, and the
+   wallet adds it to `gasReserved` when it signs. The wallet signs before the chain charges the
+   fee, so it reserves the most the transaction can cost. The real fee is usually lower, and
+   the reservation is not returned, so the account never pays more than the budget. When
+   another address pays the gas, nothing is reserved.
+   The `to` of `AllowGas` only receives the dApp share of the gas bill, so it is not checked.
+
+The answer is the same as after a prompt. The wallet keeps the id of a request that it signed
+without a prompt at least until the transaction expires (§18.2). A copy of the request is
+therefore dropped while its transaction is valid. A copy that arrives later carries an
+expired transaction: rule 3 sends it to the normal prompt, and the chain refuses it. Rule 3
+counts from the send time written in the request, so a
+request held back and delivered late is signed without a prompt at most once, within 5 minutes
+after it was sent. A dApp sends an action again only after the transaction of its earlier
+request expired, so that a late delivery of the earlier request cannot repeat the action; a
+client that waits 5 minutes for an answer meets this. A wallet MAY add checks of its own; such
+a check may send a request to the prompt, and never signs one that these rules refuse. A phone
+wallet still comes to the front for each request (§6.3, §6.4): the permission removes the
+prompt, not the wake.
+
 ## 10. Error codes
 
 JSON-RPC reserved:
@@ -730,7 +851,8 @@ Codes that the client reports itself, without an answer from the wallet:
   relay refused a frame with an `error` frame (§16), or the session ended and its pairing
   with it (§18.3).
 - `5005` when the wallet was reached but no answer came before the client's timeout. The
-  user may still be deciding; the dApp may ask again with a new request.
+  user may still be deciding. The dApp may ask again with a new request; for a transaction
+  it waits until the transaction of the earlier request expired (§9.8).
 - `5001` when the client refuses to send a request whose payload is above the advertised
   limit (§11), or a request above the URL budget on a pairing without a relay (§6.3).
 
@@ -784,6 +906,11 @@ Codes that the client reports itself, without an answer from the wallet:
 - Session expiry + revocation UI; dApp identity shown on every approval.
 - signMessage non-forgeable (CSPRNG random + domain tag).
 - Replay protection via the request `id` (§18.2).
+- Signing permission (§9.8): enforced by the wallet alone. It covers only scripts in the
+  standard call form with permitted calls between the gas calls and to a gas budget, and it
+  lasts at most a day. A transaction signed under it expires within 5 minutes after its request
+  was sent, so a copy of the request is never signed again without a prompt. It trusts the
+  site and the contracts it names.
 - Relay abuse controls (rate-limit, topic auth, message TTL), §16.
 
 ## 15. Pairing URI + handshake
@@ -1041,11 +1168,15 @@ Either path yields one 32-byte session key; the channel is uniform `secretbox` t
   text is base64url-encoded once more (§6.3). Chunked messages (§16) are reassembled to the
   full frame BEFORE one `secretbox` open.
 - Replay: the wallet handles each request `id` of a session once. It remembers the ids of
-  a session for at least 10 minutes, and the memory survives a restart of the wallet,
-  because the relay hands the messages it holds to the first subscription after the restart
-  (§16). A request with an `id` it remembers is dropped without an answer, because the
-  first copy gets the answer. A frame that is replayed repeats its request `id`, so the same
-  check stops it. This also makes a client's re-send after a reconnect (§16) safe.
+  a session for at least 10 minutes, and the id of a request whose transaction it signed
+  without a prompt at least until that transaction expires (§9.8). The memory survives a
+  restart of the wallet, because the relay hands the messages it holds to the first
+  subscription after the restart (§16). A request with an `id` it remembers is dropped
+  without an answer, because the first copy gets the answer. A frame that is replayed
+  repeats its request `id`, so the same check stops it. This also makes a client's re-send
+  after a reconnect (§16) safe. A wallet never forgets an id early because it holds many; a
+  wallet that cannot keep more ids refuses new requests of the session with `-32603`
+  instead.
 - A `pha_connect` without a session belongs to no session yet. The wallet remembers its `id`
   for the same time with the channel it came on (§7): the pairing, the caller's origin, or
   the connection of a caller without an origin. It drops a copy while the prompt of

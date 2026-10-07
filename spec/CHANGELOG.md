@@ -77,6 +77,25 @@
   switch. `4100` keeps one meaning, no valid session.
 - Section 4: a method that the wallet does not implement gets `-32601` before any check of
   the session or of the lock, because the methods of a wallet depend on neither.
+- Section 9.8 (new) and sections 5, 9.2, 9.5 and 14: the signing permission. A dApp asks once
+  with `pha_requestSigningPermission`; the user approves contracts, methods, a duration of at
+  most a day and a gas budget in the smallest unit of KCAL; the wallet then signs the session's
+  matching transactions without a prompt. The wallet enforces it alone, because the chain has
+  no key delegation: only
+  scripts in the standard call form with permitted calls between the gas calls, and a gas
+  budget. The permission trusts the site and the contracts it names. A transaction qualifies
+  only when it expires at most 5 minutes after the request's new `sentAt` field (section 4),
+  and the wallet keeps the id of such a request until the transaction expires, so neither a
+  copy nor a held-back request is signed twice without a prompt. A revoke may name the
+  permission it ends. The prompt shows the duration, counted from the approval. A transaction
+  signed under the permission reserves the most it can cost against the budget
+  (`gasReserved`), because the wallet signs before the chain charges the fee. The wallet pushes
+  the permission again each time it reserves gas, so a dApp shows the budget left. A dApp
+  treats a permission as ended at `expiresAt`. A locked wallet asks the user to unlock it or
+  answers `4900`. A permission holds on the network on which the user approved it, and the
+  prompt shows that network, because the same contract name means another contract on another
+  network. After `5005` a dApp sends a transaction again only once the earlier one expired
+  (section 10). Decision record `decisions/0003-signing-permission-enforced-by-the-wallet.md`.
 - Sections 3, 6, 6.1, 6.2, 6.3, 6.4, 11 and 16 state the rules for a client without naming
   an SDK. Section 6.3: a web page on the wallet's phone SHOULD send small requests over the
   relay and fall back to the deeplink when the relay cannot be reached. Section 6 gives the
