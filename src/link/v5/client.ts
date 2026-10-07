@@ -50,6 +50,7 @@ import {
   WebDeeplinkOptions,
   resolveWebDeeplinkHooks,
   loadWebDeeplinkRecord,
+  WEB_DEEPLINK_STORED_ANSWERS,
   saveWebDeeplinkRecord,
   createWebDeeplinkRecord,
   stripUrlFragment,
@@ -334,6 +335,8 @@ export class PhantasmaLink5 {
     // The record is the source of truth from here on (a snapshot for the closures below).
     const stored = record;
     const sessionKey = base64UrlToBytes(stored.key);
+    // Set once the session ended and the record was deleted with its key: nothing writes it again.
+    let deleted = false;
 
     const client = new PhantasmaLink5(
       new DeeplinkRelayTransport({
@@ -351,9 +354,19 @@ export class PhantasmaLink5 {
         requestTimeoutMs: options.requestTimeoutMs ?? DEEPLINK_REQUEST_TIMEOUT_MS,
         idleTtlMs,
         log: options.log,
+        handledAnswers: stored.answered,
+        onAnswerHandled: (handled) => {
+          // The answer to pha_disconnect comes after the record was deleted.
+          if (deleted) {
+            return;
+          }
+          stored.answered = handled.slice(-WEB_DEEPLINK_STORED_ANSWERS);
+          saveWebDeeplinkRecord(hooks.storage, hooks.storageKey, stored);
+        },
         onSessionChange: (connect) => {
           if (connect === undefined) {
             // Spec §18.3: the pairing key goes with the session.
+            deleted = true;
             hooks.storage.removeItem(hooks.storageKey);
             return;
           }

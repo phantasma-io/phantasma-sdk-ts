@@ -28,6 +28,10 @@ import { walletAnswerError } from './wallet-answer.js';
 /** The transports of spec §6, named as in `maxPayloadBytes` (spec §5). */
 export type TransportKind = 'injected' | 'loopback' | 'deeplink' | 'relay';
 
+/** How long a client remembers the id of an answer it handled. The relay hands its frames
+ * again to every new subscription for its TTL (spec §16), so a repeat must be recognized. */
+const ANSWER_MEMORY_MS = 10 * 60 * 1000;
+
 /** How long a client remembers the session of a request it sent, so that an answer which comes
  * after the timeout is told apart from an answer to a request of an earlier page load. */
 const REQUEST_MEMORY_MS = 10 * 60 * 1000;
@@ -69,6 +73,14 @@ export interface LinkSessionClientOptions {
    * the wallet was open, discarding the original request promise). Without it such responses
    * are dropped. Never fires on same-page flows - those always have a pending entry. */
   onUnmatchedResponse?: (response: UnmatchedResponse) => void;
+  /** Ids of the answers handled before, each with the Unix milliseconds it came, for example by an
+   * earlier load of the same page. The relay hands its held answers again to every new
+   * subscription (spec §16), so an answer handled before is dropped as a repeat. */
+  handledAnswers?: ReadonlyArray<readonly [string, number]>;
+  /** Called with the ids of the answers handled in the last 10 minutes, oldest first, each with
+   * the Unix milliseconds it came, whenever the client handles a new answer, so that an embedder
+   * can keep them across page loads ({@link handledAnswers}). */
+  onAnswerHandled?: (handled: Array<[string, number]>) => void;
   /** Optional diagnostic sink for the receive path: frames dropped (undecodable / wrong key) and
    * events received. Mirrors the relay transport's `log` seam so a host can trace the otherwise
    * silent deeplink/relay receive path. METADATA ONLY - never receives secrets or plaintext
@@ -109,8 +121,11 @@ export class LinkSessionClient {
   private sessionId?: string;
   private readonly requestTimeoutMs: number;
   private readonly onUnmatchedResponse?: (response: UnmatchedResponse) => void;
+  private readonly onAnswerHandled?: (handled: Array<[string, number]>) => void;
   private readonly log?: (message: string) => void;
   private readonly pending = new Map<string, Pending>();
+  // Ids of the answers handled, oldest first, with the time they came.
+  private readonly answered = new Map<string, number>();
   // The session each request named, by request id, oldest first, with the time it was sent. A
   // late answer of a request that timed out is then told apart from an answer to a request of
   // an earlier page load.
@@ -126,7 +141,14 @@ export class LinkSessionClient {
     this.sessionId = options.sessionId;
     this.requestTimeoutMs = options.requestTimeoutMs ?? 60000;
     this.onUnmatchedResponse = options.onUnmatchedResponse;
+    this.onAnswerHandled = options.onAnswerHandled;
     this.log = options.log;
+    // Oldest first, as the memory keeps them: the pruning in isRepeat stops at the first id that
+    // is still young.
+    const handled = [...(options.handledAnswers ?? [])].sort((a, b) => a[1] - b[1]);
+    for (const [id, at] of handled) {
+      this.answered.set(id, at);
+    }
     transport.onMessage((frame) => this.handleFrame(frame));
     transport.onClose?.((reason) => this.handleClose(reason));
   }
@@ -307,6 +329,10 @@ export class LinkSessionClient {
     if (typeof id !== 'string') {
       return;
     }
+    if (this.isRepeat(id)) {
+      this.log?.('frame dropped: an answer already handled');
+      return;
+    }
     const request = this.sentIn.get(id);
     this.sentIn.delete(id);
     const pending = this.pending.get(id);
@@ -351,6 +377,27 @@ export class LinkSessionClient {
       this.sentIn.delete(sent);
     }
     this.sentIn.set(id, { session, at: now });
+  }
+
+  /** True when an answer with this id was handled before; otherwise remembers it. */
+  private isRepeat(id: string): boolean {
+    const now = Date.now();
+    for (const [seen, at] of this.answered) {
+      if (now - at < ANSWER_MEMORY_MS) {
+        break;
+      }
+      this.answered.delete(seen);
+    }
+    if (this.answered.has(id)) {
+      return true;
+    }
+    this.answered.set(id, now);
+    try {
+      this.onAnswerHandled?.([...this.answered]);
+    } catch {
+      // A failing embedder hook must not lose the answer.
+    }
+    return false;
   }
 
   private emitEvent(message: LinkEventMessage): void {

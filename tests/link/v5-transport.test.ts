@@ -184,6 +184,26 @@ describe('LinkSessionClient robustness', () => {
     }
   });
 
+  // The relay hands its frames again to every new subscription (spec §16): an answer that
+  // comes twice is handled once.
+  it('handles a repeated answer once', async () => {
+    const transport = new MockTransport();
+    const unmatched: string[] = [];
+    const client = new LinkSessionClient(transport, {
+      onUnmatchedResponse: (response) => unmatched.push(response.id),
+    });
+    const promise = client.request('pha_getChains');
+    const answer = JSON.stringify({ plv: PLV, id: lastRequestId(transport), result: { n: 1 } });
+    transport.inject(answer);
+    transport.inject(answer);
+    await expect(promise).resolves.toEqual({ n: 1 });
+
+    const late = JSON.stringify({ plv: PLV, id: 'lost-page', result: { n: 2 } });
+    transport.inject(late);
+    transport.inject(late);
+    expect(unmatched).toEqual(['lost-page']);
+  });
+
   // One throwing event handler must not prevent other handlers from receiving the event.
   it('isolates exceptions thrown by event handlers', () => {
     const transport = new MockTransport();

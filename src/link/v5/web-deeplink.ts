@@ -26,6 +26,10 @@ export interface WebDeeplinkStorage {
 /** Default storage key for the persisted {@link WebDeeplinkRecord}. */
 export const WEB_DEEPLINK_STORAGE_KEY = 'phantasma.link.v5.webdeeplink';
 
+/** How many ids of handled answers a record keeps. A relay mailbox holds 80 frames by default
+ * (spec §16), so the newest 128 cover every answer that the relay can hand again. */
+export const WEB_DEEPLINK_STORED_ANSWERS = 128;
+
 /** Options for `PhantasmaLink5.webDeeplink()`. Only `dapp` is required in a browser; every
  * platform hook has a browser default and exists so tests/embedders can inject fakes. */
 export interface WebDeeplinkOptions {
@@ -92,6 +96,10 @@ export interface WebDeeplinkRecord {
   /** Unix milliseconds of the last answer from the wallet in the session, for the inactivity
    * expiry of spec §7. Present whenever `sessionId` is. */
   lastSeenAt?: number;
+  /** Ids of the answers handled in the last 10 minutes, each with the Unix milliseconds it came,
+   * at most {@link WEB_DEEPLINK_STORED_ANSWERS}. The relay hands its held answers again to the
+   * subscription of a reloaded page (spec §16), and the page drops the ones it handled before. */
+  answered?: Array<[string, number]>;
 }
 
 /** Resolved platform hooks (options merged with browser defaults). */
@@ -252,6 +260,10 @@ export function loadWebDeeplinkRecord(
       return null;
     }
   }
+  // The ids of handled answers are a cache: a malformed list is dropped, the pairing stays.
+  if (record.answered !== undefined && !isAnswerList(record.answered)) {
+    delete record.answered;
+  }
   // The key must decode to exactly one secretbox key, or nothing sealed with it could
   // ever be opened - regenerating the pairing is the only way forward.
   if (typeof record.key !== 'string') {
@@ -265,6 +277,21 @@ export function loadWebDeeplinkRecord(
     return null;
   }
   return record as WebDeeplinkRecord;
+}
+
+/** Returns true when `value` is a list of `[answer id, Unix milliseconds]` pairs. */
+function isAnswerList(value: unknown): value is Array<[string, number]> {
+  return (
+    Array.isArray(value) &&
+    value.every(
+      (entry) =>
+        Array.isArray(entry) &&
+        entry.length === 2 &&
+        typeof entry[0] === 'string' &&
+        typeof entry[1] === 'number' &&
+        Number.isFinite(entry[1])
+    )
+  );
 }
 
 /** Persist the record (single JSON blob under the storage key). */

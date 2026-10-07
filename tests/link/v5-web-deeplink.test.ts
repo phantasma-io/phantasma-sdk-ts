@@ -283,6 +283,8 @@ describe('PhantasmaLink5.webDeeplink', () => {
     );
     env.navigate(buildResponseUrl(paired.callback, paired.topic, frame));
     await disconnecting;
+    // The answer came after the record was deleted, and nothing wrote it again.
+    expect(env.store.has(WEB_DEEPLINK_STORAGE_KEY)).toBe(false);
 
     expect(client.account).toBeUndefined();
     expect(client.isClosed).toBe(true);
@@ -714,6 +716,44 @@ describe('PhantasmaLink5.webDeeplink over the relay', () => {
     env.relay().receive({ op: 'ack', id: request.id });
     deliver(env, key, { id: request.envelope.id, result: { chains: [], current: '', nexus: 'x' } });
     await expect(chains).resolves.toMatchObject({ nexus: 'x' });
+  });
+
+  // Spec §16: the relay hands its held frames to every new subscription, so a reloaded page meets
+  // the answers it handled before the reload again. The record keeps their ids, and the page drops
+  // them instead of showing an old result as a new one.
+  it('drops an answer that it handled before a reload when the relay brings it again', async () => {
+    const env = new FakeWebEnv();
+    const first = await PhantasmaLink5.webDeeplink({ dapp: DAPP, ...env.options() });
+    const key = base64UrlToBytes(env.record().key);
+    env.relay().open();
+    establish(env, key);
+    const chains = first.getChains();
+    const [request] = published(env, key);
+    env.relay().receive({ op: 'ack', id: request.id });
+    const result = { chains: [], current: '', nexus: 'x' };
+    deliver(env, key, { id: request.envelope.id, result });
+    await expect(chains).resolves.toEqual(result);
+    expect(env.record().answered?.map(([id]) => id)).toEqual([request.envelope.id]);
+    first.close();
+
+    const reloaded = await PhantasmaLink5.webDeeplink({ dapp: DAPP, ...env.options() });
+    env.relay().open();
+    deliver(env, key, { id: request.envelope.id, result });
+    expect(reloaded.takeUnmatchedResponse()).toBeUndefined();
+  });
+
+  it('keeps the pairing when the stored ids of handled answers are malformed', async () => {
+    const env = new FakeWebEnv();
+    await connected(env);
+    const stored = env.record();
+    env.storage.setItem(
+      WEB_DEEPLINK_STORAGE_KEY,
+      JSON.stringify({ ...stored, answered: [['id', 'not a time']] })
+    );
+
+    const reloaded = await PhantasmaLink5.webDeeplink({ dapp: DAPP, ...env.options() });
+    expect(reloaded.account?.address).toBe('P2KTestAddr');
+    expect(env.record().topic).toBe(stored.topic);
   });
 
   // Spec §6.3: while the relay is not connected, a request that fits a URL takes the deeplink.
