@@ -55,6 +55,7 @@ function harness(options: Partial<ConstructorParameters<typeof RelayTransport>[0
   const sockets: FakeSocket[] = [];
   const transport = new RelayTransport({
     topic: 'top-1',
+    side: 'dapp',
     webSocketFactory: (url) => {
       const socket = new FakeSocket(url);
       sockets.push(socket);
@@ -117,11 +118,11 @@ describe('RelayTransport', () => {
     expect(socket.url).toBe(DEFAULT_RELAY_URL);
 
     socket.open();
-    expect(socket.sentJson()[0]).toEqual({ op: 'subscribe', topic: 'top-1' });
+    expect(socket.sentJson()[0]).toEqual({ op: 'subscribe', topic: 'top-1.wallet' });
 
     const sendPromise = transport.send('FRAME-1');
     const publish = socket.sentJson()[1];
-    expect(publish).toEqual({ op: 'publish', topic: 'top-1', id: 'p1', payload: 'FRAME-1' });
+    expect(publish).toEqual({ op: 'publish', topic: 'top-1.dapp', id: 'p1', payload: 'FRAME-1' });
 
     let settled = false;
     void sendPromise.then(() => {
@@ -130,7 +131,7 @@ describe('RelayTransport', () => {
     await Promise.resolve();
     expect(settled).toBe(false); // no ack yet
 
-    socket.receive({ op: 'ack', topic: 'top-1', id: 'p1' });
+    socket.receive({ op: 'ack', topic: 'top-1.dapp', id: 'p1' });
     await expect(sendPromise).resolves.toBeUndefined();
   });
 
@@ -181,7 +182,7 @@ describe('RelayTransport', () => {
     await expect(sendPromise).rejects.toMatchObject({ code: LinkErrorCode.Disconnected });
 
     const next = transport.send('FRAME-2');
-    socket.receive({ op: 'ack', topic: 'top-1', id: 'p2' });
+    socket.receive({ op: 'ack', topic: 'top-1.dapp', id: 'p2' });
     await expect(next).resolves.toBeUndefined();
   });
 
@@ -211,7 +212,7 @@ describe('RelayTransport', () => {
     expect(sent[0].op).toBe('subscribe');
     expect(sent[1]).toMatchObject({ op: 'publish', payload: 'EARLY' });
 
-    socket.receive({ op: 'ack', topic: 'top-1', id: sent[1].id });
+    socket.receive({ op: 'ack', topic: 'top-1.dapp', id: sent[1].id });
     await expect(sendPromise).resolves.toBeUndefined();
   });
 
@@ -222,11 +223,51 @@ describe('RelayTransport', () => {
     socket.open();
 
     socket.receive({ op: 'deliver', topic: 'other', payload: 'NOPE' });
-    socket.receive({ op: 'deliver', topic: 'top-1', payload: 'YES' });
-    socket.receive({ op: 'ack', topic: 'top-1', id: 'p999' }); // unknown ack: ignored
+    socket.receive({ op: 'deliver', topic: 'top-1.wallet', payload: 'YES' });
+    socket.receive({ op: 'ack', topic: 'top-1.dapp', id: 'p999' }); // unknown ack: ignored
     socket.onmessage?.({ data: 'not json' }); // garbage: ignored
 
     expect(received).toEqual(['YES']);
+  });
+
+  // Spec §16: each side publishes to its own topic and listens on the other side's topic, so
+  // the relay never hands a side its own frames. A frame on the side's own topic is dropped.
+  it("publishes to its side's topic and listens on the other side's topic", () => {
+    const dapp = harness();
+    dapp.sockets[0].open();
+    void dapp.transport.send('TO-WALLET').catch(() => undefined);
+    expect(dapp.sockets[0].sentJson()).toEqual([
+      { op: 'subscribe', topic: 'top-1.wallet' },
+      { op: 'publish', topic: 'top-1.dapp', id: 'p1', payload: 'TO-WALLET' },
+    ]);
+    dapp.sockets[0].receive({ op: 'deliver', topic: 'top-1.dapp', payload: 'OWN' });
+    dapp.sockets[0].receive({ op: 'deliver', topic: 'top-1.wallet', payload: 'FROM-WALLET' });
+    expect(dapp.received).toEqual(['FROM-WALLET']);
+    dapp.transport.close();
+
+    const wallet = harness({ side: 'wallet' });
+    wallet.sockets[0].open();
+    void wallet.transport.send('TO-DAPP').catch(() => undefined);
+    expect(wallet.sockets[0].sentJson()).toEqual([
+      { op: 'subscribe', topic: 'top-1.dapp' },
+      { op: 'publish', topic: 'top-1.wallet', id: 'p1', payload: 'TO-DAPP' },
+    ]);
+    wallet.sockets[0].receive({ op: 'deliver', topic: 'top-1.wallet', payload: 'OWN' });
+    wallet.sockets[0].receive({ op: 'deliver', topic: 'top-1.dapp', payload: 'FROM-DAPP' });
+    expect(wallet.received).toEqual(['FROM-DAPP']);
+    wallet.transport.close();
+  });
+
+  // A caller without types can leave the side out. The transport refuses to start, because it
+  // would listen on a topic that nobody publishes to.
+  it('requires a side', () => {
+    let error: unknown;
+    try {
+      harness({ side: undefined });
+    } catch (caught) {
+      error = caught;
+    }
+    expect(error).toMatchObject({ code: LinkErrorCode.InvalidParams });
   });
 
   // Spec section 16 chunking: oversized frames split into {msgId, seq, total, chunk}
@@ -241,7 +282,7 @@ describe('RelayTransport', () => {
     // The relay acknowledges each chunk; the next one goes out after the ack.
     for (let i = 1; i <= 3; i++) {
       await settle();
-      socket.receive({ op: 'ack', topic: 'top-1', id: socket.sentJson()[i].id });
+      socket.receive({ op: 'ack', topic: 'top-1.dapp', id: socket.sentJson()[i].id });
     }
     await expect(sendPromise).resolves.toBeUndefined();
 
@@ -255,12 +296,12 @@ describe('RelayTransport', () => {
     // Incoming reassembly, deliberately out of order.
     socket.receive({
       op: 'deliver',
-      topic: 'top-1',
+      topic: 'top-1.wallet',
       payload: { msgId: 'm1', seq: 1, total: 2, chunk: 'WORLD' },
     });
     socket.receive({
       op: 'deliver',
-      topic: 'top-1',
+      topic: 'top-1.wallet',
       payload: { msgId: 'm1', seq: 0, total: 2, chunk: 'HELLO ' },
     });
     expect(received).toEqual(['HELLO WORLD']);
@@ -277,15 +318,15 @@ describe('RelayTransport', () => {
     await settle();
     expect(socket.sentJson()).toHaveLength(2); // the subscribe and chunk 0, nothing more
 
-    socket.receive({ op: 'ack', topic: 'top-1', id: socket.sentJson()[1].id });
+    socket.receive({ op: 'ack', topic: 'top-1.dapp', id: socket.sentJson()[1].id });
     await settle();
     expect(socket.sentJson()).toHaveLength(3);
     expect((socket.sentJson()[2].payload as Record<string, unknown>).seq).toBe(1);
 
-    socket.receive({ op: 'ack', topic: 'top-1', id: socket.sentJson()[2].id });
+    socket.receive({ op: 'ack', topic: 'top-1.dapp', id: socket.sentJson()[2].id });
     await settle();
     expect((socket.sentJson()[3].payload as Record<string, unknown>).seq).toBe(2);
-    socket.receive({ op: 'ack', topic: 'top-1', id: socket.sentJson()[3].id });
+    socket.receive({ op: 'ack', topic: 'top-1.dapp', id: socket.sentJson()[3].id });
     await expect(sendPromise).resolves.toBeUndefined();
   });
 
@@ -303,7 +344,7 @@ describe('RelayTransport', () => {
       sendPromise.catch(() => {}); // observed below; avoid an unhandled rejection
       for (let i = 1; i <= 3; i++) {
         await jest.advanceTimersByTimeAsync(900); // each chunk takes 900 ms to arrive
-        socket.receive({ op: 'ack', topic: 'top-1', id: socket.sentJson()[i].id });
+        socket.receive({ op: 'ack', topic: 'top-1.dapp', id: socket.sentJson()[i].id });
       }
       await expect(sendPromise).resolves.toBeUndefined();
     } finally {
@@ -321,7 +362,7 @@ describe('RelayTransport', () => {
       for (let seq = 0; seq < total; seq++) {
         socket.receive({
           op: 'deliver',
-          topic: 'top-1',
+          topic: 'top-1.wallet',
           payload: { msgId, seq, total, chunk: 'x' },
         });
       }
@@ -345,7 +386,7 @@ describe('RelayTransport', () => {
       code: LinkErrorCode.PayloadTooLarge,
       data: { maxPayloadBytes: 32 * 1024 * 1024 },
     });
-    expect(socket.sentJson()).toEqual([{ op: 'subscribe', topic: 'top-1' }]);
+    expect(socket.sentJson()).toEqual([{ op: 'subscribe', topic: 'top-1.wallet' }]);
   });
 
   // Reassembly is bounded: a stream exceeding the configured ceiling is discarded
@@ -356,12 +397,12 @@ describe('RelayTransport', () => {
     socket.open();
     socket.receive({
       op: 'deliver',
-      topic: 'top-1',
+      topic: 'top-1.wallet',
       payload: { msgId: 'big', seq: 0, total: 2, chunk: 'AAAAAA' },
     });
     socket.receive({
       op: 'deliver',
-      topic: 'top-1',
+      topic: 'top-1.wallet',
       payload: { msgId: 'big', seq: 1, total: 2, chunk: 'BBBBBB' },
     });
     expect(received).toEqual([]);
@@ -388,10 +429,10 @@ describe('RelayTransport', () => {
       const second = sockets[1];
       second.open();
       const sent = second.sentJson();
-      expect(sent[0]).toEqual({ op: 'subscribe', topic: 'top-1' });
+      expect(sent[0]).toEqual({ op: 'subscribe', topic: 'top-1.wallet' });
       expect(sent[1]).toMatchObject({ op: 'publish', payload: 'IMPORTANT', id: 'p1' });
 
-      second.receive({ op: 'ack', topic: 'top-1', id: 'p1' });
+      second.receive({ op: 'ack', topic: 'top-1.dapp', id: 'p1' });
       await expect(sendPromise).resolves.toBeUndefined();
     } finally {
       jest.useRealTimers();
@@ -500,7 +541,7 @@ describe('PhantasmaLink5.relayEcdh (custom-scheme pairing, key derived from the 
     await expect(client.getChains()).rejects.toMatchObject({ code: 4100 });
     sockets[0].open();
     // Nothing but the subscribe may have left the transport (no plaintext, no publish).
-    expect(sockets[0].sentJson()).toEqual([{ op: 'subscribe', topic: pairing.topic }]);
+    expect(sockets[0].sentJson()).toEqual([{ op: 'subscribe', topic: `${pairing.topic}.wallet` }]);
   });
 
   // The full fallback handshake (spec §15 step 3, §18.1): wallet pub + sealed connect result
@@ -524,7 +565,7 @@ describe('PhantasmaLink5.relayEcdh (custom-scheme pairing, key derived from the 
     const sealedEvent = sealEnvelopeText(eventEnvelope, derived);
     socket.receive({
       op: 'deliver',
-      topic,
+      topic: `${topic}.wallet`,
       payload: { wpk: bytesToBase64Url(walletPair.publicKey), ...sealedEvent },
     });
 
@@ -537,7 +578,7 @@ describe('PhantasmaLink5.relayEcdh (custom-scheme pairing, key derived from the 
       openEnvelopeText(JSON.parse(publish.payload as string) as EncryptedFrame, derived)
     );
     expect(envelope.method).toBe('pha_getChains');
-    socket.receive({ op: 'ack', topic, id: publish.id });
+    socket.receive({ op: 'ack', topic: `${topic}.dapp`, id: publish.id });
     const response = JSON.stringify({
       plv: PLV,
       id: envelope.id,
@@ -545,7 +586,7 @@ describe('PhantasmaLink5.relayEcdh (custom-scheme pairing, key derived from the 
     });
     socket.receive({
       op: 'deliver',
-      topic,
+      topic: `${topic}.wallet`,
       payload: JSON.stringify(sealEnvelopeText(response, derived)),
     });
     await expect(promise).resolves.toMatchObject({ nexus: 'simnet' });
@@ -562,12 +603,12 @@ describe('PhantasmaLink5.relayEcdh (custom-scheme pairing, key derived from the 
     const stranger = generateEphemeralKeyPair();
     socket.receive({
       op: 'deliver',
-      topic,
+      topic: `${topic}.wallet`,
       payload: { wpk: bytesToBase64Url(stranger.publicKey) },
     });
     socket.receive({
       op: 'deliver',
-      topic,
+      topic: `${topic}.wallet`,
       payload: { wpk: 'not base64url!', nonce: 'AAAA', ct: 'AAAA' },
     });
     expect(client.account).toBeUndefined();
@@ -585,7 +626,7 @@ describe('PhantasmaLink5.relayEcdh (custom-scheme pairing, key derived from the 
     );
     socket.receive({
       op: 'deliver',
-      topic,
+      topic: `${topic}.wallet`,
       payload: { wpk: bytesToBase64Url(walletPair.publicKey), ...sealedEvent },
     });
     expect(client.account?.address).toBe('P2KEcdh');
@@ -602,7 +643,7 @@ describe('PhantasmaLink5.relayEcdh (custom-scheme pairing, key derived from the 
     // Plaintext before the key: dropped silently (never parsed as an envelope).
     socket.receive({
       op: 'deliver',
-      topic,
+      topic: `${topic}.wallet`,
       payload: JSON.stringify({
         plv: PLV,
         type: 'event',
@@ -625,7 +666,7 @@ describe('PhantasmaLink5.relayEcdh (custom-scheme pairing, key derived from the 
     );
     socket.receive({
       op: 'deliver',
-      topic,
+      topic: `${topic}.wallet`,
       payload: { wpk: bytesToBase64Url(walletPair.publicKey), ...sealedEvent },
     });
     expect(client.account?.address).toBe('P2KEcdh');
@@ -635,14 +676,14 @@ describe('PhantasmaLink5.relayEcdh (custom-scheme pairing, key derived from the 
     const attacker = generateEphemeralKeyPair();
     socket.receive({
       op: 'deliver',
-      topic,
+      topic: `${topic}.wallet`,
       payload: { wpk: bytesToBase64Url(attacker.publicKey) },
     });
     const events: string[] = [];
     client.onEvent((event) => events.push(event));
     socket.receive({
       op: 'deliver',
-      topic,
+      topic: `${topic}.wallet`,
       payload: JSON.stringify(
         sealEnvelopeText(
           JSON.stringify({ plv: PLV, type: 'event', event: 'pha_chainChanged', data: {} }),
@@ -692,7 +733,7 @@ describe('PhantasmaLink5.relay (sealed end-to-end over a fake relay)', () => {
     expect(envelope.method).toBe('pha_getChains');
     expect(publish.payload as string).not.toContain('pha_getChains'); // sealed on the wire
 
-    socket.receive({ op: 'ack', topic: 'topic-r', id: publish.id });
+    socket.receive({ op: 'ack', topic: 'topic-r.dapp', id: publish.id });
     const responseEnvelope = JSON.stringify({
       plv: PLV,
       id: envelope.id,
@@ -700,7 +741,7 @@ describe('PhantasmaLink5.relay (sealed end-to-end over a fake relay)', () => {
     });
     socket.receive({
       op: 'deliver',
-      topic: 'topic-r',
+      topic: 'topic-r.wallet',
       payload: JSON.stringify(sealEnvelopeText(responseEnvelope, sessionKey)),
     });
 
@@ -740,7 +781,7 @@ describe('PhantasmaLink5.relay (sealed end-to-end over a fake relay)', () => {
       expect(payload.seq).toBe(chunks.length);
       chunks.push(payload.chunk);
       total = payload.total;
-      socket.receive({ op: 'ack', topic: 'topic-big', id: publish.id });
+      socket.receive({ op: 'ack', topic: 'topic-big.dapp', id: publish.id });
     } while (chunks.length < total);
     expect(total).toBe(67);
 
@@ -753,7 +794,7 @@ describe('PhantasmaLink5.relay (sealed end-to-end over a fake relay)', () => {
     const response = JSON.stringify({ plv: PLV, id: envelope.id, result: { signedTx: 'AA==' } });
     socket.receive({
       op: 'deliver',
-      topic: 'topic-big',
+      topic: 'topic-big.wallet',
       payload: JSON.stringify(sealEnvelopeText(response, sessionKey)),
     });
     await expect(promise).resolves.toEqual({ signedTx: 'AA==' });

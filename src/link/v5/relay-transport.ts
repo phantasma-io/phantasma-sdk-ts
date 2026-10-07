@@ -1,5 +1,6 @@
 // Phantasma Link v5 - relay transport (spec §6.4/§16). dApp and wallet meet on an
-// E2E-blind pub/sub server: both subscribe to the pairing topic; every frame is
+// E2E-blind pub/sub server. Each side publishes to its own topic of the pairing and
+// subscribes to the other side's topic, so it never receives its own frames. Every frame is
 // published as OPAQUE payload (the NaCl-sealed envelope text - the relay never sees
 // plaintext, enforced by PhantasmaLink5.relay() requiring the session key). Unlike
 // deeplink this transport is persistent and bidirectional, so it carries big payloads,
@@ -53,9 +54,22 @@ const MAX_CHUNKS_PER_MESSAGE = Math.ceil(MAX_SEALED_FRAME_CHARS / RELAY_CHUNK_BY
 const MAX_CONCURRENT_PARTIALS = 8;
 const PARTIAL_STALE_MS = 120_000;
 
+/** Which end of a pairing a relay client is (spec §16). */
+export type RelaySide = 'dapp' | 'wallet';
+
+/** Returns the relay topic that `side` publishes to and the other side subscribes to: the
+ * pairing topic, a dot and the side (spec §16). */
+export function relayTopic(pairingTopic: string, side: RelaySide): string {
+  return `${pairingTopic}.${side}`;
+}
+
 export interface RelayTransportOptions {
-  /** The pairing topic both sides subscribe to (bearer capability, spec §16). */
+  /** The pairing topic `t` (bearer capability, spec §15). The relay topics of both sides are
+   * built from it. */
   topic: string;
+  /** Which end of the pairing this transport is. It publishes to the topic of this side and
+   * subscribes to the topic of the other side (spec §16). */
+  side: RelaySide;
   /** Relay WebSocket URL; default {@link DEFAULT_RELAY_URL}. */
   url?: string;
   /** Override the WebSocket implementation (Node / tests). Defaults to global WebSocket. */
@@ -116,7 +130,8 @@ function defaultWebSocketFactory(url: string): WebSocketLike {
  */
 export class RelayTransport implements LinkTransport {
   readonly kind = 'relay';
-  private readonly topic: string;
+  private readonly publishTopic: string;
+  private readonly subscribeTopic: string;
   private readonly url: string;
   private readonly factory: WebSocketFactory;
   private readonly maxPayloadBytes: number;
@@ -141,7 +156,16 @@ export class RelayTransport implements LinkTransport {
     if (!options.topic) {
       throw new LinkError(LinkErrorCode.InvalidParams, 'Relay transport requires a topic');
     }
-    this.topic = options.topic;
+    // A caller without types could leave the side out; the transport would then listen on a
+    // topic that nobody publishes to.
+    if (options.side !== 'dapp' && options.side !== 'wallet') {
+      throw new LinkError(
+        LinkErrorCode.InvalidParams,
+        "Relay transport requires the side 'dapp' or 'wallet'"
+      );
+    }
+    this.publishTopic = relayTopic(options.topic, options.side);
+    this.subscribeTopic = relayTopic(options.topic, options.side === 'dapp' ? 'wallet' : 'dapp');
     this.url = options.url ?? DEFAULT_RELAY_URL;
     this.factory = options.webSocketFactory ?? defaultWebSocketFactory;
     this.maxPayloadBytes = options.maxPayloadBytes ?? RELAY_CHUNK_BYTES;
@@ -256,7 +280,7 @@ export class RelayTransport implements LinkTransport {
         return;
       }
       this.reconnectAttempt = 0;
-      socket.send(JSON.stringify({ op: 'subscribe', topic: this.topic }));
+      socket.send(JSON.stringify({ op: 'subscribe', topic: this.subscribeTopic }));
       // Re-send publishes the previous socket never got acked for (at-least-once;
       // the wallet de-duplicates by envelope id). Order by publish sequence so a
       // chunked message keeps its relative order.
@@ -295,7 +319,7 @@ export class RelayTransport implements LinkTransport {
 
   private publish(payload: unknown): Promise<void> {
     const id = `p${++this.publishSeq}`;
-    const text = JSON.stringify({ op: 'publish', topic: this.topic, id, payload });
+    const text = JSON.stringify({ op: 'publish', topic: this.publishTopic, id, payload });
     // The socket takes the text at once and sends it as fast as the uplink allows, so the timer
     // also gives the frame the time it needs to leave the device.
     const timeoutMs =
@@ -335,7 +359,7 @@ export class RelayTransport implements LinkTransport {
 
     switch (frame.op) {
       case 'deliver': {
-        if (frame.topic !== this.topic) {
+        if (frame.topic !== this.subscribeTopic) {
           return;
         }
         const payload = frame.payload;

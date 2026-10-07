@@ -160,7 +160,7 @@ describe('DeeplinkRelayTransport', () => {
   it('delivers frames from both paths', () => {
     const { transport, socket, received } = harness('relay');
     socket.open();
-    socket.receive({ op: 'deliver', topic: 'topic-1', payload: 'from-relay' });
+    socket.receive({ op: 'deliver', topic: 'topic-1.wallet', payload: 'from-relay' });
     expect(
       transport.deliverUrl(buildResponseUrl('https://dapp.example', 'topic-1', 'from-url'))
     ).toBe(true);

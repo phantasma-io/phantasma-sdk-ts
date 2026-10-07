@@ -5,7 +5,7 @@
 // URL. Whatever the preference, a request that a deeplink cannot carry goes over the relay.
 // After a request goes over the relay, the wake link brings the wallet app to the front so that
 // it reads the relay. The wallet answers over the path the request came on; both paths feed the
-// same session (one topic, one key).
+// same session (one pairing, one key).
 
 import { LinkError, LinkErrorCode } from './errors.js';
 import { LinkTransport, SendOptions } from './transport.js';
@@ -17,8 +17,9 @@ import {
 import { RelayTransport, RelayTransportOptions } from './relay-transport.js';
 
 export interface DeeplinkRelayTransportOptions extends DeeplinkTransportOptions {
-  /** The relay of the pairing. The topic is the pairing's, and `log` defaults to the one above. */
-  relay: Omit<RelayTransportOptions, 'topic' | 'onWalletKey'>;
+  /** The relay of the pairing. The topic is the pairing's, the side is the dApp's, and `log`
+   * defaults to the one above. */
+  relay: Omit<RelayTransportOptions, 'topic' | 'side' | 'onWalletKey'>;
   /** Where a request that fits a URL goes while the relay is connected: `relay` for a web page
    * (spec §6.3: no page reload), `deeplink` for a native app. */
   prefer: 'relay' | 'deeplink';
@@ -48,9 +49,15 @@ export class DeeplinkRelayTransport implements LinkTransport {
 
   constructor(options: DeeplinkRelayTransportOptions) {
     this.deeplink = new DeeplinkTransport(options);
-    // The relay connects and subscribes to the topic now (spec §15 step 1), so that whatever the
-    // wallet publishes, the session after the pairing approval included, reaches this page.
-    this.relay = new RelayTransport({ log: options.log, ...options.relay, topic: options.topic });
+    // The relay connects and subscribes to the wallet's topic now (spec §15 step 1, §16), so that
+    // whatever the wallet publishes, the session after the pairing approval included, reaches
+    // this page.
+    this.relay = new RelayTransport({
+      log: options.log,
+      ...options.relay,
+      topic: options.topic,
+      side: 'dapp',
+    });
     this.prefer = options.prefer;
     // The relay closes for good only on close() or when it refuses the topic. The deeplink still
     // works then; the client closes only on close().

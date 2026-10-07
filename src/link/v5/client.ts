@@ -194,7 +194,7 @@ export class PhantasmaLink5 {
     options: DeeplinkTransportOptions & {
       sessionKey: Uint8Array;
       requestTimeoutMs?: number;
-      relay?: Omit<RelayTransportOptions, 'topic' | 'onWalletKey'>;
+      relay?: Omit<RelayTransportOptions, 'topic' | 'side' | 'onWalletKey'>;
     }
   ): PhantasmaLink5 {
     if (!options.sessionKey || options.sessionKey.length !== 32) {
@@ -219,7 +219,10 @@ export class PhantasmaLink5 {
    * pairing is MANDATORY: relay payloads are ALWAYS encrypted (spec §8) - the relay is
    * E2E-blind and must stay that way. */
   static relay(
-    options: RelayTransportOptions & { sessionKey: Uint8Array; requestTimeoutMs?: number }
+    options: Omit<RelayTransportOptions, 'side'> & {
+      sessionKey: Uint8Array;
+      requestTimeoutMs?: number;
+    }
   ): PhantasmaLink5 {
     if (!options.sessionKey || options.sessionKey.length !== 32) {
       throw new LinkError(
@@ -227,7 +230,7 @@ export class PhantasmaLink5 {
         'Relay requires the 32-byte pairing session key'
       );
     }
-    return new PhantasmaLink5(new RelayTransport(options), {
+    return new PhantasmaLink5(new RelayTransport({ ...options, side: 'dapp' }), {
       sessionKey: options.sessionKey,
       // Relay round-trips include human consents too; same generous default.
       requestTimeoutMs: options.requestTimeoutMs ?? DEEPLINK_REQUEST_TIMEOUT_MS,
@@ -243,7 +246,7 @@ export class PhantasmaLink5 {
    * (a phantasma:// URI) to start; the session then arrives one-tap.
    */
   static relayEcdh(
-    options: Omit<RelayTransportOptions, 'topic' | 'onWalletKey'> & {
+    options: Omit<RelayTransportOptions, 'topic' | 'side' | 'onWalletKey'> & {
       topic?: string;
       dapp?: DappMetadata;
       keyPair?: EphemeralKeyPair;
@@ -257,6 +260,7 @@ export class PhantasmaLink5 {
     const transport = new RelayTransport({
       ...options,
       topic,
+      side: 'dapp',
       url: relayUrl,
       onWalletKey: (publicKeyB64Url, sealedFrame) => {
         // Fires only when a wallet hop arrives, long after `client` below exists. The key is

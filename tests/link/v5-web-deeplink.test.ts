@@ -635,13 +635,13 @@ describe('PhantasmaLink5.webDeeplink', () => {
 });
 
 describe('PhantasmaLink5.webDeeplink over the relay', () => {
-  /** The wallet's side of the relay: a sealed envelope delivered on the pairing topic. */
+  /** The wallet's side of the relay: a sealed envelope delivered on the wallet's topic. */
   function deliver(env: FakeWebEnv, key: Uint8Array, envelope: object): void {
     const record = env.record();
     const payload = JSON.stringify(
       sealEnvelopeText(JSON.stringify({ plv: PLV, ...envelope }), key)
     );
-    env.relay().receive({ op: 'deliver', topic: record.topic, payload });
+    env.relay().receive({ op: 'deliver', topic: `${record.topic}.wallet`, payload });
   }
 
   /** The session the wallet publishes over the relay right after the pairing approval. */
@@ -672,9 +672,9 @@ describe('PhantasmaLink5.webDeeplink over the relay', () => {
       }));
   }
 
-  // Spec §15: the pairing carries the relay, and the page subscribes to the topic at once, so
-  // that the session the wallet publishes after the approval reaches it.
-  it('pairs with a relay and subscribes to the topic', async () => {
+  // Spec §15, §16: the pairing carries the relay, and the page subscribes to the wallet's topic
+  // at once, so that the session the wallet publishes after the approval reaches it.
+  it("pairs with a relay and subscribes to the wallet's topic", async () => {
     const env = new FakeWebEnv();
     const client = await PhantasmaLink5.webDeeplink({ dapp: DAPP, ...env.options() });
     const record = env.record();
@@ -683,7 +683,7 @@ describe('PhantasmaLink5.webDeeplink over the relay', () => {
     expect(env.relay().url).toBe(DEFAULT_RELAY_URL);
 
     env.relay().open();
-    expect(env.relay().sentJson()).toEqual([{ op: 'subscribe', topic: record.topic }]);
+    expect(env.relay().sentJson()).toEqual([{ op: 'subscribe', topic: `${record.topic}.wallet` }]);
     expect(env.opened).toEqual([]);
   });
 
