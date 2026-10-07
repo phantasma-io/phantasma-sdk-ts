@@ -820,7 +820,12 @@ describe('PhantasmaLink5.webDeeplink over the relay', () => {
     const key = base64UrlToBytes(env.record().key);
     env.relay().open();
     establish(env, key);
-    env.relay().receive({ op: 'error', code: 'topic_limit', message: 'too many topics' });
+    env.relay().receive({
+      op: 'error',
+      code: 'topic_limit',
+      message: 'too many topics',
+      topic: `${env.record().topic}.wallet`,
+    });
 
     await expect(
       client.signTransaction({ format: 'carbon', tx: bytesToBase64(new Uint8Array(20_000)) })

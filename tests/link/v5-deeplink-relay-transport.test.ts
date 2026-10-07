@@ -120,7 +120,12 @@ describe('DeeplinkRelayTransport', () => {
   it('refuses what a deeplink cannot carry once the relay is gone', () => {
     const { transport, send, opened, socket } = harness('relay');
     socket.open();
-    socket.receive({ op: 'error', code: 'topic_limit', message: 'too many topics' });
+    socket.receive({
+      op: 'error',
+      code: 'topic_limit',
+      message: 'too many topics',
+      topic: 'topic-1.wallet',
+    });
 
     expect(() => transport.send(LARGE)).toThrow(
       expect.objectContaining({ code: LinkErrorCode.Disconnected })
@@ -143,7 +148,12 @@ describe('DeeplinkRelayTransport', () => {
     const [publish] = socket.publishes();
     socket.receive({ op: 'ack', id: publish.id });
 
-    socket.receive({ op: 'error', code: 'topic_limit', message: 'too many topics' });
+    socket.receive({
+      op: 'error',
+      code: 'topic_limit',
+      message: 'too many topics',
+      topic: 'topic-1.wallet',
+    });
     await expect(overRelay).rejects.toMatchObject({ code: LinkErrorCode.Disconnected });
     expect(logged).toEqual(['relay error code=topic_limit: too many topics']);
     const waiting = await Promise.race([

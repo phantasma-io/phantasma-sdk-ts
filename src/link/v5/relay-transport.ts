@@ -405,6 +405,16 @@ export class RelayTransport implements LinkTransport {
       case 'error': {
         const entry = typeof frame.id === 'string' ? this.pending.get(frame.id) : undefined;
         const message = (frame as { message?: unknown }).message;
+        const code = (frame as { code?: unknown }).code;
+        const detail = `relay error${typeof code !== 'undefined' ? ` code=${String(code)}` : ''}${typeof message === 'string' ? `: ${message}` : ''}`;
+        if (code === 'bad_topic') {
+          // The relay refused a topic of this transport, which uses its two topics only, as
+          // invalid. It names no topic then (spec §16), and no reconnect can change the answer:
+          // the transport ends, and every request in flight fails with 4900.
+          (this.log ?? ((m: string) => console.warn(`[phantasma-link relay] ${m}`)))(detail);
+          this.shutDown(detail);
+          return;
+        }
         if (entry) {
           // A publish-scoped error settles that one publish. The relay refused the frame, so the
           // wallet cannot be reached through it: 4900 (spec §10).
@@ -418,22 +428,24 @@ export class RelayTransport implements LinkTransport {
           );
           return;
         }
-        // No publish matches this error (e.g. a subscribe refusal like topic_limit, which carries
-        // no publish id). Spec §16 requires clients to surface error frames and to fail the
-        // affected session or operation, never to drop them - a silent drop is exactly what let a
-        // refused subscribe hang.
-        const code = (frame as { code?: unknown }).code;
-        const detail = `relay error${typeof code !== 'undefined' ? ` code=${String(code)}` : ''}${typeof message === 'string' ? `: ${message}` : ''}`;
+        // No publish matches this error. Spec §16 requires clients to surface error frames and to
+        // fail the affected session or operation, never to drop them - a silent drop is exactly
+        // what let a refused subscribe hang.
         (this.log ?? ((m: string) => console.warn(`[phantasma-link relay] ${m}`)))(detail);
         if (typeof frame.id === 'string') {
           // The error refuses a publish that no longer waits here: one that timed out, or one of a
           // socket before a reconnect. The publishes in flight are not its subject.
           return;
         }
-        if (code === 'topic_limit') {
-          // The relay refused this topic, so no answer can ever arrive on it: end the transport,
-          // and every request in flight fails with 4900.
-          this.shutDown(detail);
+        if (typeof frame.topic === 'string') {
+          // An error that names a topic refuses the subscribe of that topic (spec §16). This
+          // transport subscribes one topic only, so a refusal that names another topic touches
+          // nothing here.
+          if (frame.topic === this.subscribeTopic) {
+            // No answer can ever arrive on a refused topic: end the transport, and every
+            // request in flight fails with 4900.
+            this.shutDown(detail);
+          }
         } else {
           // Any other error ends this connection on the relay side. The publishes in flight fail
           // now with 4900; re-sending them after the reconnect would meet the same refusal.

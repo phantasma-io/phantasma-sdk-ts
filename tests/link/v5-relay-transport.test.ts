@@ -143,16 +143,36 @@ describe('RelayTransport', () => {
     socket.open();
 
     const sendPromise = transport.send('FRAME-1');
-    socket.receive({ op: 'error', code: 'bad_topic', message: 'Invalid topic', id: 'p1' });
+    socket.receive({ op: 'error', code: 'hold_limit', message: 'Too many held bytes', id: 'p1' });
     await expect(sendPromise).rejects.toMatchObject({
       code: LinkErrorCode.Disconnected,
-      message: 'Invalid topic',
+      message: 'Too many held bytes',
     });
   });
 
-  // A refused subscription (topic_limit, no publish id) means that no answer can ever arrive
-  // on this topic: the transport ends, every request in flight fails with 4900, and the
-  // session layer learns the reason (spec §16).
+  // The relay refuses an invalid topic with `bad_topic`, naming no topic (spec §16). The transport
+  // uses its own two topics only, and no reconnect changes the answer: it ends, instead of
+  // subscribing again and again.
+  it('ends the transport on bad_topic', async () => {
+    for (const named of [{}, { id: 'p1' }]) {
+      const { transport, sockets } = harness({ log: () => {} });
+      const closed: Array<string | undefined> = [];
+      transport.onClose((reason) => closed.push(reason));
+      const socket = sockets[0];
+      socket.open();
+
+      const sendPromise = transport.send('FRAME-1');
+      socket.receive({ op: 'error', code: 'bad_topic', message: 'Invalid topic', ...named });
+      await expect(sendPromise).rejects.toMatchObject({ code: LinkErrorCode.Disconnected });
+      expect(closed).toHaveLength(1);
+      expect(closed[0]).toContain('bad_topic');
+      expect(sockets).toHaveLength(1);
+    }
+  });
+
+  // An error frame that names the subscribed topic refuses that subscription (spec §16), so no
+  // answer can ever arrive: the transport ends, every request in flight fails with 4900, and the
+  // session layer learns the reason. The code does not matter; the topic decides.
   it('ends the transport when the relay refuses the subscription', async () => {
     const { transport, sockets } = harness({ log: () => {} });
     const closed: Array<string | undefined> = [];
@@ -161,13 +181,39 @@ describe('RelayTransport', () => {
     socket.open();
 
     const sendPromise = transport.send('FRAME-1');
-    socket.receive({ op: 'error', code: 'topic_limit', message: 'Too many topics' });
+    socket.receive({
+      op: 'error',
+      code: 'topic_limit',
+      message: 'Too many topics on one connection',
+      topic: 'top-1.wallet',
+    });
     await expect(sendPromise).rejects.toMatchObject({ code: LinkErrorCode.Disconnected });
     expect(closed).toHaveLength(1);
     expect(closed[0]).toContain('topic_limit');
     await expect(transport.send('FRAME-2')).rejects.toMatchObject({
       code: LinkErrorCode.Disconnected,
     });
+  });
+
+  // A refusal that names another topic is not about this transport's subscription: the publish
+  // in flight still gets its ack, and the transport stays open.
+  it('stays open when the relay refuses a subscription of another topic', async () => {
+    const { transport, sockets } = harness({ log: () => {} });
+    const closed: Array<string | undefined> = [];
+    transport.onClose((reason) => closed.push(reason));
+    const socket = sockets[0];
+    socket.open();
+
+    const sendPromise = transport.send('FRAME-1');
+    socket.receive({
+      op: 'error',
+      code: 'topic_limit',
+      message: 'Too many topics',
+      topic: 'other.wallet',
+    });
+    socket.receive({ op: 'ack', topic: 'top-1.dapp', id: 'p1' });
+    await expect(sendPromise).resolves.toBeUndefined();
+    expect(closed).toHaveLength(0);
   });
 
   // Any other error without a publish id (here the rate limit) fails the publishes in flight
