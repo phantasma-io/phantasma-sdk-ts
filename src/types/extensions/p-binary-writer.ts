@@ -122,29 +122,26 @@ export class PBinaryWriter {
       this.appendByte(A);
       this.appendByte(B);
     } else if (value <= 0xffffffff) {
-      const C = (value & 0x00ff0000) >> 16;
-      const B = (value & 0x0000ff00) >> 8;
-      const A = value & 0x000000ff;
-
-      // VM variable integers append the least significant byte first.
+      // Four bytes after 0xFE, least significant first.
       this.appendByte(0xfe);
-      this.appendByte(A);
-      this.appendByte(B);
-      this.appendByte(C);
+      this.appendLittleEndian(value, 4);
     } else {
-      const D = (value & 0xff000000) >> 24;
-      const C = (value & 0x00ff0000) >> 16;
-      const B = (value & 0x0000ff00) >> 8;
-      const A = value & 0x000000ff;
-
-      // VM variable integers append the least significant byte first.
+      // Eight bytes after 0xFF. A number above 2^53 has already lost its low digits.
+      if (!Number.isSafeInteger(value)) throw new Error('value too large for a variable integer');
       this.appendByte(0xff);
-      this.appendByte(A);
-      this.appendByte(B);
-      this.appendByte(C);
-      this.appendByte(D);
+      this.appendLittleEndian(value, 8);
     }
     return this;
+  }
+
+  /** Appends the `count` low bytes of a non-negative integer, least significant first. Division
+   * keeps the bytes above the 32nd bit, which the bitwise operators of JavaScript would drop. */
+  private appendLittleEndian(value: number, count: number): void {
+    let rest = Math.floor(value);
+    for (let i = 0; i < count; i++) {
+      this.appendByte(rest % 256);
+      rest = Math.floor(rest / 256);
+    }
   }
 
   public writeTimestamp(obj: Timestamp): this {

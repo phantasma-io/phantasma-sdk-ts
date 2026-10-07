@@ -583,41 +583,8 @@ export class ScriptBuilder {
   }
 
   public emitVarInt(value: number): this {
-    if (value < 0) throw new Error('negative value invalid');
-
-    if (value < 0xfd) {
-      this.appendByte(value);
-    } else if (value <= 0xffff) {
-      const B = (value & 0x0000ff00) >> 8;
-      const A = value & 0x000000ff;
-
-      // VM variable integers append the least significant byte first.
-      this.appendByte(0xfd);
-      this.appendByte(A);
-      this.appendByte(B);
-    } else if (value <= 0xffffffff) {
-      const C = (value & 0x00ff0000) >> 16;
-      const B = (value & 0x0000ff00) >> 8;
-      const A = value & 0x000000ff;
-
-      // VM variable integers append the least significant byte first.
-      this.appendByte(0xfe);
-      this.appendByte(A);
-      this.appendByte(B);
-      this.appendByte(C);
-    } else {
-      const D = (value & 0xff000000) >> 24;
-      const C = (value & 0x00ff0000) >> 16;
-      const B = (value & 0x0000ff00) >> 8;
-      const A = value & 0x000000ff;
-
-      // VM variable integers append the least significant byte first.
-      this.appendByte(0xff);
-      this.appendByte(A);
-      this.appendByte(B);
-      this.appendByte(C);
-      this.appendByte(D);
-    }
+    // The binary writer holds the one encoding of a variable integer that the VM and the node read.
+    this.emitBytes(Array.from(new PBinaryWriter().writeVarInt(value).toUint8Array()));
     return this;
   }
 
