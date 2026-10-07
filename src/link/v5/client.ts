@@ -243,12 +243,13 @@ export class PhantasmaLink5 {
    * ephemeral X25519 PUBLIC key. The wallet answers over the relay with its own public
    * key plus the sealed connect result; the session key is derived on arrival and the
    * client refuses to send (or accept) anything before that. Show {@link pairingUri}
-   * (a phantasma:// URI) to start; the session then arrives one-tap.
+   * (a phantasma:// URI) to start; the session then arrives one-tap. `dapp` is required: the
+   * wallet sends its key only after the user saw the dApp named in the URI (spec §15).
    */
   static relayEcdh(
     options: Omit<RelayTransportOptions, 'topic' | 'side' | 'onWalletKey'> & {
       topic?: string;
-      dapp?: DappMetadata;
+      dapp: DappMetadata;
       keyPair?: EphemeralKeyPair;
       requestTimeoutMs?: number;
     }
