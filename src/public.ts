@@ -109,12 +109,15 @@ export {
   getString,
   getTokenEventData,
   getTransactionSettleEventData,
+  readContractCalls,
 } from './vm/index.js';
 export type {
   ChainValueEventData,
   GasEventData,
   InfusionEventData,
   MarketEventData,
+  ScriptContractCall,
+  ScriptValue,
   TokenEventData,
   TransactionSettleEventData,
 } from './vm/index.js';

@@ -6,3 +6,4 @@ export * from './event-data.js';
 export * from './decoder.js';
 export * from './disassembler.js';
 export * from './vm-object.js';
+export * from './contract-calls.js';
