@@ -36,7 +36,8 @@ export async function onPageLoad(ui: WebDappUi): Promise<PhantasmaLink5> {
   });
 
   if (client.account) {
-    // Cached from the last successful connect - shown without any wallet hop.
+    // Cached from the last connect, with the account details the wallet pushed since then;
+    // shown without any wallet hop.
     ui.showAccount(client.account.address);
   } else {
     // Not paired yet (or pairing was reset): the user must tap the pairing URI once.

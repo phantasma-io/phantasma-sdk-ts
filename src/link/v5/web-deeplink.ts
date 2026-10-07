@@ -92,7 +92,8 @@ export interface WebDeeplinkRecord {
   /** Established session id (spec §7), set after a successful connect. */
   sessionId?: string;
   /** Cache of the last ConnectResult so a reloaded page can show the account without a
-   * URL hop; refreshed by every successful connect. */
+   * URL hop; refreshed by every successful connect and by the account details that the wallet
+   * pushes in `pha_accountsChanged`. */
   lastConnect?: ConnectResult;
   /** Unix milliseconds of the last answer from the wallet in the session, for the inactivity
    * expiry of spec §7. Present whenever `sessionId` is. */

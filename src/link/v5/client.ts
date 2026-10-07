@@ -75,8 +75,9 @@ export interface PhantasmaLink5Options extends LinkSessionClientOptions {
   /** Default dApp identity used by {@link PhantasmaLink5.connect} when none is passed. */
   dapp?: DappMetadata;
   /** Notified on session-state changes: the {@link ConnectResult} after every successful
-   * connect/resume, `undefined` when the session ends. Lets an embedder persist session state
-   * (the web-deeplink factory stores it; a custom host could keep it elsewhere). */
+   * connect/resume and after the wallet pushes new details of the session's account,
+   * `undefined` when the session ends. Lets an embedder persist session state (the
+   * web-deeplink factory stores it; a custom host could keep it elsewhere). */
   onSessionChange?: (connect: ConnectResult | undefined) => void;
   /** How long a session may go without an answer from the wallet before the client ends it, in
    * milliseconds (spec §7); default {@link SESSION_IDLE_TTL_MS}. Every session ends by inactivity,
@@ -159,6 +160,8 @@ export class PhantasmaLink5 {
     this.session.onEvent((event, data, session) => {
       if (event === LinkEvent.SessionEstablished && isConnectResult(data)) {
         this.adoptConnectResult(data);
+      } else if (event === LinkEvent.AccountsChanged) {
+        this.adoptAccountDetails(data, session);
       } else if (event === LinkEvent.SessionDeleted || event === LinkEvent.SessionExpired) {
         // The wallet tore a session down (user revoke / LRU evict / idle expiry) and notified us
         // over the channel, so it ends here too and a reload cannot resume a dead one. The ended
@@ -471,7 +474,8 @@ export class PhantasmaLink5 {
     return this.session.isClosed;
   }
 
-  /** The account from the last successful {@link connect}, if any. */
+  /** The session's account from the last successful {@link connect}, with the details the
+   * wallet pushed since then in {@link LinkEvent.AccountsChanged}, if any. */
   get account(): LinkAccountV5 | undefined {
     return this.lastConnect?.account;
   }
@@ -512,6 +516,38 @@ export class PhantasmaLink5 {
     this.lastSeenAt = Date.now();
     this.session.setSessionId(result.session.id);
     this.onSessionChange?.(result);
+  }
+
+  /** Takes the new details of the session's account (name, avatar, balances) from a
+   * {@link LinkEvent.AccountsChanged} event, so {@link account} shows them and an embedder can
+   * persist them. A session holds one account (spec §7), so an entry with another address is
+   * ignored, and so is an event that names another session. An event that names no session is
+   * this client's, because only its channel delivers it. */
+  private adoptAccountDetails(data: unknown, session: string | undefined): void {
+    const current = this.lastConnect;
+    if (current === undefined) {
+      return;
+    }
+    if (session !== undefined && session !== this.session.getSessionId()) {
+      return;
+    }
+    const accounts =
+      data && typeof data === 'object' ? (data as { accounts?: unknown }).accounts : undefined;
+    if (!Array.isArray(accounts)) {
+      return;
+    }
+    const account = accounts.find(
+      (item): item is LinkAccountV5 =>
+        !!item &&
+        typeof item === 'object' &&
+        (item as { address?: unknown }).address === current.account.address
+    );
+    if (account === undefined) {
+      return;
+    }
+    // A new object: an observer that compares references (a React or MobX store) sees the change.
+    this.lastConnect = { ...current, account };
+    this.onSessionChange?.(this.lastConnect);
   }
 
   getAccounts(): Promise<GetAccountsResult> {

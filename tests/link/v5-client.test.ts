@@ -3,6 +3,7 @@ import { LoopbackTransport, WebSocketLike } from '../../src/link/v5/loopback-tra
 import { LinkTransport } from '../../src/link/v5/transport.js';
 import { PLV, MAX_TX_BYTES } from '../../src/link/v5/protocol.js';
 import { LinkErrorCode } from '../../src/link/v5/errors.js';
+import type { ConnectResult, LinkAccountV5 } from '../../src/link/v5/capabilities.js';
 
 /** In-memory transport: captures outgoing plaintext envelopes, lets a test inject responses. */
 class MockTransport implements LinkTransport {
@@ -31,6 +32,43 @@ class MockTransport implements LinkTransport {
 /** The same mock, named as a loopback transport so the client applies the loopback limit. */
 class KindMockTransport extends MockTransport {
   readonly kind = 'loopback';
+}
+
+/** Makes `sessionId` the client's live session through a wallet-pushed connect result. */
+function establish(transport: MockTransport, sessionId: string, account: LinkAccountV5): void {
+  transport.inject(
+    JSON.stringify({
+      plv: PLV,
+      type: 'event',
+      event: 'pha_sessionEstablished',
+      session: sessionId,
+      data: {
+        wallet: { name: 'Wallet', version: '1.0' },
+        capabilities: {
+          plvVersions: [5],
+          methods: [],
+          chains: [],
+          txFormats: [],
+          signatureKinds: [],
+        },
+        account,
+        session: { id: sessionId },
+      },
+    })
+  );
+}
+
+/** Delivers a wallet-pushed pha_accountsChanged event of `sessionId` with `accounts` as its data. */
+function pushAccounts(transport: MockTransport, sessionId: string, accounts: unknown): void {
+  transport.inject(
+    JSON.stringify({
+      plv: PLV,
+      type: 'event',
+      event: 'pha_accountsChanged',
+      session: sessionId,
+      data: { accounts },
+    })
+  );
 }
 
 describe('PhantasmaLink5 (cohesive v5 client)', () => {
@@ -422,6 +460,47 @@ describe('PhantasmaLink5 (cohesive v5 client)', () => {
     expect(transport.lastEnvelope().session).toBeUndefined();
     answer();
     await second;
+  });
+
+  // Spec §7: a session holds one account, and a wallet pushes pha_accountsChanged with that
+  // account's current details. The client takes them, so `account` and the persistence callback
+  // show a renamed account or new balances. The account is a new object, so a store that compares
+  // references re-renders.
+  it('takes new details of the session account from pha_accountsChanged', () => {
+    const transport = new MockTransport();
+    const changes: Array<ConnectResult | undefined> = [];
+    const client = new PhantasmaLink5(transport, { onSessionChange: (c) => changes.push(c) });
+    establish(transport, 'sess-a', { address: 'P2K...', name: 'Main' });
+    const before = client.account;
+
+    const renamed = {
+      address: 'P2K...',
+      name: 'Renamed',
+      balances: [{ symbol: 'SOUL', value: '500000000', decimals: 8 }],
+    };
+    pushAccounts(transport, 'sess-a', [renamed]);
+
+    expect(client.account).toEqual(renamed);
+    expect(client.account).not.toBe(before);
+    expect(changes).toHaveLength(2);
+    expect(changes[1]?.account).toEqual(renamed);
+    expect(changes[1]?.session.id).toBe('sess-a');
+  });
+
+  // The session's account never changes (spec §7): an entry with another address, an event of
+  // another session and a malformed payload leave the account and the persisted state as they were.
+  it('keeps the session account on an account event it cannot take', () => {
+    const transport = new MockTransport();
+    const changes: Array<ConnectResult | undefined> = [];
+    const client = new PhantasmaLink5(transport, { onSessionChange: (c) => changes.push(c) });
+    establish(transport, 'sess-a', { address: 'P2K...', name: 'Main' });
+
+    pushAccounts(transport, 'sess-a', [{ address: 'P2OTHER', name: 'Other' }]);
+    pushAccounts(transport, 'sess-b', [{ address: 'P2K...', name: 'Renamed' }]);
+    pushAccounts(transport, 'sess-a', 'not a list');
+
+    expect(client.account).toEqual({ address: 'P2K...', name: 'Main' });
+    expect(changes).toHaveLength(1);
   });
 
   // Spec §7: 4100 to a request made in the session means the wallet no longer keeps it, so the
