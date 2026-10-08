@@ -12,7 +12,7 @@
 // appUrlOpen, depending on platform).
 
 import { LinkError, LinkErrorCode } from './errors.js';
-import { LinkTransport } from './transport.js';
+import type { LinkTransport } from './transport.js';
 import { bytesToBase64Url, base64UrlToBytes, utf8ToBytes, bytesToUtf8 } from './encoding.js';
 import { DEFAULT_LINK_HOST } from './protocol.js';
 
@@ -24,9 +24,9 @@ export const WALLET_LINK_BASE = `https://${DEFAULT_LINK_HOST}`;
  * register the scheme, so it is never the default. */
 export const WALLET_SCHEME_BASE = 'phantasma://';
 
-/** Default per-request timeout on deeplink transports. A round-trip spans an app switch
- * plus a human consent, so the generic 60 s session default is far too tight here - it
- * would expire the money path while the user is still reading the wallet's Send screen. */
+/** Default per-request timeout of every transport: 5 minutes. An answer waits for a human
+ * consent, on a phone also for an app switch, and a client that waits 5 minutes before it sends
+ * an action again meets the resend rule of the signing permission (spec §9.8). */
 export const DEEPLINK_REQUEST_TIMEOUT_MS = 300000;
 
 /** Default URL budget for the `f` value of a request URL, in characters (spec §6.3). */

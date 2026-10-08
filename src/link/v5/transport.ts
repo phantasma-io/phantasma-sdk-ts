@@ -24,6 +24,7 @@ import {
   randomToken,
 } from './session-crypto.js';
 import { walletAnswerError } from './wallet-answer.js';
+import { DEEPLINK_REQUEST_TIMEOUT_MS } from './deeplink.js';
 
 /** The transports of spec §6, named as in `maxPayloadBytes` (spec §5). */
 export type TransportKind = 'injected' | 'loopback' | 'deeplink' | 'relay';
@@ -73,7 +74,8 @@ export interface LinkSessionClientOptions {
   /** Session id attached to outgoing requests after connect/pairing. */
   sessionId?: string;
   /** Per-request timeout in ms, counted from the last part of the request that left the
-   * device (`SendOptions.onProgress`); 0 disables. Default 60000. */
+   * device (`SendOptions.onProgress`); 0 disables. Default {@link DEEPLINK_REQUEST_TIMEOUT_MS},
+   * 5 minutes, on every transport. */
   requestTimeoutMs?: number;
   /** Sink for responses with no matching in-flight request: the request timed out (`5005`)
    * before its answer came, or an earlier load of the page sent it (the wallet's callback
@@ -146,7 +148,7 @@ export class LinkSessionClient {
     this.sessionKey = options.sessionKey;
     this.requireSessionKey = options.requireSessionKey ?? false;
     this.sessionId = options.sessionId;
-    this.requestTimeoutMs = options.requestTimeoutMs ?? 60000;
+    this.requestTimeoutMs = options.requestTimeoutMs ?? DEEPLINK_REQUEST_TIMEOUT_MS;
     this.onUnmatchedResponse = options.onUnmatchedResponse;
     this.onAnswerHandled = options.onAnswerHandled;
     this.log = options.log;

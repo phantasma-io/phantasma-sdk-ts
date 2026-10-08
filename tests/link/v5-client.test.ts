@@ -1,4 +1,6 @@
+import { jest } from '@jest/globals';
 import { PhantasmaLink5 } from '../../src/link/v5/client.js';
+import { DEEPLINK_REQUEST_TIMEOUT_MS } from '../../src/link/v5/deeplink.js';
 import { LoopbackTransport, WebSocketLike } from '../../src/link/v5/loopback-transport.js';
 import { LinkTransport } from '../../src/link/v5/transport.js';
 import { PLV, MAX_TX_BYTES } from '../../src/link/v5/protocol.js';
@@ -796,6 +798,23 @@ describe('PhantasmaLink5 (cohesive v5 client)', () => {
     });
     expect(client).toBeInstanceOf(PhantasmaLink5);
     expect(sockets[0].url).toBe('ws://localhost:7090/phantasma/v5');
+  });
+
+  // Spec §9.8 counts on a client that waits 5 minutes for an answer; a loopback consent takes as
+  // long as any other.
+  it('waits 5 minutes for an answer over loopback', async () => {
+    jest.useFakeTimers();
+    try {
+      const client = PhantasmaLink5.loopback({ webSocketFactory: (url) => new FakeSocket(url) });
+      let outcome: unknown;
+      client.getChains().catch((error: unknown) => (outcome = error));
+      await jest.advanceTimersByTimeAsync(DEEPLINK_REQUEST_TIMEOUT_MS - 1);
+      expect(outcome).toBeUndefined();
+      await jest.advanceTimersByTimeAsync(1);
+      expect(outcome).toMatchObject({ code: LinkErrorCode.Timeout });
+    } finally {
+      jest.useRealTimers();
+    }
   });
 });
 
