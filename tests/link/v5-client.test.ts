@@ -248,6 +248,31 @@ describe('PhantasmaLink5 (cohesive v5 client)', () => {
     client.close();
   });
 
+  // The client tells its caller which session it holds, so that the caller can match the
+  // session that an event names.
+  it('exposes the id of the session it holds', async () => {
+    const transport = new MockTransport();
+    const client = new PhantasmaLink5(transport, { dapp: { name: 'D', url: 'https://d.app' } });
+    expect(client.sessionId).toBeUndefined();
+    const connecting = client.connect();
+    transport.inject(
+      JSON.stringify({
+        plv: PLV,
+        id: transport.lastEnvelope().id,
+        result: {
+          wallet: { name: 'W', version: '1' },
+          capabilities: { features: [] },
+          account: { address: 'P2K...' },
+          session: { id: 'sess-7', expiresAt: null },
+        },
+      })
+    );
+    await connecting;
+    expect(client.sessionId).toBe('sess-7');
+    client.forgetSession();
+    expect(client.sessionId).toBeUndefined();
+  });
+
   // After disconnect the wallet has dropped the session, so the client must stop sending
   // the dead session id (and clear the cached account).
   it('clears the session and cached account after disconnect', async () => {

@@ -479,6 +479,12 @@ export class PhantasmaLink5 {
     return this.session.isClosed;
   }
 
+  /** The id of the session this client holds, or undefined when it holds none. An event names
+   * the session it is about, so a caller can tell an event of this session from another one. */
+  get sessionId(): string | undefined {
+    return this.session.getSessionId();
+  }
+
   /** The session's account from the last successful {@link connect}, with the details the
    * wallet pushed since then in {@link LinkEvent.AccountsChanged}, if any. */
   get account(): LinkAccountV5 | undefined {
