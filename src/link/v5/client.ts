@@ -257,6 +257,11 @@ export class PhantasmaLink5 {
    * client refuses to send (or accept) anything before that. Show {@link pairingUri}
    * (a phantasma:// URI) to start; the session then arrives one-tap. `dapp` is required: the
    * wallet sends its key only after the user saw the dApp named in the URI (spec §15).
+   *
+   * To keep the pairing across page loads, store the key that `onSessionKey` reports with the
+   * topic, the relay and the session that `onSessionChange` reports, in the storage the platform
+   * offers (spec §18.3), and later build
+   * `new PhantasmaLink5(new RelayTransport({ topic, side: 'dapp', url }), { sessionKey, sessionId })`.
    */
   static relayEcdh(
     options: Omit<RelayTransportOptions, 'topic' | 'side' | 'onWalletKey'> & {
@@ -264,6 +269,9 @@ export class PhantasmaLink5 {
       dapp: DappMetadata;
       keyPair?: EphemeralKeyPair;
       requestTimeoutMs?: number;
+      /** Called with the session key once the wallet's key hop derived it (spec §15, §18.1). */
+      onSessionKey?: (key: Uint8Array) => void;
+      onSessionChange?: PhantasmaLink5Options['onSessionChange'];
     }
   ): PhantasmaLink5 {
     const topic = options.topic ?? randomToken(32);
@@ -289,21 +297,28 @@ export class PhantasmaLink5 {
       onWalletKey: (publicKeyB64Url, sealedFrame) => {
         // Fires only when a wallet hop arrives, long after `client` below exists. The key is
         // installed only when the hop's own sealed frame opens with it (spec §15).
+        let key: Uint8Array;
         try {
           const walletPublicKey = base64UrlToBytes(publicKeyB64Url);
-          const key = deriveSessionKey(walletPublicKey, pair.secretKey);
+          key = deriveSessionKey(walletPublicKey, pair.secretKey);
           openEnvelopeText(JSON.parse(sealedFrame) as EncryptedFrame, key);
-          client.session.setSessionKey(key);
-          return true;
         } catch {
           return false;
         }
+        client.session.setSessionKey(key);
+        try {
+          options.onSessionKey?.(key);
+        } catch {
+          // The pairing stands without the embedder's copy of the key.
+        }
+        return true;
       },
     });
     const client = new PhantasmaLink5(transport, {
       dapp: options.dapp,
       requireSessionKey: true,
       requestTimeoutMs: options.requestTimeoutMs ?? DEEPLINK_REQUEST_TIMEOUT_MS,
+      onSessionChange: options.onSessionChange,
     });
     client.pairingUriValue = pairingUri;
     return client;

@@ -699,6 +699,76 @@ describe('PhantasmaLink5.relayEcdh (custom-scheme pairing, key derived from the 
     await expect(promise).resolves.toMatchObject({ nexus: 'simnet' });
   });
 
+  // Spec §18.3: a dApp keeps the pairing in the storage its platform offers. The key of a
+  // custom-scheme pairing exists only after the hop, so the client reports it, and a client built
+  // later from the stored topic, key and session talks to the same wallet.
+  it('reports the derived key so that a later client can resume the pairing', async () => {
+    const sockets: FakeSocket[] = [];
+    const keyPair = generateEphemeralKeyPair();
+    const reported: Uint8Array[] = [];
+    const sessions: Array<string | undefined> = [];
+    const webSocketFactory = (url: string) => {
+      const socket = new FakeSocket(url);
+      sockets.push(socket);
+      return socket;
+    };
+    const client = PhantasmaLink5.relayEcdh({
+      dapp: DAPP,
+      keyPair,
+      webSocketFactory,
+      onSessionKey: (key) => reported.push(key),
+      onSessionChange: (connect) => sessions.push(connect?.session.id),
+    });
+    sockets[0].open();
+    const topic = parsePairingUri(client.pairingUri!).topic;
+    const walletPair = generateEphemeralKeyPair();
+    const derived = deriveSessionKey(keyPair.publicKey, walletPair.secretKey);
+    const sealedEvent = sealEnvelopeText(
+      JSON.stringify({
+        plv: PLV,
+        type: 'event',
+        event: 'pha_sessionEstablished',
+        session: 'ecdh-1',
+        data: CONNECT_RESULT,
+      }),
+      derived
+    );
+    sockets[0].receive({
+      op: 'deliver',
+      topic: `${topic}.wallet`,
+      payload: { wpk: bytesToBase64Url(walletPair.publicKey), ...sealedEvent },
+    });
+    expect(reported).toEqual([derived]);
+    expect(sessions).toEqual(['ecdh-1']);
+    client.close();
+
+    const resumed = new PhantasmaLink5(
+      new RelayTransport({ topic, side: 'dapp', webSocketFactory }),
+      { sessionKey: reported[0], sessionId: client.sessionId ?? 'ecdh-1' }
+    );
+    const socket = sockets[1];
+    socket.open();
+    const promise = resumed.getChains();
+    const publish = socket.sentJson().find((f) => f.op === 'publish')!;
+    const envelope = JSON.parse(
+      openEnvelopeText(JSON.parse(publish.payload as string) as EncryptedFrame, derived)
+    );
+    expect(envelope).toMatchObject({ method: 'pha_getChains', session: 'ecdh-1' });
+    socket.receive({ op: 'ack', topic: `${topic}.dapp`, id: publish.id });
+    socket.receive({
+      op: 'deliver',
+      topic: `${topic}.wallet`,
+      payload: JSON.stringify(
+        sealEnvelopeText(
+          JSON.stringify({ plv: PLV, id: envelope.id, result: { nexus: 'simnet' } }),
+          derived
+        )
+      ),
+    });
+    await expect(promise).resolves.toMatchObject({ nexus: 'simnet' });
+    resumed.close();
+  });
+
   // A hop whose sealed frame is missing or does not open must not bind a key: the real hop
   // that follows still establishes the session (spec §15).
   it('ignores a key hop without a frame that opens', () => {
