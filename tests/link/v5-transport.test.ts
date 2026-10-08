@@ -1,6 +1,6 @@
 import { jest } from '@jest/globals';
 
-import { LinkSessionClient, LinkTransport } from '../../src/link/v5/transport.js';
+import { LinkSessionClient, LinkTransport, SendOptions } from '../../src/link/v5/transport.js';
 import { LinkError, LinkErrorCode } from '../../src/link/v5/errors.js';
 import { PLV } from '../../src/link/v5/protocol.js';
 import {
@@ -130,6 +130,36 @@ describe('LinkSessionClient (plaintext / trusted-local transport)', () => {
       const assertion = expect(promise).rejects.toMatchObject({ code: LinkErrorCode.Timeout });
       jest.advanceTimersByTime(1000);
       await assertion;
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  // Spec §10: 5005 means that the wallet was reached and did not answer in time. The upload of
+  // a large request here takes longer than the timeout, which counts from its last part.
+  it('counts the request timeout from the last part that left the device', async () => {
+    jest.useFakeTimers();
+    try {
+      const transport = new MockTransport();
+      let progress: (() => void) | undefined;
+      transport.send = (frame: string, options?: SendOptions) => {
+        transport.sent.push(frame);
+        progress = options?.onProgress;
+      };
+      const client = new LinkSessionClient(transport, { requestTimeoutMs: 1000 });
+      let outcome: unknown;
+      client.request('pha_signTransaction').then(
+        () => (outcome = 'answered'),
+        (error: LinkError) => (outcome = error.code)
+      );
+      for (let part = 0; part < 5; part++) {
+        await jest.advanceTimersByTimeAsync(600);
+        progress?.();
+      }
+      await jest.advanceTimersByTimeAsync(999);
+      expect(outcome).toBeUndefined();
+      await jest.advanceTimersByTimeAsync(1);
+      expect(outcome).toBe(LinkErrorCode.Timeout);
     } finally {
       jest.useRealTimers();
     }

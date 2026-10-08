@@ -15,7 +15,7 @@
 // SERVER pings, browsers auto-pong.
 
 import { LinkError, LinkErrorCode } from './errors.js';
-import { LinkTransport } from './transport.js';
+import { LinkTransport, SendOptions } from './transport.js';
 import { DEFAULT_LINK_HOST, MAX_TX_BYTES } from './protocol.js';
 import { WebSocketLike, WebSocketFactory } from './loopback-transport.js';
 import { randomToken } from './session-crypto.js';
@@ -177,12 +177,15 @@ export class RelayTransport implements LinkTransport {
     this.connect();
   }
 
-  async send(frame: string): Promise<void> {
+  /** Publishes `frame`, in chunks when it is large, and reports each frame that the relay
+   * acknowledged through `options.onProgress`. */
+  async send(frame: string, options?: SendOptions): Promise<void> {
     if (this.closed) {
       throw new LinkError(LinkErrorCode.Disconnected, 'Relay transport is closed');
     }
     if (frame.length <= this.maxPayloadBytes) {
       await this.publish(frame);
+      options?.onProgress?.();
       return;
     }
     // Chunked send: split the opaque frame TEXT; the chunks travel as ordinary
@@ -206,6 +209,7 @@ export class RelayTransport implements LinkTransport {
     for (let seq = 0; seq < total; seq++) {
       const chunk = frame.slice(seq * this.maxPayloadBytes, (seq + 1) * this.maxPayloadBytes);
       await this.publish({ msgId, seq, total, chunk });
+      options?.onProgress?.();
     }
   }
 

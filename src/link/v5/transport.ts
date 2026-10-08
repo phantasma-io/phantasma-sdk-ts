@@ -41,6 +41,11 @@ export interface SendOptions {
   /** The request carries a payload larger than the wallet takes over a deeplink (spec §6.3,
    * §11). A transport that can choose sends it over the relay. */
   needsRelay?: boolean;
+  /** Called each time a part of the request has left the device: for the relay, each frame
+   * that the relay acknowledged. The request timeout starts again then, so the upload of a
+   * large request does not use up the time the wallet has to answer (spec §10: `5005` means
+   * that the wallet was reached). A transport that sends at once need not call it. */
+  onProgress?: () => void;
 }
 
 /** A duplex channel that carries opaque frame strings between dApp and wallet. */
@@ -67,7 +72,8 @@ export interface LinkSessionClientOptions {
   requireSessionKey?: boolean;
   /** Session id attached to outgoing requests after connect/pairing. */
   sessionId?: string;
-  /** Per-request timeout in ms; 0 disables. Default 60000. */
+  /** Per-request timeout in ms, counted from the last part of the request that left the
+   * device (`SendOptions.onProgress`); 0 disables. Default 60000. */
   requestTimeoutMs?: number;
   /** Sink for responses with no matching in-flight request: the request timed out (`5005`)
    * before its answer came, or an earlier load of the page sent it (the wallet's callback
@@ -227,20 +233,10 @@ export class LinkSessionClient {
     };
 
     const promise = new Promise<unknown>((resolve, reject) => {
-      const pending: Pending = { resolve, reject };
-      if (this.requestTimeoutMs > 0) {
-        pending.timer = setTimeout(() => {
-          this.pending.delete(id);
-          // Spec §10: 5005, so a dApp can tell a user who has not decided yet from a wallet
-          // that cannot be reached (4900).
-          reject(
-            new LinkError(LinkErrorCode.Timeout, `Phantasma Link request "${method}" timed out`)
-          );
-        }, this.requestTimeoutMs);
-      }
-      this.pending.set(id, pending);
+      this.pending.set(id, { resolve, reject });
     });
     this.rememberRequest(id, this.sessionId);
+    this.startTimeout(id, method);
 
     // Send after registering the pending entry so a synchronous transport error settles it.
     // A LinkError from the transport keeps its code: the transport knows the reason, as with
@@ -248,7 +244,12 @@ export class LinkSessionClient {
     // reach.
     let sent: void | Promise<void>;
     try {
-      sent = this.transport.send(this.encodeOutgoing(envelope), options);
+      sent = this.transport.send(this.encodeOutgoing(envelope), {
+        ...options,
+        // Spec §10: 5005 means that the wallet was reached and did not answer in time, so the
+        // upload of a large request does not count.
+        onProgress: () => this.startTimeout(id, method),
+      });
     } catch (err) {
       // A refusal at once (a deeplink above the URL budget, a closed transport) settles this
       // request like a later rejection; otherwise its timer would fire on a promise nobody holds.
@@ -418,6 +419,23 @@ export class LinkSessionClient {
   private handleClose(reason?: string): void {
     this.closed = true;
     this.rejectAll(reason ?? 'Phantasma Link transport closed');
+  }
+
+  /** Starts the timeout of request `id` again, unless the request is settled. On expiry it
+   * fails with 5005 (spec §10), so a dApp can tell a user who has not decided yet from a
+   * wallet that cannot be reached (4900). */
+  private startTimeout(id: string, method: string): void {
+    const pending = this.pending.get(id);
+    if (pending === undefined || this.requestTimeoutMs <= 0) {
+      return;
+    }
+    clearTimeout(pending.timer);
+    pending.timer = setTimeout(() => {
+      this.pending.delete(id);
+      pending.reject(
+        new LinkError(LinkErrorCode.Timeout, `Phantasma Link request "${method}" timed out`)
+      );
+    }, this.requestTimeoutMs);
   }
 
   private settleError(id: string, err: LinkError): void {

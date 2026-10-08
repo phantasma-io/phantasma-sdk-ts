@@ -95,7 +95,7 @@ export class DeeplinkRelayTransport implements LinkTransport {
     // browser opens an app only from the user's gesture, which ends with this call. A publish
     // made while the relay reconnects goes out on the reconnect, and the relay keeps it for the
     // wallet (spec §16).
-    const sent = this.relay.send(frame);
+    const sent = this.relay.send(frame, options);
     this.deeplink.wake();
     return this.waitOverRelay(sent);
   }

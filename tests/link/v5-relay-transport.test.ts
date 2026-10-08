@@ -413,6 +413,23 @@ describe('RelayTransport', () => {
     }
   });
 
+  // Each frame that the relay acknowledged has left the device, and the session's request
+  // timeout counts from the last one (SendOptions.onProgress).
+  it('reports each acknowledged frame as progress', async () => {
+    const { transport, sockets } = harness({ maxPayloadBytes: 10 });
+    const socket = sockets[0];
+    socket.open();
+    let parts = 0;
+    const sendPromise = transport.send('ABCDEFGHIJ0123456789xyz', { onProgress: () => parts++ });
+    for (let i = 1; i <= 3; i++) {
+      await settle();
+      expect(parts).toBe(i - 1);
+      socket.receive({ op: 'ack', topic: 'top-1.dapp', id: socket.sentJson()[i].id });
+    }
+    await expect(sendPromise).resolves.toBeUndefined();
+    expect(parts).toBe(3);
+  });
+
   // A receiver takes a message of up to 67 chunks, the sealed frame of a 32 MiB
   // transaction at the default chunk size, and drops a message that claims more.
   it('reassembles 67 chunks and drops a message of 68', () => {

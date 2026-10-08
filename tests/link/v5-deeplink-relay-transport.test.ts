@@ -1,7 +1,9 @@
+import { jest } from '@jest/globals';
+
 import { DeeplinkRelayTransport } from '../../src/link/v5/deeplink-relay-transport.js';
 import { LinkSessionClient, SendOptions } from '../../src/link/v5/transport.js';
 import { PhantasmaLink5 } from '../../src/link/v5/client.js';
-import { LinkErrorCode } from '../../src/link/v5/errors.js';
+import { LinkError, LinkErrorCode } from '../../src/link/v5/errors.js';
 import { WebSocketLike } from '../../src/link/v5/loopback-transport.js';
 import { buildResponseUrl } from '../../src/link/v5/deeplink.js';
 import { bytesToBase64 } from '../../src/link/v5/encoding.js';
@@ -167,6 +169,31 @@ describe('DeeplinkRelayTransport', () => {
       new Promise((resolve) => setTimeout(() => resolve('waiting'), 10)),
     ]);
     expect(waiting).toBe('waiting');
+  });
+
+  // The phone transport reports the relay's ack, so the request timeout counts from it: a
+  // publish that waits for the relay longer than the timeout does not end the request.
+  it('counts the request timeout from the relay ack', async () => {
+    jest.useFakeTimers();
+    try {
+      const { transport, socket } = harness('relay');
+      const session = new LinkSessionClient(transport, { requestTimeoutMs: 1000 });
+      socket.open();
+      let outcome: unknown;
+      session.request('pha_signTransaction', undefined, { needsRelay: true }).then(
+        () => (outcome = 'answered'),
+        (error: LinkError) => (outcome = error.code)
+      );
+      await jest.advanceTimersByTimeAsync(900);
+      const [publish] = socket.publishes();
+      socket.receive({ op: 'ack', id: publish.id });
+      await jest.advanceTimersByTimeAsync(999);
+      expect(outcome).toBeUndefined();
+      await jest.advanceTimersByTimeAsync(1);
+      expect(outcome).toBe(LinkErrorCode.Timeout);
+    } finally {
+      jest.useRealTimers();
+    }
   });
 
   // The wallet answers on the path the request came on; both reach the session.
