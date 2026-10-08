@@ -14,8 +14,7 @@ export function createClient(): PhantasmaLink5 {
   return findInjectedProvider() ? PhantasmaLink5.injected() : PhantasmaLink5.loopback();
 }
 
-/** Click handler for a "Connect" button. The wallet prompts the user once; a stored session
- * resumes without a prompt (spec §7). */
+/** Click handler for a "Connect" button. The wallet asks the user to approve the connection. */
 export async function onConnectClick(client: PhantasmaLink5): Promise<string> {
   const result = await client.connect(dapp);
   return result.account.address;

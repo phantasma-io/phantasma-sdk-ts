@@ -2,7 +2,7 @@
 // rides over any transport (injected / loopback / deeplink / relay); a transport only moves
 // opaque frame strings. The session client owns request/response correlation by `id`, event
 // dispatch, optional channel encryption, and timeouts - so each concrete transport stays
-// tiny. Concrete transports are implemented in later phases.
+// tiny.
 
 import { PLV } from './protocol.js';
 import { LinkError, LinkErrorCode } from './errors.js';
