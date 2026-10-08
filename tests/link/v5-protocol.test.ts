@@ -59,6 +59,19 @@ describe('v5 envelope encode/decode', () => {
   it('rejects a shape that is neither request, response, nor event', () => {
     expect(() => decodeEnvelope('{"plv":5,"id":"a"}')).toThrow(LinkError);
   });
+
+  // Spec §4: an id holds at most 128 characters, because the wallet keeps the ids it saw.
+  it('refuses an id longer than 128 characters with -32600', () => {
+    const request = (id: string) => `{"plv":5,"id":"${id}","method":"pha_getChains"}`;
+    expect((decodeEnvelope(request('i'.repeat(128))) as LinkRequest).id).toHaveLength(128);
+    let code: number | undefined;
+    try {
+      decodeEnvelope(request('i'.repeat(129)));
+    } catch (error) {
+      code = (error as LinkError).code;
+    }
+    expect(code).toBe(LinkErrorCode.InvalidRequest);
+  });
 });
 
 describe('v5 request send time', () => {

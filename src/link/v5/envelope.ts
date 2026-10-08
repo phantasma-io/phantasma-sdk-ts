@@ -5,6 +5,10 @@
 import { PLV } from './protocol.js';
 import { LinkError, LinkErrorCode, LinkErrorObject } from './errors.js';
 
+/** The longest `id` of an envelope, in characters (spec §4). A wallet keeps the ids it saw
+ * (spec §18.2), so an id of any length would let a peer fill its memory. */
+export const MAX_ENVELOPE_ID_CHARS = 128;
+
 /** Request: dApp -> wallet. `session` is omitted only on the first `pha_connect`. */
 export interface LinkRequest {
   plv: typeof PLV;
@@ -70,8 +74,8 @@ export function encodeEnvelope(message: LinkMessage): string {
  * Parse and validate an on-the-wire JSON text into a {@link LinkMessage}.
  *
  * Throws {@link LinkError} with `ParseError` for non-JSON and `InvalidRequest` for a JSON
- * value that is not a well-formed v5 envelope (wrong `plv`, missing `id`, or a shape that
- * is neither request, response, nor event). Validation happens here, once, so every
+ * value that is not a well-formed v5 envelope (wrong `plv`, a missing `id` or one longer than
+ * {@link MAX_ENVELOPE_ID_CHARS}, or a shape that is neither request, response, nor event). Validation happens here, once, so every
  * downstream consumer can trust the structure.
  */
 export function decodeEnvelope(text: string): LinkMessage {
@@ -104,6 +108,12 @@ export function decodeEnvelope(text: string): LinkMessage {
 
   if (typeof record.id !== 'string' || record.id.length === 0) {
     throw new LinkError(LinkErrorCode.InvalidRequest, 'Envelope is missing a string `id`');
+  }
+  if (record.id.length > MAX_ENVELOPE_ID_CHARS) {
+    throw new LinkError(
+      LinkErrorCode.InvalidRequest,
+      `Envelope \`id\` is longer than ${MAX_ENVELOPE_ID_CHARS} characters`
+    );
   }
 
   if (typeof record.method === 'string') {
