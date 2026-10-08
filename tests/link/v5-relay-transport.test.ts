@@ -276,6 +276,21 @@ describe('RelayTransport', () => {
     expect(received).toEqual(['YES']);
   });
 
+  // JSON that is no object (null, a number, a string) is no relay frame. It must not throw out of
+  // the socket handler, and the transport keeps working.
+  it('ignores a frame that is valid JSON but no object', () => {
+    const { sockets, received } = harness();
+    const socket = sockets[0];
+    socket.open();
+
+    for (const data of ['null', '42', '"text"']) {
+      expect(() => socket.onmessage?.({ data })).not.toThrow();
+    }
+    socket.receive({ op: 'deliver', topic: 'top-1.wallet', payload: 'YES' });
+
+    expect(received).toEqual(['YES']);
+  });
+
   // Spec §16: each side publishes to its own topic and listens on the other side's topic, so
   // the relay never hands a side its own frames. A frame on the side's own topic is dropped.
   it("publishes to its side's topic and listens on the other side's topic", () => {

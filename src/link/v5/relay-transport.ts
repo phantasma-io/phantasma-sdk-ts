@@ -350,12 +350,18 @@ export class RelayTransport implements LinkTransport {
   // --- incoming -------------------------------------------------------------------
 
   private handleRaw(text: string): void {
-    let frame: { op?: unknown; topic?: unknown; id?: unknown; payload?: unknown };
+    let parsed: unknown;
     try {
-      frame = JSON.parse(text) as typeof frame;
+      parsed = JSON.parse(text);
     } catch {
       return; // not a relay frame; ignore
     }
+    // Valid JSON such as `null` or a number is no relay frame either. Reading `op` from `null`
+    // would throw inside the socket handler.
+    if (typeof parsed !== 'object' || parsed === null) {
+      return;
+    }
+    const frame = parsed as { op?: unknown; topic?: unknown; id?: unknown; payload?: unknown };
 
     switch (frame.op) {
       case 'deliver': {
