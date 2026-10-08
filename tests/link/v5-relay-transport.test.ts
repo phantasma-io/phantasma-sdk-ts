@@ -568,9 +568,16 @@ describe('PhantasmaLink5.relayEcdh (custom-scheme pairing, key derived from the 
   const DAPP = { name: 'ecdh dApp', url: 'https://dapp.example' };
   const CONNECT_RESULT = {
     wallet: { name: 'PGL', version: '1.0' },
-    capabilities: { plvVersions: [5], methods: [], chains: [], txFormats: [], signatureKinds: [] },
+    capabilities: {
+      plvVersions: [5],
+      methods: [],
+      chains: [],
+      txFormats: [],
+      signatureKinds: [],
+      features: [],
+    },
     account: { address: 'P2KEcdh' },
-    session: { id: 'ecdh-1' },
+    session: { id: 'ecdh-1', expiresAt: null },
   };
 
   function buildEcdh() {

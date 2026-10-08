@@ -57,9 +57,10 @@ function connectResult(id: string): string {
         chains: [],
         txFormats: [],
         signatureKinds: [],
+        features: [],
       },
       account: { address: 'P2K...' },
-      session: { id: 'sess-1' },
+      session: { id: 'sess-1', expiresAt: null },
     },
   });
 }

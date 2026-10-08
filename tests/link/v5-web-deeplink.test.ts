@@ -34,9 +34,10 @@ const CONNECT_RESULT = {
     chains: [],
     txFormats: [],
     signatureKinds: [],
+    features: [],
   },
   account: { address: 'P2KTestAddr' },
-  session: { id: 'sess-1' },
+  session: { id: 'sess-1', expiresAt: null },
 };
 
 /** A relay socket double: it stays connecting until a test opens it, and the test plays the
@@ -560,7 +561,7 @@ describe('PhantasmaLink5.webDeeplink', () => {
       type: 'event',
       event: 'pha_sessionEstablished',
       session: 'one-tap-1',
-      data: { ...CONNECT_RESULT, session: { id: 'one-tap-1' } },
+      data: { ...CONNECT_RESULT, session: { id: 'one-tap-1', expiresAt: null } },
     });
     const frame = JSON.stringify(sealEnvelopeText(eventEnvelope, key));
     env.navigate(buildResponseUrl(record.callback, record.topic, frame));

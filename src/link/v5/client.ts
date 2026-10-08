@@ -505,6 +505,14 @@ export class PhantasmaLink5 {
     // ended or that it does not know, a wallet runs the full approval over injected and
     // loopback, and answers 5100 or 4100 over deeplink and relay.
     const result = await this.request<ConnectResult>(LinkMethod.Connect, params);
+    // The client reads these fields later, for example the capabilities before every transaction.
+    // A wallet that left one out gets a clear error here instead of a TypeError on a later call.
+    if (!isConnectResult(result)) {
+      throw new LinkError(
+        LinkErrorCode.InternalError,
+        'The wallet sent a malformed connect result'
+      );
+    }
     this.adoptConnectResult(result);
     return result;
   }
@@ -801,20 +809,35 @@ function sessionOf(data: unknown): string | undefined {
   return undefined;
 }
 
-/** Structural check for a wallet-pushed connect result before adopting it as session state.
- * The frame already authenticated via the channel key, so this guards against a malformed
- * wallet payload, not an attacker; only the fields the client dereferences are checked. */
+/** Returns true if `data` has the fields of a connect result that the client reads, and those that
+ * spec §5 requires: the session id and its end (a number, or null for no fixed end), the
+ * account's address, and the capabilities with their features and size limits. A connect result
+ * comes from the wallet, so this guards against a malformed answer of a faulty wallet. */
 function isConnectResult(data: unknown): data is ConnectResult {
   if (!data || typeof data !== 'object') {
     return false;
   }
-  const record = data as { session?: { id?: unknown } | null; account?: unknown };
+  const record = data as {
+    session?: { id?: unknown; expiresAt?: unknown } | null;
+    account?: { address?: unknown } | null;
+    capabilities?: { features?: unknown; maxPayloadBytes?: unknown } | null;
+  };
+  const session = record.session;
+  const account = record.account;
+  const capabilities = record.capabilities;
   return (
-    typeof record.session === 'object' &&
-    record.session !== null &&
-    typeof record.session.id === 'string' &&
-    record.session.id.length > 0 &&
-    typeof record.account === 'object' &&
-    record.account !== null
+    typeof session === 'object' &&
+    session !== null &&
+    typeof session.id === 'string' &&
+    session.id.length > 0 &&
+    (session.expiresAt === null || typeof session.expiresAt === 'number') &&
+    typeof account === 'object' &&
+    account !== null &&
+    typeof account.address === 'string' &&
+    typeof capabilities === 'object' &&
+    capabilities !== null &&
+    Array.isArray(capabilities.features) &&
+    (capabilities.maxPayloadBytes === undefined ||
+      (typeof capabilities.maxPayloadBytes === 'object' && capabilities.maxPayloadBytes !== null))
   );
 }

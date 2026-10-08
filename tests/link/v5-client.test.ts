@@ -50,9 +50,10 @@ function establish(transport: MockTransport, sessionId: string, account: LinkAcc
           chains: [],
           txFormats: [],
           signatureKinds: [],
+          features: [],
         },
         account,
-        session: { id: sessionId },
+        session: { id: sessionId, expiresAt: null },
       },
     })
   );
@@ -94,9 +95,10 @@ describe('PhantasmaLink5 (cohesive v5 client)', () => {
             chains: [],
             txFormats: [],
             signatureKinds: [],
+            features: [],
           },
           account: { address: 'P2K...' },
-          session: { id: 'sess-1' },
+          session: { id: 'sess-1', expiresAt: null },
         },
       })
     );
@@ -155,9 +157,10 @@ describe('PhantasmaLink5 (cohesive v5 client)', () => {
             chains: [],
             txFormats: [],
             signatureKinds: [],
+            features: [],
           },
           account: { address: 'P2K...' },
-          session: { id: 'old-sess' },
+          session: { id: 'old-sess', expiresAt: null },
         },
       })
     );
@@ -198,13 +201,51 @@ describe('PhantasmaLink5 (cohesive v5 client)', () => {
             chains: [],
             txFormats: [],
             signatureKinds: [],
+            features: [],
           },
           account: { address: 'P2K...' },
-          session: { id: 's1' },
+          session: { id: 's1', expiresAt: null },
         },
       })
     );
     await expect(promise).resolves.toMatchObject({ session: { id: 's1' } });
+  });
+
+  // A connect result without the capabilities, the account's address or a field that spec §5
+  // requires is refused with -32603, and the client keeps no session. Later calls then cannot fail
+  // with a TypeError.
+  it('refuses a malformed connect result and keeps no session', async () => {
+    const transport = new MockTransport();
+    const client = new PhantasmaLink5(transport, { dapp: { name: 'D', url: 'https://d.app' } });
+    const malformed = [
+      { account: { address: 'P2K...' }, session: { id: 's1' } },
+      { capabilities: { plvVersions: [5] }, account: {}, session: { id: 's1' } },
+      {
+        capabilities: { features: [], maxPayloadBytes: 7 },
+        account: { address: 'P2K...' },
+        session: { id: 's1', expiresAt: null },
+      },
+      {
+        capabilities: { features: [] },
+        account: { address: 'P2K...' },
+        session: { id: 's1', expiresAt: '1' },
+      },
+      // Spec §5 requires both: the features, and the end of the session or null.
+      { capabilities: { features: [] }, account: { address: 'P2K...' }, session: { id: 's1' } },
+      { capabilities: {}, account: { address: 'P2K...' }, session: { id: 's1', expiresAt: null } },
+    ];
+    for (const result of malformed) {
+      const connecting = client.connect();
+      transport.inject(JSON.stringify({ plv: PLV, id: transport.lastEnvelope().id, result }));
+      await expect(connecting).rejects.toMatchObject({ code: LinkErrorCode.InternalError });
+      expect(client.account).toBeUndefined();
+      expect(client.capabilities).toBeUndefined();
+    }
+    // With no adopted result, a transaction call reads no missing field and does not throw.
+    expect(() => {
+      void client.signTransaction({ format: 'script', tx: 'AA==' }).catch(() => undefined);
+    }).not.toThrow();
+    client.close();
   });
 
   // After disconnect the wallet has dropped the session, so the client must stop sending
@@ -226,9 +267,10 @@ describe('PhantasmaLink5 (cohesive v5 client)', () => {
             chains: [],
             txFormats: [],
             signatureKinds: [],
+            features: [],
           },
           account: { address: 'P2K...' },
-          session: { id: 'sess-x' },
+          session: { id: 'sess-x', expiresAt: null },
         },
       })
     );
@@ -334,9 +376,10 @@ describe('PhantasmaLink5 (cohesive v5 client)', () => {
             chains: [],
             txFormats: [],
             signatureKinds: [],
+            features: [],
           },
           account: { address: 'P2K...' },
-          session: { id: 'push-1' },
+          session: { id: 'push-1', expiresAt: null },
         },
       })
     );
@@ -396,9 +439,10 @@ describe('PhantasmaLink5 (cohesive v5 client)', () => {
             chains: [],
             txFormats: [],
             signatureKinds: [],
+            features: [],
           },
           account: { address: 'P2K...' },
-          session: { id: 'sess-x' },
+          session: { id: 'sess-x', expiresAt: null },
         },
       })
     );
