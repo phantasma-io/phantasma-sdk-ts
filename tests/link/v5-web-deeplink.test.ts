@@ -213,7 +213,7 @@ describe('PhantasmaLink5.webDeeplink', () => {
 
     const promise = client.connect();
     expect(env.opened).toHaveLength(1);
-    expect(env.opened[0].startsWith('phantasma://v5/req#')).toBe(true);
+    expect(env.opened[0].startsWith('https://link.phantasma.info/v5/req#')).toBe(true);
     expect(env.opened[0]).not.toContain('pha_connect'); // sealed, never plaintext
 
     const { topic, envelope } = unsealRequest(env.opened[0], key);
@@ -719,7 +719,7 @@ describe('PhantasmaLink5.webDeeplink over the relay', () => {
     establish(env, key);
 
     const chains = client.getChains();
-    expect(env.opened).toEqual(['phantasma://v5/wake']);
+    expect(env.opened).toEqual(['https://link.phantasma.info/v5/wake']);
     const [request] = published(env, key);
     expect(request.envelope.method).toBe('pha_getChains');
     expect(request.envelope.session).toBe('sess-1');
@@ -773,7 +773,7 @@ describe('PhantasmaLink5.webDeeplink over the relay', () => {
     expect(env.relay().readyState).toBe(0);
 
     const chains = client.getChains();
-    expect(env.opened[1].startsWith('phantasma://v5/req#')).toBe(true);
+    expect(env.opened[1].startsWith('https://link.phantasma.info/v5/req#')).toBe(true);
     respond(env, key, unsealRequest(env.opened[1], key).envelope.id, {
       chains: [],
       current: '',
@@ -802,7 +802,7 @@ describe('PhantasmaLink5.webDeeplink over the relay', () => {
       format: 'carbon',
       tx: bytesToBase64(new Uint8Array(200)),
     });
-    expect(env.opened).toEqual(['phantasma://v5/wake']);
+    expect(env.opened).toEqual(['https://link.phantasma.info/v5/wake']);
     await new Promise((resolve) => setTimeout(resolve, 600)); // the first reconnect step
     env.relay().open();
     const [request] = published(env, key);

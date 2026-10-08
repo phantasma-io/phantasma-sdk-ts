@@ -86,14 +86,14 @@ describe('DeeplinkRelayTransport', () => {
     socket.open();
     send(SMALL);
     expect(socket.publishes().map((p) => p.payload)).toEqual([SMALL]);
-    expect(opened).toEqual(['phantasma://v5/wake']);
+    expect(opened).toEqual(['https://link.phantasma.info/v5/wake']);
   });
 
   it('falls back to the deeplink while the relay is not connected', () => {
     const { send, opened, socket } = harness('relay');
     send(SMALL);
     expect(opened).toHaveLength(1);
-    expect(opened[0].startsWith('phantasma://v5/req#t=topic-1&f=')).toBe(true);
+    expect(opened[0].startsWith('https://link.phantasma.info/v5/req#t=topic-1&f=')).toBe(true);
     expect(socket.publishes()).toEqual([]);
   });
 
@@ -102,7 +102,7 @@ describe('DeeplinkRelayTransport', () => {
     const { send, opened, socket } = harness('deeplink');
     socket.open();
     send(SMALL);
-    expect(opened[0].startsWith('phantasma://v5/req#')).toBe(true);
+    expect(opened[0].startsWith('https://link.phantasma.info/v5/req#')).toBe(true);
     expect(socket.publishes()).toEqual([]);
   });
 
@@ -114,7 +114,10 @@ describe('DeeplinkRelayTransport', () => {
     send(LARGE);
     send(SMALL, { needsRelay: true });
     expect(socket.publishes().map((p) => p.payload)).toEqual([LARGE, SMALL]);
-    expect(opened).toEqual(['phantasma://v5/wake', 'phantasma://v5/wake']);
+    expect(opened).toEqual([
+      'https://link.phantasma.info/v5/wake',
+      'https://link.phantasma.info/v5/wake',
+    ]);
   });
 
   it('refuses what a deeplink cannot carry once the relay is gone', () => {
@@ -132,7 +135,7 @@ describe('DeeplinkRelayTransport', () => {
     );
     send(SMALL);
     expect(opened).toHaveLength(1);
-    expect(opened[0].startsWith('phantasma://v5/req#')).toBe(true);
+    expect(opened[0].startsWith('https://link.phantasma.info/v5/req#')).toBe(true);
   });
 
   // Spec §10, §16: the wallet answers on the path a request came on. When the relay refuses the
@@ -215,7 +218,7 @@ describe('DeeplinkRelayTransport', () => {
       tx: bytesToBase64(new Uint8Array(20_000)),
     });
     expect(sockets[0].publishes()).toHaveLength(1);
-    expect(opened).toEqual(['phantasma://v5/wake']);
+    expect(opened).toEqual(['https://link.phantasma.info/v5/wake']);
     client.close();
     await expect(signing).rejects.toMatchObject({ code: LinkErrorCode.Disconnected });
   });

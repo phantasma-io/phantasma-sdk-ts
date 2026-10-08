@@ -14,8 +14,14 @@
 import { LinkError, LinkErrorCode } from './errors.js';
 import { LinkTransport } from './transport.js';
 import { bytesToBase64Url, base64UrlToBytes, utf8ToBytes, bytesToUtf8 } from './encoding.js';
+import { DEFAULT_LINK_HOST } from './protocol.js';
 
-/** Default custom-scheme base of the wallet ("phantasma://v5/req"). */
+/** Default base of the request and wake links: the universal link (spec §6.3, §17). The phone
+ * opens it only in an app that the host lists, so no other app can take the request. */
+export const WALLET_LINK_BASE = `https://${DEFAULT_LINK_HOST}`;
+
+/** Custom-scheme base of the wallet ("phantasma://v5/req"), the fallback of spec §6.3. Any app can
+ * register the scheme, so it is never the default. */
 export const WALLET_SCHEME_BASE = 'phantasma://';
 
 /** Default per-request timeout on deeplink transports. A round-trip spans an app switch
@@ -35,8 +41,8 @@ export interface DeeplinkUrls {
   frame: string;
 }
 
-/** Build the dApp->wallet request URL. `walletBase` is e.g. `phantasma:/` (custom scheme) or
- * `https://link.phantasma.info` (universal link); the path is fixed to /v5/req. */
+/** Build the dApp->wallet request URL. `walletBase` is `https://link.phantasma.info` (universal
+ * link) or `phantasma://` (custom scheme); the path is fixed to /v5/req. */
 export function buildRequestUrl(walletBase: string, topic: string, frame: string): string {
   const base = walletBase.endsWith('/') ? walletBase : `${walletBase}/`;
   return `${base}v5/req#t=${encodeURIComponent(topic)}&f=${bytesToBase64Url(utf8ToBytes(frame))}`;
@@ -102,7 +108,8 @@ export interface DeeplinkTransportOptions {
   topic: string;
   /** Opens a URL at the wallet (platform hook: location.href, anchor click, native intent). */
   opener: (url: string) => void;
-  /** Wallet base; defaults to the custom scheme {@link WALLET_SCHEME_BASE}. */
+  /** Wallet base; defaults to the universal link {@link WALLET_LINK_BASE}. The custom scheme
+   * {@link WALLET_SCHEME_BASE} is the fallback of spec §6.3. */
   walletBase?: string;
   /** Largest `f` value of a request URL, in characters; default
    * {@link DEEPLINK_URL_BUDGET_CHARS}. */
@@ -135,7 +142,7 @@ export class DeeplinkTransport implements LinkTransport {
     }
     this.topic = options.topic;
     this.opener = options.opener;
-    this.walletBase = options.walletBase ?? WALLET_SCHEME_BASE;
+    this.walletBase = options.walletBase ?? WALLET_LINK_BASE;
     this.urlBudgetChars = options.urlBudgetChars ?? DEEPLINK_URL_BUDGET_CHARS;
     this.log = options.log;
   }

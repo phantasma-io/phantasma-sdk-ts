@@ -50,8 +50,8 @@ export interface WebDeeplinkOptions {
   /** Replaces the page URL after a response fragment is consumed (history.replaceState by
    * default) so reload/back does not re-deliver it and ciphertext leaves the address bar. */
   replaceUrl?: (url: string) => void;
-  /** Wallet base for request and wake URLs (DeeplinkTransport); default the `phantasma://`
-   * scheme. */
+  /** Wallet base for request and wake URLs (DeeplinkTransport); default the universal link
+   * `https://link.phantasma.info`. */
   walletBase?: string;
   /** Relay of new pairings, a `wss://` URL; default the public relay. A stored pairing keeps the
    * relay it was made with. */
