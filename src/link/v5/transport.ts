@@ -69,9 +69,10 @@ export interface LinkSessionClientOptions {
   sessionId?: string;
   /** Per-request timeout in ms; 0 disables. Default 60000. */
   requestTimeoutMs?: number;
-  /** Sink for responses with no matching in-flight request (the deeplink page reloaded while
-   * the wallet was open, discarding the original request promise). Without it such responses
-   * are dropped. Never fires on same-page flows - those always have a pending entry. */
+  /** Sink for responses with no matching in-flight request: the request timed out (`5005`)
+   * before its answer came, or an earlier load of the page sent it (the wallet's callback
+   * reloaded the page, or the relay hands its held answers to the new subscription, spec §16).
+   * Without it such responses are dropped. */
   onUnmatchedResponse?: (response: UnmatchedResponse) => void;
   /** Ids of the answers handled before, each with the Unix milliseconds it came, for example by an
    * earlier load of the same page. The relay hands its held answers again to every new
@@ -94,10 +95,10 @@ interface Pending {
   timer?: ReturnType<typeof setTimeout>;
 }
 
-/** A wallet response that arrived with no in-flight request to match it - the deeplink reload
- * case, where the page that issued the request was discarded before the answer came back.
- * Surfaced via {@link LinkSessionClientOptions.onUnmatchedResponse} so a persistence layer can
- * still present the result instead of dropping it. */
+/** A wallet response that arrived with no in-flight request to match it: its request timed out
+ * before the answer came, or an earlier load of the page sent it. Surfaced via
+ * {@link LinkSessionClientOptions.onUnmatchedResponse} so a persistence layer can still present
+ * the result instead of dropping it. */
 export interface UnmatchedResponse {
   id: string;
   ok: boolean;
@@ -340,10 +341,9 @@ export class LinkSessionClient {
     this.sentIn.delete(id);
     const pending = this.pending.get(id);
     if (!pending) {
-      // No in-flight request matches this id. On deeplink this means the page reloaded while
-      // the wallet was open, so the original request promise was lost with the old page. Hand
-      // the answer to the optional sink instead of dropping it; same-page flows always have a
-      // pending entry, so this path is reload-only.
+      // No in-flight request matches this id: the request timed out before its answer came, or
+      // an earlier load of the page sent it and its promise was lost with that page. Hand the
+      // answer to the optional sink instead of dropping it.
       if (this.onUnmatchedResponse) {
         const sent = request === undefined ? {} : { request: { session: request.session } };
         if (isLinkErrorResponse(message)) {

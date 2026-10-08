@@ -13,7 +13,7 @@ import {
   WebDeeplinkRecord,
   WEB_DEEPLINK_STORAGE_KEY,
 } from '../../src/link/v5/web-deeplink.js';
-import type { LinkTransport } from '../../src/link/v5/transport.js';
+import type { LinkTransport, UnmatchedResponse } from '../../src/link/v5/transport.js';
 import { base64UrlToBytes, bytesToBase64, bytesToBase64Url } from '../../src/link/v5/encoding.js';
 import { DEFAULT_RELAY_URL } from '../../src/link/v5/relay-transport.js';
 import { WebSocketLike } from '../../src/link/v5/loopback-transport.js';
@@ -727,6 +727,34 @@ describe('PhantasmaLink5.webDeeplink over the relay', () => {
     env.relay().receive({ op: 'ack', id: request.id });
     deliver(env, key, { id: request.envelope.id, result: { chains: [], current: '', nexus: 'x' } });
     await expect(chains).resolves.toMatchObject({ nexus: 'x' });
+  });
+
+  // Spec §16: the page reloaded while the wallet answered over the relay. The relay hands the held
+  // answer to the new page's subscription after the factory returned, and the dApp's handler gets
+  // it, so the user sees the result of the signature.
+  it('hands an answer that the relay brings after a reload to onUnmatchedResponse', async () => {
+    const env = new FakeWebEnv();
+    const first = await PhantasmaLink5.webDeeplink({ dapp: DAPP, ...env.options() });
+    const key = base64UrlToBytes(env.record().key);
+    env.relay().open();
+    establish(env, key);
+    void first.getChains().catch(() => undefined);
+    const [request] = published(env, key);
+    first.close();
+
+    const late: UnmatchedResponse[] = [];
+    const reloaded = await PhantasmaLink5.webDeeplink({
+      dapp: DAPP,
+      ...env.options(),
+      onUnmatchedResponse: (response) => late.push(response),
+    });
+    expect(reloaded.takeUnmatchedResponse()).toBeUndefined();
+    env.relay().open();
+    const result = { chains: [], current: '', nexus: 'x' };
+    deliver(env, key, { id: request.envelope.id, result });
+
+    expect(late).toEqual([{ id: request.envelope.id, ok: true, result }]);
+    expect(reloaded.account?.address).toBe('P2KTestAddr');
   });
 
   // Spec §16: the relay hands its held frames to every new subscription, so a reloaded page meets

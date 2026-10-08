@@ -128,10 +128,13 @@ export class PhantasmaLink5 {
 
   constructor(transport: LinkTransport, options: PhantasmaLink5Options = {}) {
     this.transport = transport;
-    // Capture responses that arrive with no in-flight request (the deeplink page reloaded
-    // mid-flow). The web-deeplink factory delivers any such response during construction, so a
-    // caller can recover it via takeUnmatchedResponse() right after building the client. Its
-    // request went out in the session this client holds, the only one of its channel.
+    // Capture responses that arrive with no in-flight request: an earlier load of the page sent
+    // the request, or it timed out before its answer came. The web-deeplink factory delivers a
+    // response found in the page URL during construction, so a caller can recover it via
+    // takeUnmatchedResponse() right after building the client. The relay hands its held answers
+    // again to the new page's subscription after the factory returned (spec §16); every such
+    // answer also reaches the caller's onUnmatchedResponse.
+    const onUnmatchedResponse = options.onUnmatchedResponse;
     this.session = new LinkSessionClient(transport, {
       ...options,
       onUnmatchedResponse: (response) => {
@@ -147,6 +150,7 @@ export class PhantasmaLink5 {
               ? this.session.getSessionId()
               : undefined;
         this.noteAnswer(sentSession, response.ok ? undefined : walletAnswerError(response.error));
+        onUnmatchedResponse?.(response);
       },
     });
     this.defaultDapp = options.dapp;
@@ -369,6 +373,7 @@ export class PhantasmaLink5 {
         requestTimeoutMs: options.requestTimeoutMs ?? DEEPLINK_REQUEST_TIMEOUT_MS,
         idleTtlMs,
         log: options.log,
+        onUnmatchedResponse: options.onUnmatchedResponse,
         handledAnswers: stored.answered,
         onAnswerHandled: (handled) => {
           // The answer to pha_disconnect comes after the record was deleted.
@@ -452,10 +457,10 @@ export class PhantasmaLink5 {
     );
   }
 
-  /** Take (and clear) a wallet response that arrived with no in-flight request to match it -
-   * the deeplink reload case, where the page that issued the request was discarded before the
-   * answer returned. The web-deeplink factory delivers it during construction, so read it right
-   * after building the client. Returns undefined when there is nothing to recover. */
+  /** Take (and clear) the last wallet response that arrived with no in-flight request to match
+   * it: an earlier load of the page sent the request, or it timed out before its answer came. The
+   * web-deeplink factory delivers an answer found in the page URL during construction, so read it
+   * right after building the client. Returns undefined when there is nothing to recover. */
   takeUnmatchedResponse(): UnmatchedResponse | undefined {
     const response = this.lastUnmatched;
     this.lastUnmatched = undefined;
