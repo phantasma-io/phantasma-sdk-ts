@@ -84,9 +84,26 @@ describe('v5 request send time', () => {
       1_800_000_000_000
     );
     expect((decodeEnvelope(request('')) as LinkRequest).sentAt).toBeUndefined();
-    for (const value of ['"1800000000000"', 'null', '{}']) {
+    for (const value of ['"1800000000000"', '{}']) {
       expect(() => decodeEnvelope(request(value))).toThrow(LinkError);
     }
+  });
+
+  // Spec §4: in a request, a field of the envelope or of `params` set to null counts as absent.
+  it('reads a request field set to null as absent', () => {
+    const decoded = decodeEnvelope(
+      '{"plv":5,"id":"a","method":"pha_signTransaction","session":null,"sentAt":null,' +
+        '"params":{"format":"script","tx":"AA==","signatureKind":null}}'
+    ) as LinkRequest;
+    expect(decoded).toEqual({
+      plv: 5,
+      id: 'a',
+      method: 'pha_signTransaction',
+      params: { format: 'script', tx: 'AA==' },
+    });
+    expect(
+      decodeEnvelope('{"plv":5,"id":"a","method":"pha_getChains","params":null}')
+    ).not.toHaveProperty('params');
   });
 });
 

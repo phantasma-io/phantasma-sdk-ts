@@ -117,6 +117,22 @@ export function decodeEnvelope(text: string): LinkMessage {
   }
 
   if (typeof record.method === 'string') {
+    // Spec §4: in a request, a field of the envelope or of `params` set to null counts as absent,
+    // so every reader takes `"signatureKind": null` as the default kind instead of a bad value.
+    for (const key of ['session', 'sentAt', 'params']) {
+      if (record[key] === null) {
+        delete record[key];
+      }
+    }
+    const params = record.params;
+    if (typeof params === 'object' && params !== null && !Array.isArray(params)) {
+      const fields = params as Record<string, unknown>;
+      for (const key of Object.keys(fields)) {
+        if (fields[key] === null) {
+          delete fields[key];
+        }
+      }
+    }
     if (
       record.sentAt !== undefined &&
       (typeof record.sentAt !== 'number' || !Number.isFinite(record.sentAt))
