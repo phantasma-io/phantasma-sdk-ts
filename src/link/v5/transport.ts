@@ -203,11 +203,12 @@ export class LinkSessionClient {
       );
     }
     // The ecdh flow forbids plaintext: until the wallet's key hop arrives there is no
-    // channel key, and nothing may be sent (spec §8: relay payloads are always sealed).
+    // channel key, and nothing may be sent (spec §8: relay payloads are always sealed). The
+    // wallet cannot be reached yet, which the client reports as 4900 (spec §10).
     if (this.requireSessionKey && !this.sessionKey) {
       return Promise.reject(
         new LinkError(
-          LinkErrorCode.Unauthorized,
+          LinkErrorCode.Disconnected,
           'Channel key not established yet; complete the pairing first'
         )
       );

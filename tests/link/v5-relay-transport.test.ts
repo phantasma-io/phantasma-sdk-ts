@@ -628,7 +628,7 @@ describe('PhantasmaLink5.relayEcdh (custom-scheme pairing, key derived from the 
     expect(pairing.symKey).toBeUndefined();
     expect(pairing.relay).toBeDefined();
 
-    await expect(client.getChains()).rejects.toMatchObject({ code: 4100 });
+    await expect(client.getChains()).rejects.toMatchObject({ code: LinkErrorCode.Disconnected });
     sockets[0].open();
     // Nothing but the subscribe may have left the transport (no plaintext, no publish).
     expect(sockets[0].sentJson()).toEqual([{ op: 'subscribe', topic: `${pairing.topic}.wallet` }]);
