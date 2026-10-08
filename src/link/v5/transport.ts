@@ -82,6 +82,11 @@ export interface LinkSessionClientOptions {
    * reloaded the page, or the relay hands its held answers to the new subscription, spec §16).
    * Without it such responses are dropped. */
   onUnmatchedResponse?: (response: UnmatchedResponse) => void;
+  /** Called with each request right before it leaves for the transport: its id, its method and
+   * the session it names. A dApp that keeps an operation across a page reload stores the id with
+   * it, so that an answer which arrives after the reload ({@link onUnmatchedResponse}) is matched
+   * to its operation by id, and an answer to another request is never taken for it. */
+  onRequestSent?: (request: SentRequest) => void;
   /** Ids of the answers handled before, each with the Unix milliseconds it came, for example by an
    * earlier load of the same page. The relay hands its held answers again to every new
    * subscription (spec §16), so an answer handled before is dropped as a repeat. */
@@ -95,6 +100,14 @@ export interface LinkSessionClientOptions {
    * silent deeplink/relay receive path. METADATA ONLY - never receives secrets or plaintext
    * payloads. Default: no-op. */
   log?: (message: string) => void;
+}
+
+/** A request as {@link LinkSessionClientOptions.onRequestSent} reports it. */
+export interface SentRequest {
+  id: string;
+  method: string;
+  /** The session the request names, if any. */
+  session?: string;
 }
 
 interface Pending {
@@ -131,6 +144,7 @@ export class LinkSessionClient {
   private readonly requestTimeoutMs: number;
   private readonly onUnmatchedResponse?: (response: UnmatchedResponse) => void;
   private readonly onAnswerHandled?: (handled: Array<[string, number]>) => void;
+  private readonly onRequestSent?: (request: SentRequest) => void;
   private readonly log?: (message: string) => void;
   private readonly pending = new Map<string, Pending>();
   // Ids of the answers handled, oldest first, with the time they came.
@@ -151,6 +165,7 @@ export class LinkSessionClient {
     this.requestTimeoutMs = options.requestTimeoutMs ?? DEEPLINK_REQUEST_TIMEOUT_MS;
     this.onUnmatchedResponse = options.onUnmatchedResponse;
     this.onAnswerHandled = options.onAnswerHandled;
+    this.onRequestSent = options.onRequestSent;
     this.log = options.log;
     // Oldest first, as the memory keeps them: the pruning in isRepeat stops at the first id that
     // is still young.
@@ -239,6 +254,12 @@ export class LinkSessionClient {
     });
     this.rememberRequest(id, this.sessionId);
     this.startTimeout(id, method);
+    // Before the send: a deeplink send may unload the page, and the dApp stores the id first.
+    try {
+      this.onRequestSent?.({ id, method, ...(this.sessionId ? { session: this.sessionId } : {}) });
+    } catch {
+      // A failing embedder hook must not stop the request.
+    }
 
     // Send after registering the pending entry so a synchronous transport error settles it.
     // A LinkError from the transport keeps its code: the transport knows the reason, as with

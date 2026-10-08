@@ -374,6 +374,7 @@ export class PhantasmaLink5 {
         idleTtlMs,
         log: options.log,
         onUnmatchedResponse: options.onUnmatchedResponse,
+        onRequestSent: options.onRequestSent,
         handledAnswers: stored.answered,
         onAnswerHandled: (handled) => {
           // The answer to pha_disconnect comes after the record was deleted.

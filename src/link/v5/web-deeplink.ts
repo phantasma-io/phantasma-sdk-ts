@@ -16,7 +16,7 @@ import { WebSocketFactory } from './loopback-transport.js';
 import { bytesToBase64Url, base64UrlToBytes } from './encoding.js';
 import { generateSessionKey, randomToken, SESSION_KEY_LENGTH } from './session-crypto.js';
 import { isPairingTopic } from './pairing.js';
-import type { UnmatchedResponse } from './transport.js';
+import type { SentRequest, UnmatchedResponse } from './transport.js';
 
 /** The subset of the Web Storage API the web-deeplink flow needs (localStorage-shaped). */
 export interface WebDeeplinkStorage {
@@ -79,6 +79,10 @@ export interface WebDeeplinkOptions {
    * the page URL arrives while the factory runs; an answer that the relay hands again to the new
    * page arrives later (spec §16). */
   onUnmatchedResponse?: (response: UnmatchedResponse) => void;
+  /** Called with each request right before it leaves, before a deeplink may unload the page: its
+   * id, its method and its session. Store the id with the operation that waits for the answer, so
+   * that an answer arriving after a reload ({@link onUnmatchedResponse}) is matched by id. */
+  onRequestSent?: (request: SentRequest) => void;
 }
 
 /** The persisted pairing/session state of one web dApp <-> wallet deeplink channel. The whole

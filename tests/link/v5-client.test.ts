@@ -2,7 +2,7 @@ import { jest } from '@jest/globals';
 import { PhantasmaLink5 } from '../../src/link/v5/client.js';
 import { DEEPLINK_REQUEST_TIMEOUT_MS } from '../../src/link/v5/deeplink.js';
 import { LoopbackTransport, WebSocketLike } from '../../src/link/v5/loopback-transport.js';
-import { LinkTransport } from '../../src/link/v5/transport.js';
+import { LinkTransport, SentRequest } from '../../src/link/v5/transport.js';
 import { PLV, MAX_TX_BYTES } from '../../src/link/v5/protocol.js';
 import { LinkErrorCode } from '../../src/link/v5/errors.js';
 import type { ConnectResult, LinkAccountV5 } from '../../src/link/v5/capabilities.js';
@@ -696,6 +696,26 @@ describe('PhantasmaLink5 (cohesive v5 client)', () => {
     expect(client.account?.address).toBe('P2KTest');
     void client.getChains().catch(() => undefined);
     expect(transport.lastEnvelope().session).toBe('new');
+    client.close();
+  });
+
+  // A dApp that keeps an operation across a page reload needs the id of its request before the
+  // request leaves: a deeplink send may unload the page at once.
+  it('reports each request before it leaves for the transport', () => {
+    const transport = new MockTransport();
+    const sent: Array<{ request: SentRequest; framesBefore: number }> = [];
+    const client = new PhantasmaLink5(transport, {
+      sessionId: 'sess-1',
+      onRequestSent: (request) => sent.push({ request, framesBefore: transport.sent.length }),
+    });
+    void client.getChains().catch(() => undefined);
+    const envelope = transport.lastEnvelope();
+    expect(sent).toEqual([
+      {
+        request: { id: envelope.id, method: 'pha_getChains', session: 'sess-1' },
+        framesBefore: 0,
+      },
+    ]);
     client.close();
   });
 

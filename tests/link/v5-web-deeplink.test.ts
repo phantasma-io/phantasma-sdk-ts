@@ -795,6 +795,25 @@ describe('PhantasmaLink5.webDeeplink over the relay', () => {
     expect(env.record().topic).toBe(stored.topic);
   });
 
+  // The page stores the id of a request before the wake link may unload it, so that an answer
+  // after a reload is matched to its operation by id.
+  it('reports the id of each request before it leaves', async () => {
+    const env = new FakeWebEnv();
+    const ids: string[] = [];
+    const client = await PhantasmaLink5.webDeeplink({
+      dapp: DAPP,
+      ...env.options(),
+      onRequestSent: (request) => ids.push(request.id),
+    });
+    const key = base64UrlToBytes(env.record().key);
+    env.relay().open();
+    establish(env, key);
+    void client.getChains().catch(() => undefined);
+    const [request] = published(env, key);
+    expect(ids).toEqual([request.envelope.id]);
+    client.close();
+  });
+
   // Spec §6.3: while the relay is not connected, a request that fits a URL takes the deeplink.
   it('falls back to the deeplink while the relay is not connected', async () => {
     const env = new FakeWebEnv();
