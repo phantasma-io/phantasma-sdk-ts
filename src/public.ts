@@ -110,13 +110,16 @@ export {
   getTokenEventData,
   getTransactionSettleEventData,
   readContractCalls,
+  readScriptCalls,
 } from './vm/index.js';
 export type {
   ChainValueEventData,
   GasEventData,
   InfusionEventData,
   MarketEventData,
+  ScriptCall,
   ScriptContractCall,
+  ScriptInteropCall,
   ScriptValue,
   TokenEventData,
   TransactionSettleEventData,

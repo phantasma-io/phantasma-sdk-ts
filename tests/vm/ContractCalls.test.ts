@@ -1,5 +1,5 @@
 import { Address, Opcode, ScriptBuilder, VMType, hexToBytes } from '../../src/core';
-import { readContractCalls } from '../../src/vm/contract-calls';
+import { readContractCalls, readScriptCalls } from '../../src/vm/contract-calls';
 
 const FROM = Address.fromText('P2KEYzWsbrMbPNtW1tBzzDKeYxYi4hjzpx4EfiyRyaoLkMM');
 
@@ -259,5 +259,80 @@ describe('readContractCalls', () => {
   test('refuses a name with a space or a byte outside printable ASCII', () => {
     expect(readContractCalls(built((sb) => sb.callContract('game 1', 'move', [])))).toBeUndefined();
     expect(readContractCalls(built((sb) => sb.callContract('game1', 'mové', [])))).toBeUndefined();
+  });
+});
+
+/** The script a dApp builds for a transfer of 1 SOUL with gas paid by FROM. */
+function transferScript(): Uint8Array {
+  return built((sb) =>
+    sb
+      .allowGas(FROM, Address.nullAddress, 100000n, 21000n)
+      .transferTokens('SOUL', FROM, Address.nullAddress, 100000000n)
+      .spendGas(FROM)
+  );
+}
+
+/** Returns a call as `contract.method` or, for an interop call, its method name. */
+function callName(call: NonNullable<ReturnType<typeof readScriptCalls>>[number]): string {
+  return call.kind === 'interop' ? call.method : `${call.contract}.${call.method}`;
+}
+
+// readScriptCalls is the wallet's description of a transaction in its prompt. It reads the interop
+// calls that ScriptBuilder writes, such as a transfer, as strictly as readContractCalls reads the
+// contract calls.
+describe('readScriptCalls', () => {
+  test('reads a transfer between the gas calls in the order the VM makes them', () => {
+    expect(readScriptCalls(transferScript())?.map(callName)).toEqual([
+      'gas.AllowGas',
+      'Runtime.TransferTokens',
+      'gas.SpendGas',
+    ]);
+  });
+
+  test('returns the arguments of an interop call in parameter order with their load types', () => {
+    const transfer = readScriptCalls(transferScript())?.[1];
+    expect(transfer?.kind).toBe('interop');
+    expect(transfer?.args.map((arg) => arg.type)).toEqual([
+      VMType.Bytes,
+      VMType.Bytes,
+      VMType.String,
+      VMType.Number,
+    ]);
+    expect(transfer?.args[0].bytes).toEqual(Uint8Array.from([34, ...FROM.toByteArray()]));
+    expect(new TextDecoder().decode(transfer?.args[2].bytes)).toBe('SOUL');
+  });
+
+  test('reads the contract calls of a script as readContractCalls does', () => {
+    const calls = readScriptCalls(gameScript());
+    const contractCalls = readContractCalls(gameScript());
+    expect(calls?.map(callName)).toEqual(
+      contractCalls?.map((call) => `${call.contract}.${call.method}`)
+    );
+    expect(calls?.map((call) => call.args)).toEqual(contractCalls?.map((call) => call.args));
+  });
+
+  // EXTCALL r1 calls the method whose name register 1 holds, not the name just loaded into r0.
+  test('refuses an interop call through another register', () => {
+    const script = built((sb) =>
+      sb.callInterop('Runtime.TransferTokens', [FROM, FROM, 'SOUL', 1n])
+    );
+    // The script ends with EXTCALL, its register and RET.
+    expect(script[script.length - 3]).toBe(Opcode.EXTCALL);
+    expect(readScriptCalls(script)).toBeDefined();
+    script[script.length - 2] = 1;
+    expect(readScriptCalls(script)).toBeUndefined();
+  });
+
+  test('refuses an interop method name with a space or a byte outside printable ASCII', () => {
+    expect(
+      readScriptCalls(built((sb) => sb.callInterop('Runtime.Transfer Tokens', [])))
+    ).toBeUndefined();
+    expect(readScriptCalls(built((sb) => sb.callInterop('Runtime.Transfér', [])))).toBeUndefined();
+  });
+
+  test('refuses a byte after RET and a script without RET', () => {
+    const script = transferScript();
+    expect(readScriptCalls(Uint8Array.from([...script, Opcode.RET]))).toBeUndefined();
+    expect(readScriptCalls(script.slice(0, script.length - 1))).toBeUndefined();
   });
 });

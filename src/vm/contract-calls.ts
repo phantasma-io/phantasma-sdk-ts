@@ -1,12 +1,14 @@
-// Reads the contract calls of a VM script that ScriptBuilder built with callContract (allowGas and
-// spendGas included) and endScript. A wallet uses it to learn what a transaction calls before it
-// signs the transaction without asking the user (Phantasma Link v5, the signing permission).
+// Reads the calls of a VM script that ScriptBuilder built with callContract (allowGas and spendGas
+// included), callInterop and endScript. A wallet uses readContractCalls to learn what a transaction
+// calls before it signs the transaction without asking the user (Phantasma Link v5, the signing
+// permission), and readScriptCalls to describe a transaction in its prompt.
 //
 // The reader is strict on purpose. It accepts exactly the bytes that ScriptBuilder writes for such a
 // script and returns undefined for anything else: another opcode, another register, a length written
 // in a longer form than needed, a byte after the final RET. The VM executes a script that passes this
-// reader as a straight line of loads, pushes and context switches, so the calls read here are the
-// calls the VM makes. A looser reader could be fooled by bytes that the VM reads differently.
+// reader as a straight line of loads, pushes, context switches and interop calls, so the calls read
+// here are the calls the VM makes. A looser reader could be fooled by bytes that the VM reads
+// differently.
 
 import { Opcode } from './opcode.js';
 import { VMType } from './vm-type.js';
@@ -29,6 +31,19 @@ export interface ScriptContractCall {
    * first argument is the one on top of the stack when the method starts. */
   args: ScriptValue[];
 }
+
+/** One interop call of a script: a call of the chain's runtime, such as `Runtime.TransferTokens`. */
+export interface ScriptInteropCall {
+  /** The interop method name that the script loads before `EXTCALL`. */
+  method: string;
+  /** The arguments in the method's parameter order, pushed last to first as for a contract call. */
+  args: ScriptValue[];
+}
+
+/** One call of a script, as the VM makes it: a contract call or an interop call. */
+export type ScriptCall =
+  | ({ kind: 'contract' } & ScriptContractCall)
+  | ({ kind: 'interop' } & ScriptInteropCall);
 
 // ScriptBuilder loads every value into register 0 and switches through register 1.
 const VALUE_REGISTER = 0;
@@ -90,7 +105,7 @@ function readLoad(script: Uint8Array, pos: number): Load | undefined {
   };
 }
 
-/** Returns true if `text` can be a contract or method name in a script that readContractCalls
+/** Returns true if `text` can be a contract or method name in a script that readScriptCalls
  * reads: 1 to 255 printable ASCII characters without a space. */
 export function isCallName(text: string): boolean {
   if (text.length === 0 || text.length > MAX_NAME_BYTES) {
@@ -136,16 +151,25 @@ function isContextSwitch(script: Uint8Array, pos: number): boolean {
   );
 }
 
+/** Returns true if the bytes at `pos` are `EXTCALL r0`. */
+function isInteropCall(script: Uint8Array, pos: number): boolean {
+  return (
+    pos + 1 < script.length && script[pos] === Opcode.EXTCALL && script[pos + 1] === VALUE_REGISTER
+  );
+}
+
 /**
- * Returns the contract calls of a script in the order the VM makes them, or undefined when the
- * script is not made of calls in the form that `ScriptBuilder.callContract` writes, closed by the
- * single `RET` of `ScriptBuilder.endScript`. A script with no call is undefined too.
+ * Returns the calls of a script in the order the VM makes them, or undefined when the script is not
+ * made of calls in the form that `ScriptBuilder.callContract` and `ScriptBuilder.callInterop` write,
+ * closed by the single `RET` of `ScriptBuilder.endScript`. A script with no call is undefined too.
  *
- * Each call is a run of `LOAD r0 <value>` + `PUSH r0` pairs (the arguments, last first, then the
- * method name), then `LOAD r0 <contract name>`, `CTX r0 r1` and `SWITCH r1`.
+ * Each call starts with a run of `LOAD r0 <value>` + `PUSH r0` pairs. A contract call pushes its
+ * arguments, last first, then the method name, and ends with `LOAD r0 <contract name>`,
+ * `CTX r0 r1` and `SWITCH r1`. An interop call pushes its arguments, last first, and ends with
+ * `LOAD r0 <method name>` and `EXTCALL r0`.
  */
-export function readContractCalls(script: Uint8Array): ScriptContractCall[] | undefined {
-  const calls: ScriptContractCall[] = [];
+export function readScriptCalls(script: Uint8Array): ScriptCall[] | undefined {
+  const calls: ScriptCall[] = [];
   // The values pushed since the previous call, in script order.
   let pushed: ScriptValue[] = [];
   let pos = 0;
@@ -167,6 +191,17 @@ export function readContractCalls(script: Uint8Array): ScriptContractCall[] | un
       pos += 2;
       continue;
     }
+    if (isInteropCall(script, pos)) {
+      pos += 2;
+      // The loaded value is the interop method; every value pushed before it is an argument.
+      const method = readName(load.value);
+      if (method === undefined) {
+        return undefined;
+      }
+      calls.push({ kind: 'interop', method, args: pushed.reverse() });
+      pushed = [];
+      continue;
+    }
     if (!isContextSwitch(script, pos)) {
       return undefined;
     }
@@ -181,9 +216,30 @@ export function readContractCalls(script: Uint8Array): ScriptContractCall[] | un
     if (contract === undefined || method === undefined) {
       return undefined;
     }
-    calls.push({ contract, method, args: pushed.reverse() });
+    calls.push({ kind: 'contract', contract, method, args: pushed.reverse() });
     pushed = [];
   }
   // A script without its closing RET is not the form ScriptBuilder writes.
   return undefined;
+}
+
+/**
+ * Returns the contract calls of a script in the order the VM makes them, or undefined when
+ * `readScriptCalls` cannot read the script or the script makes an interop call. The signing
+ * permission of Phantasma Link names contracts and their methods only, so a script with an interop
+ * call, such as a transfer through `Runtime.TransferTokens`, is never signed under it.
+ */
+export function readContractCalls(script: Uint8Array): ScriptContractCall[] | undefined {
+  const calls = readScriptCalls(script);
+  if (calls === undefined) {
+    return undefined;
+  }
+  const contractCalls: ScriptContractCall[] = [];
+  for (const call of calls) {
+    if (call.kind !== 'contract') {
+      return undefined;
+    }
+    contractCalls.push({ contract: call.contract, method: call.method, args: call.args });
+  }
+  return contractCalls;
 }
