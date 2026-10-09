@@ -30,13 +30,12 @@ export interface WalletInfo {
   icon?: string;
 }
 
-/** A token balance entry on an account. `ids` lists the NFT ids in `pha_getAccounts`; a connect
- * result and `pha_sessionEstablished` leave them out, so that they fit a deeplink (spec §9.5). */
+/** A token balance entry on an account. It carries no NFT ids: one token can count millions of
+ * NFTs, so a dApp reads them from the chain's RPC (`GetAccountNFTs`, spec §9.5). */
 export interface LinkBalance {
   symbol: string;
   value: string;
   decimals: number;
-  ids?: string[];
 }
 
 /** An account authorized for the session. */

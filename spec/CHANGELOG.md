@@ -139,6 +139,8 @@
   result whose URL would exceed the budget goes over the relay, or gets `5001` with
   `maxUrlChars` on a pairing without one; an event too large for the URL is not sent. The
   connect result and `pha_sessionEstablished` carry no NFT ids, so that they fit a URL.
+  `pha_getAccounts` and `pha_accountsChanged` carry none either: one token can count millions
+  of NFTs, so a dApp reads them from the chain's RPC.
 - Section 7: over deeplink and relay the name, the url and the icon of a dApp are what it
   declared, and the wallet shows them as declared. A session is served, resumed and sent its
   events only on the channel it was made on: the origin over injected and loopback, the

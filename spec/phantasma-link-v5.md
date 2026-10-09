@@ -513,7 +513,7 @@ Connection / session:
 - `pha_connect` - pair or resume. Params: dappMeta, requested chains/methods/features.
   Result: capability handshake (§5) incl. account(s) + session.
 - `pha_disconnect` - end session.
-- `pha_getAccounts` - account(s): address, name, balances (incl. NFT ids), avatar.
+- `pha_getAccounts` - account(s): address, name, balances (without NFT ids), avatar.
 - `pha_getChains` - supported chains (CAIP-2 ids) + current; `nexus` returned as a field
   (subsumes `getNexus`).
 - `pha_getWalletInfo` - wallet name, version, capabilities, RPC endpoint (subsumes
@@ -604,9 +604,9 @@ expiresAt } }`, the shape of §5.
   for a session that ended (§7) and `4100` for a session id it does not know, and never opens
   a second session on a pairing. The account, channel and lock rules of §7 apply to the
   resume too.
-- The account in the result carries its balances without NFT ids (`ids`), so that the
-  result fits the way back of a deeplink (§6.3); `pha_getAccounts` returns them. The same
-  holds for `pha_sessionEstablished`.
+- The account in the result carries its balances without NFT ids, as every account in an
+  answer or an event does (`pha_getAccounts`). The result fits the way back of a deeplink
+  (§6.3). The same holds for `pha_sessionEstablished`.
 - Over deeplink and relay, a `pha_connect` without a session on a pairing whose session lives
   resumes that session, without a prompt. A late copy of the first `pha_connect` of a pairing
   (§16) therefore changes nothing.
@@ -616,8 +616,12 @@ disconnecting an unknown/closed session is a success no-op. A live session of an
 channel is neither: the request gets `4100`, and the session stays (§7).
 
 **`pha_getAccounts`** - params `{}`; result `{ accounts:[{ address, name, avatar,
-balances:[{symbol,value,decimals,ids[]}] }] }`. Returns ONLY the account(s) authorized
+balances:[{symbol,value,decimals}] }] }`. Returns ONLY the account(s) authorized
 for THIS session (default exactly one - no enumerating the user's other addresses).
+A balance carries no NFT ids, here and in `pha_connect`, `pha_sessionEstablished` and
+`pha_accountsChanged`: one token can count millions of NFTs, and an answer has a size limit
+(§11). A dApp reads the NFTs of the account from the chain's RPC (`GetAccountNFTs`, page by
+page).
 
 **`pha_getChains`** - params `{}`; result `{ chains:[caip2…], current:caip2, nexus }`.
 
