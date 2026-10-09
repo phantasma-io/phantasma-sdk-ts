@@ -270,6 +270,7 @@
     "examples/**/*",
     "spec/**/*",
     "README.md",
+    "CHANGELOG.md",
     "LICENSE"
   ],
   "repository": {
