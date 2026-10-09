@@ -83,6 +83,37 @@ export interface PhantasmaLink5Options extends LinkSessionClientOptions {
    * milliseconds (spec §7); default {@link SESSION_IDLE_TTL_MS}. Every session ends by inactivity,
    * so anything but a positive finite number is refused with `-32602`. */
   idleTtlMs?: number;
+  /** A session that an earlier page load kept: the last {@link ConnectResult} that
+   * `onSessionChange` reported for it, and the Unix milliseconds of the last answer in it
+   * ({@link PhantasmaLink5.lastSeenAt}). The client then holds that session as after its
+   * connect: it knows the account, the capabilities and the payload limits (spec §11), and it
+   * ends the session when its lifetime or the inactivity limit is over (spec §7). The session id
+   * is the one of the result; a `sessionId` that names another session, or a value that is no
+   * stored session, is refused with `-32602`. */
+  restore?: { connect: ConnectResult; lastSeenAt: number };
+}
+
+/** Reads the `restore` option of {@link PhantasmaLink5Options}. */
+function readRestore(
+  restore: PhantasmaLink5Options['restore'],
+  sessionId: string | undefined
+): { connect: ConnectResult; lastSeenAt: number } | undefined {
+  if (restore === undefined) {
+    return undefined;
+  }
+  if (
+    typeof restore !== 'object' ||
+    restore === null ||
+    !isConnectResult(restore.connect) ||
+    typeof restore.lastSeenAt !== 'number' ||
+    !Number.isFinite(restore.lastSeenAt)
+  ) {
+    throw new LinkError(LinkErrorCode.InvalidParams, 'restore is not a stored session');
+  }
+  if (sessionId !== undefined && sessionId !== restore.connect.session.id) {
+    throw new LinkError(LinkErrorCode.InvalidParams, 'sessionId and restore name other sessions');
+  }
+  return restore;
 }
 
 /** Wallet answers that say the session the request carried no longer lives (spec §7). */
@@ -120,7 +151,7 @@ export class PhantasmaLink5 {
   private readonly disposers: Array<() => void> = [];
   private lastConnect?: ConnectResult;
   // Unix milliseconds of the last answer from the wallet in the current session (spec §7).
-  private lastSeenAt?: number;
+  private lastAnswerAt?: number;
   // Set by the web-deeplink factory to store lastSeenAt whenever it moves.
   private onActivity?: () => void;
   private lastUnmatched?: UnmatchedResponse;
@@ -135,8 +166,10 @@ export class PhantasmaLink5 {
     // again to the new page's subscription after the factory returned (spec §16); every such
     // answer also reaches the caller's onUnmatchedResponse.
     const onUnmatchedResponse = options.onUnmatchedResponse;
+    const restored = readRestore(options.restore, options.sessionId);
     this.session = new LinkSessionClient(transport, {
       ...options,
+      sessionId: restored?.connect.session.id ?? options.sessionId,
       onUnmatchedResponse: (response) => {
         this.lastUnmatched = response;
         // The session the request went out in: the one it named, when this client sent it. A
@@ -157,6 +190,8 @@ export class PhantasmaLink5 {
     this.onSessionChange = options.onSessionChange;
     this.keyed = options.sessionKey !== undefined || options.requireSessionKey === true;
     this.idleTtlMs = readIdleTtl(options.idleTtlMs);
+    this.lastConnect = restored?.connect;
+    this.lastAnswerAt = restored?.lastSeenAt;
     // One-tap pairing (spec §15 step 3): the wallet may push the connect result as an
     // unsolicited event right after the pairing approval, instead of waiting for an
     // explicit pha_connect. Adopt it exactly like a connect result so the session is
@@ -259,9 +294,11 @@ export class PhantasmaLink5 {
    * wallet sends its key only after the user saw the dApp named in the URI (spec §15).
    *
    * To keep the pairing across page loads, store the key that `onSessionKey` reports with the
-   * topic, the relay and the session that `onSessionChange` reports, in the storage the platform
-   * offers (spec §18.3), and later build
-   * `new PhantasmaLink5(new RelayTransport({ topic, side: 'dapp', url }), { sessionKey, sessionId })`.
+   * topic, the relay, the connect result that `onSessionChange` reports and the time of the last
+   * answer ({@link lastSeenAt}), in the storage the platform offers (spec §18.3), and later build
+   * `new PhantasmaLink5(new RelayTransport({ topic, side: 'dapp', url }), { dapp, sessionKey,
+   * restore: { connect, lastSeenAt }, onSessionChange })`. Delete what you stored when
+   * `onSessionChange` reports `undefined`: the session ended, and its pairing and key with it.
    */
   static relayEcdh(
     options: Omit<RelayTransportOptions, 'topic' | 'side' | 'onWalletKey'> & {
@@ -434,7 +471,7 @@ export class PhantasmaLink5 {
     // Hop-free hydration: a reloaded page shows the cached account immediately; the next
     // real request (or a connect()) proves liveness and refreshes it.
     client.lastConnect = stored.lastConnect;
-    client.lastSeenAt = stored.lastSeenAt;
+    client.lastAnswerAt = stored.lastSeenAt;
 
     const consumePageUrl = () => {
       const href = hooks.pageUrl();
@@ -501,6 +538,13 @@ export class PhantasmaLink5 {
     return this.session.getSessionId();
   }
 
+  /** The Unix milliseconds of the last answer from the wallet in the session this client holds:
+   * what `restore.lastSeenAt` takes after a page load (spec §7). Undefined without a session, and
+   * for a session named by `sessionId` alone until its first answer. */
+  get lastSeenAt(): number | undefined {
+    return this.lastAnswerAt;
+  }
+
   /** The session's account from the last successful {@link connect}, with the details the
    * wallet pushed since then in {@link LinkEvent.AccountsChanged}, if any. */
   get account(): LinkAccountV5 | undefined {
@@ -548,7 +592,7 @@ export class PhantasmaLink5 {
    * the wallet-pushed {@link LinkEvent.SessionEstablished} one-tap pairing path). */
   private adoptConnectResult(result: ConnectResult): void {
     this.lastConnect = result;
-    this.lastSeenAt = Date.now();
+    this.lastAnswerAt = Date.now();
     this.session.setSessionId(result.session.id);
     this.onSessionChange?.(result);
   }
@@ -745,7 +789,7 @@ export class PhantasmaLink5 {
   /** Drops the session state; the embedder hears `undefined` and deletes what it stored. */
   private clearSession(): void {
     this.lastConnect = undefined;
-    this.lastSeenAt = undefined;
+    this.lastAnswerAt = undefined;
     this.session.setSessionId(undefined);
     this.onSessionChange?.(undefined);
   }
@@ -764,7 +808,7 @@ export class PhantasmaLink5 {
       this.endSession();
       return;
     }
-    this.lastSeenAt = Date.now();
+    this.lastAnswerAt = Date.now();
     this.onActivity?.();
   }
 
@@ -777,7 +821,7 @@ export class PhantasmaLink5 {
     // a keyed channel the wallet dropped the pairing as well, so nothing would ever answer.
     if (
       this.session.getSessionId() !== undefined &&
-      sessionLapsed(this.lastConnect?.session.expiresAt, this.lastSeenAt, this.idleTtlMs)
+      sessionLapsed(this.lastConnect?.session.expiresAt, this.lastAnswerAt, this.idleTtlMs)
     ) {
       this.endSession();
     }

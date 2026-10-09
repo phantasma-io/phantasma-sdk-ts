@@ -794,6 +794,132 @@ describe('PhantasmaLink5 (cohesive v5 client)', () => {
     await expect(fitting).resolves.toEqual({ signedTx: 'AAAA' });
   });
 
+  // A session that an earlier page load kept is held as after its connect: its account, its
+  // payload limits (spec §11) and pushed account details (spec §7) all apply at once.
+  it('holds a restored session as after its connect', async () => {
+    const transport = new KindMockTransport();
+    const changes: Array<ConnectResult | undefined> = [];
+    const connect: ConnectResult = {
+      wallet: { name: 'W', version: '1' },
+      capabilities: {
+        plvVersions: [5],
+        methods: [],
+        chains: [],
+        txFormats: [],
+        signatureKinds: [],
+        features: [],
+        maxPayloadBytes: { loopback: 3 },
+      },
+      account: { address: 'P2K...', name: 'Main' },
+      session: { id: 'sess-r', expiresAt: null },
+    };
+    const seen = Date.now() - 1000;
+    const client = new PhantasmaLink5(transport, {
+      restore: { connect, lastSeenAt: seen },
+      onSessionChange: (c) => changes.push(c),
+    });
+    expect(client.sessionId).toBe('sess-r');
+    expect(client.account).toEqual(connect.account);
+    expect(client.lastSeenAt).toBe(seen);
+
+    await expect(client.signMessage({ message: 'AAAAAA==' })).rejects.toMatchObject({
+      code: LinkErrorCode.PayloadTooLarge,
+      data: { maxPayloadBytes: 3 },
+    });
+    expect(transport.sent).toHaveLength(0);
+
+    pushAccounts(transport, 'sess-r', [{ address: 'P2K...', name: 'Renamed' }]);
+    expect(client.account?.name).toBe('Renamed');
+    expect(changes.at(-1)?.session.id).toBe('sess-r');
+
+    // An answer in the session moves the time a later page load restores.
+    const chains = client.getChains();
+    transport.inject(
+      JSON.stringify({
+        plv: PLV,
+        id: transport.lastEnvelope().id,
+        result: { chains: [], current: '', nexus: 'x' },
+      })
+    );
+    await chains;
+    expect(client.lastSeenAt).toBeGreaterThan(seen);
+  });
+
+  // A restored session whose lifetime ended while the page was closed ends before the next
+  // request leaves (spec §7).
+  it('ends a restored session whose lifetime is over', async () => {
+    const transport = new MockTransport();
+    const changes: Array<ConnectResult | undefined> = [];
+    const client = new PhantasmaLink5(transport, {
+      restore: {
+        connect: {
+          wallet: { name: 'W', version: '1' },
+          capabilities: {
+            plvVersions: [5],
+            methods: [],
+            chains: [],
+            txFormats: [],
+            signatureKinds: [],
+            features: [],
+          },
+          account: { address: 'P2K...' },
+          session: { id: 'sess-old', expiresAt: Date.now() - 1 },
+        },
+        lastSeenAt: Date.now(),
+      },
+      onSessionChange: (c) => changes.push(c),
+    });
+    const chains = client.getChains();
+    expect(changes).toEqual([undefined]);
+    expect(transport.lastEnvelope().session).toBeUndefined();
+    transport.inject(
+      JSON.stringify({
+        plv: PLV,
+        id: transport.lastEnvelope().id,
+        error: { code: LinkErrorCode.Unauthorized, message: 'No session' },
+      })
+    );
+    await expect(chains).rejects.toMatchObject({ code: LinkErrorCode.Unauthorized });
+  });
+
+  it('refuses a restore that is no stored session', () => {
+    const transport = new MockTransport();
+    expect(
+      () =>
+        new PhantasmaLink5(transport, {
+          restore: { connect: {} as ConnectResult, lastSeenAt: Date.now() },
+        })
+    ).toThrow(expect.objectContaining({ code: LinkErrorCode.InvalidParams }));
+    // A value read back from storage may be anything, null included.
+    for (const restore of [null, 'stored', 7]) {
+      expect(() => new PhantasmaLink5(transport, { restore: restore as never })).toThrow(
+        expect.objectContaining({ code: LinkErrorCode.InvalidParams })
+      );
+    }
+    expect(
+      () =>
+        new PhantasmaLink5(transport, {
+          sessionId: 'other',
+          restore: {
+            connect: {
+              wallet: { name: 'W', version: '1' },
+              capabilities: {
+                plvVersions: [5],
+                methods: [],
+                chains: [],
+                txFormats: [],
+                signatureKinds: [],
+                features: [],
+              },
+              account: { address: 'P2K...' },
+              session: { id: 'sess-r', expiresAt: null },
+            },
+            lastSeenAt: Date.now(),
+          },
+        })
+    ).toThrow(expect.objectContaining({ code: LinkErrorCode.InvalidParams }));
+  });
+
   // Without a connect result the chain maximum of 32 MiB still applies (spec §11).
   it('refuses a transaction above the chain maximum', async () => {
     const transport = new KindMockTransport();
