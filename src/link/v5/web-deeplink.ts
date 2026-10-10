@@ -8,7 +8,7 @@
 //
 // Everything platform-specific is injectable so the flow is fully testable without a
 // browser; the defaults bind to the real browser surface (localStorage, location.href,
-// hashchange, history.replaceState).
+// hashchange, history.replaceState, visibilitychange).
 
 import { LinkError, LinkErrorCode } from './errors.js';
 import { DappMetadata, ConnectResult } from './capabilities.js';
@@ -51,6 +51,11 @@ export interface WebDeeplinkOptions {
   /** Replaces the page URL after a response fragment is consumed (history.replaceState by
    * default) so reload/back does not re-deliver it and ciphertext leaves the address bar. */
   replaceUrl?: (url: string) => void;
+  /** Subscribes to the page being shown again and returns an unsubscribe; default listens to the
+   * document's `visibilitychange` and calls the handler when the page is visible. The page then
+   * connects to the relay at once, because a phone browser drops the connection of a page in the
+   * background. */
+  onPageVisible?: (handler: () => void) => () => void;
   /** Wallet base for request and wake URLs (DeeplinkTransport); default the universal link
    * `https://link.phantasma.info`. */
   walletBase?: string;
@@ -122,6 +127,7 @@ export interface WebDeeplinkHooks {
   pageUrl: () => string;
   onUrlChange?: (handler: () => void) => () => void;
   replaceUrl?: (url: string) => void;
+  onPageVisible?: (handler: () => void) => () => void;
 }
 
 // Narrow view of the browser globals we may bind to. The SDK compiles without the DOM lib
@@ -132,6 +138,11 @@ interface BrowserLikeGlobals {
   history?: { replaceState(data: unknown, unused: string, url: string): void };
   addEventListener?: (type: string, listener: () => void) => void;
   removeEventListener?: (type: string, listener: () => void) => void;
+  document?: {
+    visibilityState?: string;
+    addEventListener?: (type: string, listener: () => void) => void;
+    removeEventListener?: (type: string, listener: () => void) => void;
+  };
 }
 
 /** Merge options with browser defaults; throw a clear error when a required hook has no
@@ -195,6 +206,24 @@ export function resolveWebDeeplinkHooks(options: WebDeeplinkOptions): WebDeeplin
     replaceUrl = (url: string) => history.replaceState(null, '', url);
   }
 
+  // `visibilitychange` fires when the page is hidden and when it is shown; only the second
+  // matters here.
+  let onPageVisible = options.onPageVisible;
+  const document = browser.document;
+  if (!onPageVisible && document?.addEventListener && document.removeEventListener) {
+    const add = document.addEventListener.bind(document);
+    const remove = document.removeEventListener.bind(document);
+    onPageVisible = (handler: () => void) => {
+      const listener = () => {
+        if (document.visibilityState === 'visible') {
+          handler();
+        }
+      };
+      add('visibilitychange', listener);
+      return () => remove('visibilitychange', listener);
+    };
+  }
+
   return {
     storage,
     storageKey: options.storageKey ?? WEB_DEEPLINK_STORAGE_KEY,
@@ -202,6 +231,7 @@ export function resolveWebDeeplinkHooks(options: WebDeeplinkOptions): WebDeeplin
     pageUrl,
     onUrlChange,
     replaceUrl,
+    onPageVisible,
   };
 }
 

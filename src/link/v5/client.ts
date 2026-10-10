@@ -364,8 +364,9 @@ export class PhantasmaLink5 {
   /**
    * Build a ready-to-use client for a WEB dApp on the wallet's device (spec §6.3, §6.4, §17),
    * bundling the per-dApp glue: pairing material generation, the pairing URI with its relay,
-   * persistence (localStorage by default), restore + session resume across page loads, and
-   * intake of the response URLs the wallet opens back at the page (initial URL + `hashchange`).
+   * persistence (localStorage by default), restore + session resume across page loads,
+   * intake of the response URLs the wallet opens back at the page (initial URL + `hashchange`),
+   * and a new relay connection as soon as the page is shown again (`visibilitychange`).
    * Requests go over the relay, so answers reach the page without a reload, and the wake link
    * brings the wallet app to the front; while the relay is not connected, a request that fits a
    * URL goes over the deeplink instead.
@@ -409,47 +410,45 @@ export class PhantasmaLink5 {
     // Set once the session ended and the record was deleted with its key: nothing writes it again.
     let deleted = false;
 
-    const client = new PhantasmaLink5(
-      new DeeplinkRelayTransport({
-        topic: stored.topic,
-        opener: hooks.opener,
-        walletBase: options.walletBase,
-        log: options.log,
-        relay: { url: stored.relay, webSocketFactory: options.webSocketFactory },
-        prefer: 'relay',
-      }),
-      {
-        dapp: options.dapp,
-        sessionKey,
-        sessionId: stored.sessionId,
-        requestTimeoutMs: options.requestTimeoutMs ?? DEEPLINK_REQUEST_TIMEOUT_MS,
-        idleTtlMs,
-        log: options.log,
-        onUnmatchedResponse: options.onUnmatchedResponse,
-        onRequestSent: options.onRequestSent,
-        handledAnswers: stored.answered,
-        onAnswerHandled: (handled) => {
-          // The answer to pha_disconnect comes after the record was deleted.
-          if (deleted) {
-            return;
-          }
-          stored.answered = handled.slice(-WEB_DEEPLINK_STORED_ANSWERS);
-          saveWebDeeplinkRecord(hooks.storage, hooks.storageKey, stored);
-        },
-        onSessionChange: (connect) => {
-          if (connect === undefined) {
-            // Spec §18.3: the pairing key goes with the session.
-            deleted = true;
-            hooks.storage.removeItem(hooks.storageKey);
-            return;
-          }
-          stored.sessionId = connect.session.id;
-          stored.lastConnect = connect;
-          stored.lastSeenAt = client.lastSeenAt;
-          saveWebDeeplinkRecord(hooks.storage, hooks.storageKey, stored);
-        },
-      }
-    );
+    const transport = new DeeplinkRelayTransport({
+      topic: stored.topic,
+      opener: hooks.opener,
+      walletBase: options.walletBase,
+      log: options.log,
+      relay: { url: stored.relay, webSocketFactory: options.webSocketFactory },
+      prefer: 'relay',
+    });
+    const client = new PhantasmaLink5(transport, {
+      dapp: options.dapp,
+      sessionKey,
+      sessionId: stored.sessionId,
+      requestTimeoutMs: options.requestTimeoutMs ?? DEEPLINK_REQUEST_TIMEOUT_MS,
+      idleTtlMs,
+      log: options.log,
+      onUnmatchedResponse: options.onUnmatchedResponse,
+      onRequestSent: options.onRequestSent,
+      handledAnswers: stored.answered,
+      onAnswerHandled: (handled) => {
+        // The answer to pha_disconnect comes after the record was deleted.
+        if (deleted) {
+          return;
+        }
+        stored.answered = handled.slice(-WEB_DEEPLINK_STORED_ANSWERS);
+        saveWebDeeplinkRecord(hooks.storage, hooks.storageKey, stored);
+      },
+      onSessionChange: (connect) => {
+        if (connect === undefined) {
+          // Spec §18.3: the pairing key goes with the session.
+          deleted = true;
+          hooks.storage.removeItem(hooks.storageKey);
+          return;
+        }
+        stored.sessionId = connect.session.id;
+        stored.lastConnect = connect;
+        stored.lastSeenAt = client.lastSeenAt;
+        saveWebDeeplinkRecord(hooks.storage, hooks.storageKey, stored);
+      },
+    });
     client.onActivity = () => {
       stored.lastSeenAt = client.lastSeenAt;
       saveWebDeeplinkRecord(hooks.storage, hooks.storageKey, stored);
@@ -494,6 +493,13 @@ export class PhantasmaLink5 {
     const unsubscribe = hooks.onUrlChange?.(consumePageUrl);
     if (unsubscribe) {
       client.disposers.push(unsubscribe);
+    }
+    // A phone browser drops the relay connection of a page in the background, and the retries
+    // of the relay transport wait longer after each failure. The wallet's answers wait at the
+    // relay meanwhile (spec §16), so the page connects again as soon as it is shown.
+    const stopWatching = hooks.onPageVisible?.(() => transport.reconnect());
+    if (stopWatching) {
+      client.disposers.push(stopWatching);
     }
 
     return client;

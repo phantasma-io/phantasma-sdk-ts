@@ -115,6 +115,11 @@ Link v5:
 - `onRequestSent`, on every client and on `webDeeplink`, reports the id, the method and the
   session of each request right before it leaves (`SentRequest`), so a dApp can match an answer
   that arrives after a reload to its operation by id.
+- `webDeeplink` connects to the relay again as soon as the page is shown (`onPageVisible`, by
+  default the document's `visibilitychange`). A phone browser drops the relay connection of a page
+  in the background; the session or an answer that the wallet sent meanwhile now reaches the page
+  at once, instead of after the next retry. `DeeplinkRelayTransport.reconnect()` does the
+  reconnecting.
 - `relayEcdh` takes `onSessionKey`, which gets the session key once the wallet's key hop derived
   it, and `onSessionChange`, so a dApp can keep a custom-scheme pairing across page loads and build
   a client from it later.

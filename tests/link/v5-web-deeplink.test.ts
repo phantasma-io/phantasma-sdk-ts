@@ -9,6 +9,7 @@ import {
   DEEPLINK_REQUEST_TIMEOUT_MS,
 } from '../../src/link/v5/deeplink.js';
 import {
+  resolveWebDeeplinkHooks,
   WebDeeplinkOptions,
   WebDeeplinkRecord,
   WEB_DEEPLINK_STORAGE_KEY,
@@ -77,6 +78,7 @@ class FakeWebEnv {
   href = 'https://dapp.example/app';
   changeHandlers = new Set<() => void>();
   unsubscribed = 0;
+  shownHandlers = new Set<() => void>();
   sockets: FakeRelaySocket[] = [];
 
   readonly storage = {
@@ -105,6 +107,12 @@ class FakeWebEnv {
         this.replaced.push(url);
         this.href = url;
       },
+      onPageVisible: (handler) => {
+        this.shownHandlers.add(handler);
+        return () => {
+          this.shownHandlers.delete(handler);
+        };
+      },
       webSocketFactory: (url) => {
         const socket = new FakeRelaySocket(url);
         this.sockets.push(socket);
@@ -122,6 +130,13 @@ class FakeWebEnv {
   navigate(url: string): void {
     this.href = url;
     for (const handler of [...this.changeHandlers]) {
+      handler();
+    }
+  }
+
+  /** Simulate the user coming back to the page's tab. */
+  show(): void {
+    for (const handler of [...this.shownHandlers]) {
       handler();
     }
   }
@@ -615,6 +630,53 @@ describe('PhantasmaLink5.webDeeplink', () => {
     }
   });
 
+  // In a browser the shown-page hook is the document's `visibilitychange`. The event also fires
+  // when the page is hidden, and then the handler must not run.
+  it('calls the shown-page handler only for a visible page by default', () => {
+    const listeners = new Map<string, () => void>();
+    const page = {
+      visibilityState: 'hidden',
+      addEventListener: (type: string, listener: () => void) => {
+        listeners.set(type, listener);
+      },
+      removeEventListener: (type: string, listener: () => void) => {
+        if (listeners.get(type) === listener) {
+          listeners.delete(type);
+        }
+      },
+    };
+    const original = Object.getOwnPropertyDescriptor(globalThis, 'document');
+    Object.defineProperty(globalThis, 'document', { value: page, configurable: true });
+    try {
+      const env = new FakeWebEnv();
+      const hooks = resolveWebDeeplinkHooks({
+        dapp: DAPP,
+        storage: env.storage,
+        opener: () => undefined,
+        pageUrl: () => env.href,
+      });
+      let shown = 0;
+      const stop = hooks.onPageVisible!(() => {
+        shown += 1;
+      });
+      listeners.get('visibilitychange')!();
+      expect(shown).toBe(0);
+
+      page.visibilityState = 'visible';
+      listeners.get('visibilitychange')!();
+      expect(shown).toBe(1);
+
+      stop();
+      expect(listeners.has('visibilitychange')).toBe(false);
+    } finally {
+      if (original) {
+        Object.defineProperty(globalThis, 'document', original);
+      } else {
+        delete (globalThis as { document?: unknown }).document;
+      }
+    }
+  });
+
   // close() must release the page-URL listener so a discarded client cannot keep
   // receiving (or leak) after the dApp moved on.
   it('stops listening for page-URL changes after close', async () => {
@@ -829,6 +891,37 @@ describe('PhantasmaLink5.webDeeplink over the relay', () => {
     });
     await expect(chains).resolves.toMatchObject({ nexus: 'x' });
     expect(published(env, key)).toEqual([]);
+  });
+
+  // A phone browser drops the relay connection of a page in the background, and the transport's
+  // retries wait longer after each failure. Shown again, the page connects at once, so what the
+  // wallet published meanwhile (spec §16) reaches it without waiting for the next retry.
+  it('connects to the relay again at once when the page is shown', async () => {
+    jest.useFakeTimers();
+    try {
+      const env = new FakeWebEnv();
+      const client = await PhantasmaLink5.webDeeplink({ dapp: DAPP, ...env.options() });
+      const topic = env.record().topic;
+      env.relay().open();
+      // Shown while connected: the page keeps its one connection.
+      env.show();
+      expect(env.sockets).toHaveLength(1);
+
+      // The connection drops; the transport's own retry waits for its timer.
+      env.relay().readyState = 3;
+      env.relay().onclose?.({});
+      expect(env.sockets).toHaveLength(1);
+
+      env.show();
+      expect(env.sockets).toHaveLength(2);
+      env.relay().open();
+      expect(env.relay().sentJson()).toEqual([{ op: 'subscribe', topic: `${topic}.wallet` }]);
+
+      client.close();
+      expect(env.shownHandlers.size).toBe(0);
+    } finally {
+      jest.useRealTimers();
+    }
   });
 
   // Spec §6.3: a transaction above the wallet's deeplink limit goes over the relay, also while

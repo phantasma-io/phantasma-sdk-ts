@@ -114,6 +114,16 @@ export class DeeplinkRelayTransport implements LinkTransport {
     return !this.closed && this.deeplink.deliverUrl(url);
   }
 
+  /** Connects to the relay now if the connection is down, instead of waiting for the next retry;
+   * see {@link RelayTransport.reconnect}. A web page calls it when it is shown again: a phone
+   * browser drops the connection of a page in the background, and the wallet's answers wait at
+   * the relay until the page subscribes again (spec §16). */
+  reconnect(): void {
+    if (!this.closed) {
+      this.relay.reconnect();
+    }
+  }
+
   /** The outcome of a request sent over the relay: it fails when the relay refuses the frame, or
    * later when the relay refuses the topic while the request may still wait for its answer. It
    * settles without an error once the deeplink request timeout has passed, when the request has
