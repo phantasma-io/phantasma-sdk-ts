@@ -1,5 +1,32 @@
 # Changelog
 
+## 0.20.1
+
+### New
+
+- A token can be sealed against VM contracts (README, "Sealing a Token Against Contracts"). A sealed
+  token never gets a VM contract, from its owner or from governance. Only a token without a contract
+  can be sealed, and the seal cannot be removed. The seal blocks VM contracts only.
+  `TokenMetadataBuilder.buildAndSerialize(fields, { sealContract: true })` seals a token at creation
+  (`TokenMetadataOptions`), and `buildAndSerialize` refuses `_sealed_c` among its string fields.
+  `TokenMetadataBuilder.buildContractSealUpdate()` returns the update that seals an existing token.
+  The seal is the field `_sealed_c` (`StandardMeta.Token.sealed_contract`) holding the Int64 1.
+- `UpdateTokenMetadataTxHelper` builds the `Token.UpdateTokenMetadata` call, signed by the token
+  owner (README, "Changing Token Metadata"). The chain merges an update into the stored metadata
+  field by field. The helper refuses a token id outside 1 to 2^64 - 1, an update without fields and a
+  `_sealed_c` other than the Int64 1. The fee planner prices the call with the script budget, so its
+  plan is an upper bound.
+- `StandardMeta.Token` names the inflation keys `_ia`, `_iib`, `_iie` and `_ifr`
+  (`inflation_amounts`, `inflation_initial_begin`, `inflation_initial_end`, `inflation_force_reset`).
+
+### Changes
+
+- The SDK refuses the token metadata keys that the chain reserves (README, "Reserved Metadata Keys"),
+  before a transaction is signed. `TokenMetadataBuilder.buildAndSerialize` refuses every key that
+  starts with `_` among its string fields, because the chain's own settings are typed values.
+  `UpdateTokenMetadataTxHelper` refuses `_brn` and any other `_` key the chain does not define. An
+  update may name such a key only to remove it, with an empty `Array_Dynamic`.
+
 ## 0.20.0
 
 The Phantasma Link v5 client follows specification 1.2 (`spec/phantasma-link-v5.md`; what changed
