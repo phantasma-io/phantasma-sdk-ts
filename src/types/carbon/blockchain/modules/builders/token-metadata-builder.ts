@@ -21,7 +21,8 @@ export class TokenMetadataBuilder {
 
   /**
    * Returns the serialized metadata of a new token. `fields` are strings and must hold `name`, `icon`,
-   * `url` and `description`; `icon` is a base64 data URI of a PNG, JPEG or WebP image.
+   * `url` and `description`; `icon` is a base64 data URI of a PNG, JPEG or WebP image. No key may
+   * start with `_`, because the chain keeps such keys for its own settings.
    */
   static buildAndSerialize(
     fields?: Record<string, unknown>,
@@ -38,6 +39,15 @@ export class TokenMetadataBuilder {
     if (Object.keys(fields).includes(StandardMeta.Token.sealed_contract.data)) {
       throw new Error(
         'Pass { sealContract: true } to seal a token against contracts: _sealed_c holds the Int64 1, which a string field cannot carry'
+      );
+    }
+
+    // The chain keeps the keys that start with `_` for its own settings and refuses any other such key.
+    // Its settings are typed values, so a string field that starts with `_` is never a valid setting.
+    const reservedKey = Object.keys(fields).find((key) => key.startsWith('_'));
+    if (reservedKey !== undefined) {
+      throw new Error(
+        `${reservedKey} is reserved for the chain: string metadata fields cannot start with _`
       );
     }
 

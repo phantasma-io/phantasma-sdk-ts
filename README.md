@@ -207,11 +207,15 @@ the gas and data tokens are free, so for those tokens `recipientHoldsToken` chan
 
 `UpdateTokenMetadataTxHelper` builds `Token.UpdateTokenMetadata`, signed by the token owner. The chain
 merges an update into the stored metadata field by field, so a field the update does not name keeps
-its value:
+its value. A field is removed by sending it as an empty `Array_Dynamic`. This is the only value the
+chain reads as a removal:
 
 ```ts
 const update = new VmDynamicStruct();
-update.fields = [VmNamedDynamicVariable.from('description', VmType.String, 'A new description')];
+update.fields = [
+  VmNamedDynamicVariable.from('description', VmType.String, 'A new description'),
+  VmNamedDynamicVariable.from('website', VmType.Array_Dynamic, []),
+];
 const tx = UpdateTokenMetadataTxHelper.buildTx(tokenId, update, new Bytes32(keys.publicKey));
 const hash = await api.sendTransaction(tx, keys);
 ```
@@ -248,6 +252,18 @@ const tx = UpdateTokenMetadataTxHelper.buildTx(
 );
 const hash = await api.sendTransaction(tx, keys);
 ```
+
+## Reserved Metadata Keys
+
+Token metadata keys that start with `_` belong to the chain: the staking settings, the inflation
+settings, the contract seal and `_brn`, the burned supply that genesis recorded for a token. The chain
+refuses any other key that starts with `_`. It refuses `_brn` in an update, because only genesis sets
+it.
+
+The SDK refuses these keys before anything is signed. `TokenMetadataBuilder.buildAndSerialize` takes
+no key that starts with `_` among its string fields, because the chain's own keys are typed values.
+`UpdateTokenMetadataTxHelper` lets an update set the chain's own keys. It lets an update name any
+other `_` key only to remove it.
 
 ## Ledger
 
