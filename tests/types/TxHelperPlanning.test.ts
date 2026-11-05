@@ -12,6 +12,7 @@ import { PhantasmaNftMintInfo } from '../../src/types/carbon/blockchain/modules/
 import { CreateTokenSeriesTxHelper } from '../../src/types/carbon/blockchain/tx-helpers/create-token-series-tx-helper';
 import { CreateTokenTxHelper } from '../../src/types/carbon/blockchain/tx-helpers/create-token-tx-helper';
 import { MintPhantasmaNonFungibleTxHelper } from '../../src/types/carbon/blockchain/tx-helpers/mint-phantasma-non-fungible-tx-helper';
+import { UpdateTokenMetadataTxHelper } from '../../src/types/carbon/blockchain/tx-helpers/update-token-metadata-tx-helper';
 import { PhantasmaKeys } from '../../src/types/phantasma-keys';
 
 // Every `buildTxAndSign` helper follows one rule: a message whose `maxGas` the caller already set
@@ -127,6 +128,24 @@ const helpers: Array<{
         maxData: FIXED_MAX_DATA,
       }),
     unplanned: () => MintPhantasmaNonFungibleTxHelper.buildTxAndSign(phantasmaMint(), KEYS, config),
+  },
+  {
+    name: 'UpdateTokenMetadataTxHelper',
+    withLimits: () =>
+      UpdateTokenMetadataTxHelper.buildTxAndSign(
+        9n,
+        TokenMetadataBuilder.buildContractSealUpdate(),
+        KEYS,
+        config,
+        { maxGas: FIXED_MAX_GAS, maxData: FIXED_MAX_DATA }
+      ),
+    unplanned: () =>
+      UpdateTokenMetadataTxHelper.buildTxAndSign(
+        9n,
+        TokenMetadataBuilder.buildContractSealUpdate(),
+        KEYS,
+        config
+      ),
   },
 ];
 

@@ -218,6 +218,7 @@ export {
   TxMsgTransferNonFungibleSingleGasPayer,
   TxTypes,
   TokenListing,
+  UpdateTokenMetadataTxHelper,
   VmDynamicStruct,
   VmDynamicVariable,
   VmNamedDynamicVariable,
@@ -235,7 +236,7 @@ export {
   seriesDefaultMetadataFields,
   standardMetadataFields,
 } from './types/carbon/index.js';
-export type { MetadataValueInput } from './types/carbon/index.js';
+export type { MetadataValueInput, TokenMetadataOptions } from './types/carbon/index.js';
 
 export {
   ANONYMOUS_NAME,

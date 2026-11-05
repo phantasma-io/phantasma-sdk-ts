@@ -203,6 +203,52 @@ the gas and data tokens are free, so for those tokens `recipientHoldsToken` chan
 - `parseUnits` and `formatUnits` convert between decimal amounts and atoms. KCAL has 10 decimals
   and SOUL has 8. `summarizeFeePlan` renders a plan in KCAL and SOUL for display.
 
+## Changing Token Metadata
+
+`UpdateTokenMetadataTxHelper` builds `Token.UpdateTokenMetadata`, signed by the token owner. The chain
+merges an update into the stored metadata field by field, so a field the update does not name keeps
+its value:
+
+```ts
+const update = new VmDynamicStruct();
+update.fields = [VmNamedDynamicVariable.from('description', VmType.String, 'A new description')];
+const tx = UpdateTokenMetadataTxHelper.buildTx(tokenId, update, new Bytes32(keys.publicKey));
+const hash = await api.sendTransaction(tx, keys);
+```
+
+The planner prices `Token.UpdateTokenMetadata` with the script budget, so its plan is an upper bound
+(`plan.exact` is `false`). The chain charges the transfer fee and the storage the update adds.
+
+## Sealing a Token Against Contracts
+
+A sealed token never gets a VM contract, from its owner or from governance. Only a token without a
+contract can be sealed, and the seal cannot be removed.
+
+The seal blocks VM contracts only. A sealed token can be minted, transferred and burned, and it can
+get new NFT series and NFT mints. Its other metadata fields can be changed.
+
+The seal is the metadata field `_sealed_c` holding the Int64 value 1.
+
+Seal a token when it is created:
+
+```ts
+const metadata = TokenMetadataBuilder.buildAndSerialize(
+  { name, icon, url, description },
+  { sealContract: true }
+);
+```
+
+Seal a token that already exists:
+
+```ts
+const tx = UpdateTokenMetadataTxHelper.buildTx(
+  tokenId,
+  TokenMetadataBuilder.buildContractSealUpdate(),
+  new Bytes32(keys.publicKey)
+);
+const hash = await api.sendTransaction(tx, keys);
+```
+
 ## Ledger
 
 The SDK carries the Ledger flow itself: the device commands, the address and transaction

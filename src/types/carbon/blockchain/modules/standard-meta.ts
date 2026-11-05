@@ -24,5 +24,6 @@ export const StandardMeta = {
     phantasma_abi: new SmallString('_phb'),
     pre_burn: new SmallString('_brn'),
     inflation_period: new SmallString('_ip'),
+    sealed_contract: new SmallString('_sealed_c'),
   },
 } as const;

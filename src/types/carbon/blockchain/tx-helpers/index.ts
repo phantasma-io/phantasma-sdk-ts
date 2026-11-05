@@ -6,6 +6,7 @@ export * from './mint-phantasma-non-fungible-tx-helper.js';
 export * from './native-fee-estimator.js';
 export * from './native-tx-helper.js';
 export * from './plan-and-sign.js';
+export * from './update-token-metadata-tx-helper.js';
 // `applyTxLimits` and `defaultExpiry` are the builders' own, so only the caller-facing three are
 // re-exported here.
 export { DEFAULT_TX_EXPIRY_MS, expiryWithin, type TxLimits } from './tx-limits.js';
