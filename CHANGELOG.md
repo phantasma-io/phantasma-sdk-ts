@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.20.2
+
+### Fixes
+
+- `VmDynamicVariable` writes arrays of `Bytes16`, `Bytes32` and `Bytes64` values the way the chain
+  reads them: the number of items, then the items. Writing such an array threw, so token metadata
+  and NFT data with such a field could not be built.
+
 ## 0.20.1
 
 ### New

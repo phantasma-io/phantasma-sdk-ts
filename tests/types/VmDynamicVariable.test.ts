@@ -94,3 +94,48 @@ describe('VmDynamicVariable roundtrip', () => {
     expect((round.data as Bytes64).equals(value)).toBe(true);
   });
 });
+
+const fixedBytes = (size: number, seed: number): Uint8Array =>
+  new Uint8Array(Array.from({ length: size }, (_v, i) => (seed + i) & 0xff));
+
+const fixedByteArrays: Array<{ type: VmType; items: Array<Bytes16 | Bytes32 | Bytes64> }> = [
+  {
+    type: VmType.Array | VmType.Bytes16,
+    items: [new Bytes16(fixedBytes(16, 1)), new Bytes16(fixedBytes(16, 101))],
+  },
+  {
+    type: VmType.Array | VmType.Bytes32,
+    items: [new Bytes32(fixedBytes(32, 1)), new Bytes32(fixedBytes(32, 101))],
+  },
+  {
+    type: VmType.Array | VmType.Bytes64,
+    items: [new Bytes64(fixedBytes(64, 1)), new Bytes64(fixedBytes(64, 101))],
+  },
+];
+
+describe('VmDynamicVariable arrays of Bytes16, Bytes32 and Bytes64', () => {
+  it('writes the item count as four little-endian bytes and then the items, as the chain reads them', () => {
+    for (const { type, items } of fixedByteArrays) {
+      const input = new VmDynamicVariable();
+      input.type = type;
+      input.data = items;
+      const w = new CarbonBinaryWriter();
+      VmDynamicVariable.writeStatic(type, input, null, w);
+      expect(w.toUint8Array()).toEqual(
+        new Uint8Array([2, 0, 0, 0, ...items[0].bytes, ...items[1].bytes])
+      );
+    }
+  });
+
+  it('roundtrips arrays with items and empty arrays', () => {
+    for (const { type, items } of fixedByteArrays) {
+      for (const value of [items, []]) {
+        const round = roundtrip(type, value);
+        expect(round.type).toBe(type);
+        expect((round.data as Array<Bytes16 | Bytes32 | Bytes64>).map((x) => x.bytes)).toEqual(
+          value.map((x) => x.bytes)
+        );
+      }
+    }
+  });
+});

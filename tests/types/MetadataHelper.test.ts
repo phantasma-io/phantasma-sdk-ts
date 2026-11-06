@@ -1,3 +1,5 @@
+import { CarbonBinaryReader, CarbonBinaryWriter } from '../../src/core/types/CarbonSerialization';
+import { bytesToHex } from '../../src/core/utils';
 import { Bytes16 } from '../../src/core/types/Carbon/Bytes16';
 import { Bytes32 } from '../../src/core/types/Carbon/Bytes32';
 import {
@@ -304,5 +306,35 @@ describe('MetadataHelper.pushMetadataField', () => {
     const values = struct.fields[0].value.data as Bytes32[];
     expect(values).toHaveLength(2);
     expect(values[0]).toBeInstanceOf(Bytes32);
+  });
+
+  it('serializes an array of Bytes32 by its schema, as NFT data is, and reads it back', () => {
+    const rootsSchema = new VmNamedVariableSchema(
+      'roots',
+      new VmVariableSchema(VmType.Array | VmType.Bytes32)
+    );
+    const noteSchema = new VmNamedVariableSchema('note', VmType.String);
+    const schema = new VmStructSchema([rootsSchema, noteSchema]);
+    const roots = [
+      '00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff',
+      'ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff',
+    ];
+    const metadata: MetadataField[] = [
+      { name: 'roots', value: roots },
+      { name: 'note', value: 'after the array' },
+    ];
+    const struct = new VmDynamicStruct();
+    pushMetadataField(rootsSchema, struct, metadata);
+    pushMetadataField(noteSchema, struct, metadata);
+
+    const w = new CarbonBinaryWriter();
+    expect(struct.writeWithSchema(schema, w)).toBe(true);
+    const read = new VmDynamicStruct();
+    read.readWithSchema(schema, new CarbonBinaryReader(w.toUint8Array()));
+
+    const readRoots = read.fields.find((f) => f.name.data === 'roots');
+    const readNote = read.fields.find((f) => f.name.data === 'note');
+    expect((readRoots?.value.data as Bytes32[]).map((x) => bytesToHex(x.bytes))).toEqual(roots);
+    expect(readNote?.value.data).toBe('after the array');
   });
 });

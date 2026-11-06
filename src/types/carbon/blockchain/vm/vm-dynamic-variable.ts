@@ -373,13 +373,13 @@ export class VmDynamicVariable implements CarbonBlobLike {
         w.writeArrayBigInt(v.data as bigint[]);
         return true;
       case VmType.Array | VmType.Bytes16:
-        (v.data as Bytes16).write(w);
+        w.writeArrayBlob(v.data as Bytes16[]);
         return true;
       case VmType.Array | VmType.Bytes32:
-        (v.data as Bytes32).write(w);
+        w.writeArrayBlob(v.data as Bytes32[]);
         return true;
       case VmType.Array | VmType.Bytes64:
-        (v.data as Bytes64).write(w);
+        w.writeArrayBlob(v.data as Bytes64[]);
         return true;
       case VmType.Array | VmType.String:
         w.writeArraySz(v.data as string[]);
