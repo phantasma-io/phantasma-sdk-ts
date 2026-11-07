@@ -236,7 +236,11 @@ export {
   seriesDefaultMetadataFields,
   standardMetadataFields,
 } from './types/carbon/index.js';
-export type { MetadataValueInput, TokenMetadataOptions } from './types/carbon/index.js';
+export type {
+  MetadataDynamicValue,
+  MetadataValueInput,
+  TokenMetadataOptions,
+} from './types/carbon/index.js';
 
 export {
   ANONYMOUS_NAME,

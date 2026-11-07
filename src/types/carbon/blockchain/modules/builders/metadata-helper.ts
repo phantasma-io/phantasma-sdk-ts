@@ -4,11 +4,14 @@ import { Bytes32 } from '../../../bytes32.js';
 import { Bytes64 } from '../../../bytes64.js';
 import {
   VmDynamicStruct,
+  VmDynamicVariable,
+  type VmDynamicVariableData,
   VmNamedDynamicVariable,
   VmNamedVariableSchema,
   VmStructArray,
   VmStructSchema,
   VmType,
+  vmTypeFromString,
   VmVariableSchema,
 } from '../../vm/index.js';
 import { StandardMeta } from '../standard-meta.js';
@@ -97,7 +100,21 @@ interface MetadataStructRecord {
 }
 type MetadataValueArray = MetadataValueInput[];
 type MetadataStructInput = MetadataField[] | MetadataStructRecord;
-export type MetadataValueInput = MetadataPlainValue | MetadataStructInput | MetadataValueArray;
+/**
+ * The value of a Dynamic field, or of one item of an Array_Dynamic field. Such a field can hold a value
+ * of any VM type, and the chain stores the type with the value, so the type is named here. `type` is a
+ * name of `VmType`, such as "Int64", or a `VmType`. `value` is given as for a field of that type. The
+ * type cannot be Dynamic, Array_Dynamic, Struct or Array_Struct.
+ */
+export interface MetadataDynamicValue {
+  type: VmType | string;
+  value: MetadataValueInput;
+}
+export type MetadataValueInput =
+  | MetadataPlainValue
+  | MetadataStructInput
+  | MetadataValueArray
+  | MetadataDynamicValue;
 type MetadataNormalizedValue =
   | string
   | number
@@ -108,13 +125,15 @@ type MetadataNormalizedValue =
   | Bytes64
   | VmDynamicStruct
   | VmStructArray
+  | VmDynamicVariable
   | string[]
   | number[]
   | bigint[]
   | Uint8Array[]
   | Bytes16[]
   | Bytes32[]
-  | Bytes64[];
+  | Bytes64[]
+  | VmDynamicVariable[];
 
 function normalizeMetadataValue(
   schema: VmVariableSchema,
@@ -172,6 +191,8 @@ function normalizeScalarValue(
       return ensureBytes64(fieldName, value);
     case VmType.Struct:
       return normalizeStructValue(fieldName, structSchema, value as MetadataStructInput);
+    case VmType.Dynamic:
+      return normalizeDynamicValue(fieldName, value);
     default:
       throw Error(`Metadata field '${fieldName}' has unsupported type '${VmType[type] ?? type}'`);
   }
@@ -229,6 +250,8 @@ function normalizeArrayValue(
       );
       return sa;
     }
+    case VmType.Dynamic:
+      return values.map((val, idx) => normalizeDynamicValue(elementPath(idx), val));
     default:
       throw Error(
         `Metadata field '${fieldName}' with type '${VmType[type] ?? type}' does not support array values`
@@ -283,6 +306,63 @@ function normalizeStructValue(
   }
 
   return struct;
+}
+
+// A Dynamic value is written with its own type and without a schema. The form { type, value } names
+// one type, so it cannot give the types of the fields of a Struct or Array_Struct. It takes no Dynamic
+// or Array_Dynamic value either, because no use is known for typed values nested in a typed value. So
+// a Dynamic value holds a scalar or an array of scalars.
+const DYNAMIC_VALUE_REFUSED_TYPES = new Set<VmType>([
+  VmType.Dynamic,
+  VmType.Array_Dynamic,
+  VmType.Struct,
+  VmType.Array_Struct,
+]);
+
+/** Returns the variable a Dynamic field stores: the given value, normalized for its given type. */
+function normalizeDynamicValue(fieldName: string, value: MetadataValueInput): VmDynamicVariable {
+  if (!isDynamicValue(value)) {
+    throw Error(`Metadata field '${fieldName}' is Dynamic and must be given as { type, value }`);
+  }
+  const type = dynamicValueType(fieldName, value.type);
+  const variable = VmDynamicVariable.fromType(type);
+  variable.data = normalizeMetadataValue(
+    new VmVariableSchema(type),
+    fieldName,
+    value.value
+  ) as VmDynamicVariableData;
+  return variable;
+}
+
+/** Returns true if the value is an object with exactly the properties `type` and `value`. */
+function isDynamicValue(value: MetadataValueInput): value is MetadataDynamicValue {
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) return false;
+  if (value instanceof Uint8Array) return false;
+  const keys = Object.keys(value);
+  return keys.length === 2 && keys.includes('type') && keys.includes('value');
+}
+
+/** Returns the `VmType` that a Dynamic value names, by its name or as a `VmType`. */
+function dynamicValueType(fieldName: string, type: VmType | string): VmType {
+  let vmType: VmType | undefined;
+  if (typeof type === 'string') {
+    try {
+      vmType = vmTypeFromString(type);
+    } catch {
+      vmType = undefined;
+    }
+  } else if (typeof type === 'number' && VmType[type] !== undefined) {
+    vmType = type;
+  }
+  if (vmType === undefined) {
+    throw Error(`Metadata field '${fieldName}' names an unknown type '${String(type)}'`);
+  }
+  if (DYNAMIC_VALUE_REFUSED_TYPES.has(vmType)) {
+    throw Error(
+      `Metadata field '${fieldName}' cannot hold a Dynamic value of type ${VmType[vmType]}`
+    );
+  }
+  return vmType;
 }
 
 function metadataStructInputToFields(

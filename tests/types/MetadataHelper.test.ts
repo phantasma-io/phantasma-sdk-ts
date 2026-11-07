@@ -4,6 +4,7 @@ import { Bytes16 } from '../../src/core/types/Carbon/Bytes16';
 import { Bytes32 } from '../../src/core/types/Carbon/Bytes32';
 import {
   VmDynamicStruct,
+  VmDynamicVariable,
   VmNamedVariableSchema,
   VmStructSchema,
   VmType,
@@ -392,5 +393,106 @@ describe('MetadataHelper.pushMetadataField', () => {
     const readNote = read.fields.find((f) => f.name.data === 'note');
     expect((readRoots?.value.data as Bytes32[]).map((x) => bytesToHex(x.bytes))).toEqual(roots);
     expect(readNote?.value.data).toBe('after the array');
+  });
+});
+
+// A Dynamic field can hold a value of any VM type, and the chain stores the type with the value. So
+// the value names its type: { type, value }, the value given as for a field of that type.
+describe('MetadataHelper.pushMetadataField for Dynamic fields', () => {
+  const dynamicField = new VmNamedVariableSchema('extra', VmType.Dynamic);
+  const dynamicArrayField = new VmNamedVariableSchema(
+    'extras',
+    new VmVariableSchema(VmType.Array_Dynamic)
+  );
+
+  it('stores a typed value inside the Dynamic field', () => {
+    const struct = new VmDynamicStruct();
+    const metadata: MetadataField[] = [
+      { name: 'extra', value: { type: 'Int64', value: '9007199254740993' } },
+    ];
+
+    pushMetadataField(dynamicField, struct, metadata);
+
+    expect(struct.fields[0].value.type).toBe(VmType.Dynamic);
+    const inner = struct.fields[0].value.data as VmDynamicVariable;
+    expect(inner.type).toBe(VmType.Int64);
+    expect(inner.data).toBe(9007199254740993n);
+  });
+
+  it('takes the type as a VmType as well as by its name', () => {
+    const struct = new VmDynamicStruct();
+    const metadata: MetadataField[] = [
+      { name: 'extra', value: { type: VmType.Array_String, value: ['a', 'b'] } },
+    ];
+
+    pushMetadataField(dynamicField, struct, metadata);
+
+    const inner = struct.fields[0].value.data as VmDynamicVariable;
+    expect(inner.type).toBe(VmType.Array_String);
+    expect(inner.data).toEqual(['a', 'b']);
+  });
+
+  it('stores an array of typed values inside an Array_Dynamic field', () => {
+    const struct = new VmDynamicStruct();
+    const root = '00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff';
+    const metadata: MetadataField[] = [
+      {
+        name: 'extras',
+        value: [
+          { type: 'Int32', value: 5 },
+          { type: 'Bytes32', value: root },
+        ],
+      },
+    ];
+
+    pushMetadataField(dynamicArrayField, struct, metadata);
+
+    const items = struct.fields[0].value.data as VmDynamicVariable[];
+    expect(items.map((item) => item.type)).toEqual([VmType.Int32, VmType.Bytes32]);
+    expect(items[0].data).toBe(5);
+    expect(bytesToHex((items[1].data as Bytes32).bytes)).toBe(root);
+  });
+
+  it('refuses a value without its type', () => {
+    const struct = new VmDynamicStruct();
+    const metadata: MetadataField[] = [{ name: 'extra', value: 'text' }];
+
+    expect(() => pushMetadataField(dynamicField, struct, metadata)).toThrow(
+      "Metadata field 'extra' is Dynamic and must be given as { type, value }"
+    );
+  });
+
+  it('refuses a type that is not a VM type', () => {
+    const struct = new VmDynamicStruct();
+    const metadata: MetadataField[] = [{ name: 'extra', value: { type: 'Float', value: 1 } }];
+
+    expect(() => pushMetadataField(dynamicField, struct, metadata)).toThrow(
+      "Metadata field 'extra' names an unknown type 'Float'"
+    );
+  });
+
+  // A typed value names one type, so it cannot give the types of the fields of a struct. It takes no
+  // typed values inside a typed value either.
+  it.each(['Struct', 'Array_Struct', 'Dynamic', 'Array_Dynamic'])(
+    'refuses a Dynamic value of type %s',
+    (type) => {
+      const struct = new VmDynamicStruct();
+      const metadata: MetadataField[] = [{ name: 'extra', value: { type, value: {} } }];
+
+      expect(() => pushMetadataField(dynamicField, struct, metadata)).toThrow(
+        "Metadata field 'extra' cannot hold a Dynamic value of type"
+      );
+    }
+  );
+
+  it('checks each item of an Array_Dynamic field against its own type', () => {
+    const struct = new VmDynamicStruct();
+    const metadata: MetadataField[] = [
+      { name: 'extras', value: [{ type: 'Bytes32', value: '0011' }] },
+    ];
+
+    expect(() => pushMetadataField(dynamicArrayField, struct, metadata)).toThrow(
+      "Metadata field 'extras[0]' must be exactly 32 bytes"
+    );
   });
 });

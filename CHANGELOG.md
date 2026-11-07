@@ -11,6 +11,10 @@
 - An Int64 or Int256 metadata value can be a string of decimal digits, such as `"-12"` or
   `"9007199254740993"`. JSON has no bigint, and a JSON number above 2^53 - 1 loses digits when it is
   read, so a value read from JSON can now hold the whole range.
+- A Dynamic metadata field takes `{ type, value }` (`MetadataDynamicValue`). `type` is a `VmType` or
+  its name, such as `"Int64"`. `value` is given as for a field of that type. An Array_Dynamic field
+  takes an array of such values. The type cannot be Dynamic, Array_Dynamic, Struct or Array_Struct.
+  Before, the builders refused every value of such a field.
 
 ### Fixes
 

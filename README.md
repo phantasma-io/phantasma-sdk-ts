@@ -250,7 +250,13 @@ The builders of NFT data and series metadata (`PhantasmaNftRomBuilder`, `NftRomB
 | `Bytes`                         | a `Uint8Array` or a hex string                                               |
 | `Bytes16`, `Bytes32`, `Bytes64` | the same, of exactly 16, 32 or 64 bytes                                      |
 | `Struct`                        | an object with a value for every field of the struct, or a `MetadataField[]` |
+| `Dynamic`                       | `{ type, value }`: a type, by name or as a `VmType`, and the value           |
 | `Array_...`                     | an array of values of the item type                                          |
+
+The chain stores a value of any type in a `Dynamic` field, together with that type. The SDK takes
+such a value as `{ type, value }`, and `value` is given as for a field of that `type`. The `type`
+cannot be `Dynamic`, `Array_Dynamic`, `Struct` or `Array_Struct`. An `Array_Dynamic` field takes an
+array of such values.
 
 ## Changing Token Metadata
 

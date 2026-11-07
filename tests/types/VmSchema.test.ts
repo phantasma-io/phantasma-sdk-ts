@@ -7,6 +7,7 @@ import { TokenSchemasBuilder } from '../../src/types/carbon/blockchain/modules/b
 import { TokenSchemas } from '../../src/types/carbon/blockchain/modules/token-schemas';
 import {
   VmDynamicStruct,
+  VmDynamicVariable,
   VmNamedVariableSchema,
   VmStructArray,
   VmStructSchema,
@@ -126,5 +127,60 @@ describe('a struct written by its schema', () => {
     const items = read.getValue(new SmallString('items'))?.data as VmStructArray;
     expect(items.structs.map((s) => s.getValue(new SmallString('id'))?.data)).toEqual([1n, 2n]);
     expect(read.getValue(new SmallString('note'))?.data).toBe('after the structs');
+  });
+});
+
+// A Dynamic field is written as its value's type byte and then the value. An Array_Dynamic field is a
+// count and then each item in the same way.
+describe('a struct with Dynamic fields written by its schema', () => {
+  const fields = [
+    new VmNamedVariableSchema('extra', VmType.Dynamic),
+    new VmNamedVariableSchema('extras', new VmVariableSchema(VmType.Array_Dynamic)),
+    new VmNamedVariableSchema('note', VmType.String),
+  ];
+  const schema = new VmStructSchema(fields);
+  const metadata: MetadataField[] = [
+    { name: 'extra', value: { type: 'Int64', value: '9007199254740993' } },
+    {
+      name: 'extras',
+      value: [
+        { type: 'String', value: 'a' },
+        { type: 'Int32', value: 7 },
+      ],
+    },
+    { name: 'note', value: 'after the dynamic values' },
+  ];
+
+  it('writes each value with its type, as the chain reads it, and reads it back', () => {
+    const struct = new VmDynamicStruct();
+    for (const f of fields) pushMetadataField(f, struct, metadata);
+    const w = new CarbonBinaryWriter();
+    expect(struct.writeWithSchema(schema, w)).toBe(true);
+    expect(bytesToHex(w.toUint8Array())).toBe(
+      bytesToHex(
+        concat(
+          new Uint8Array([VmType.Int64]),
+          i64(9007199254740993n),
+          u32(2),
+          new Uint8Array([VmType.String]),
+          sz('a'),
+          new Uint8Array([VmType.Int32]),
+          i32(7),
+          sz('after the dynamic values')
+        )
+      )
+    );
+
+    const read = new VmDynamicStruct();
+    read.readWithSchema(schema, new CarbonBinaryReader(w.toUint8Array()));
+
+    const extra = read.getValue(new SmallString('extra'))?.data as VmDynamicVariable;
+    expect([extra.type, extra.data]).toEqual([VmType.Int64, 9007199254740993n]);
+    const extras = read.getValue(new SmallString('extras'))?.data as VmDynamicVariable[];
+    expect(extras.map((item) => [item.type, item.data])).toEqual([
+      [VmType.String, 'a'],
+      [VmType.Int32, 7],
+    ]);
+    expect(read.getValue(new SmallString('note'))?.data).toBe('after the dynamic values');
   });
 });
