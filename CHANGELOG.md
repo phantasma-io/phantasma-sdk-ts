@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.20.3
+
+### Fixes
+
+- A schema field of type Dynamic can be written. `VmVariableSchema` and `VmNamedVariableSchema` took
+  the type `VmType.Dynamic`, which is 0, for a missing type. Such token schemas could not be
+  serialized, also when `TokenSchemasBuilder.fromJson` built them.
+
 ## 0.20.2
 
 ### Fixes

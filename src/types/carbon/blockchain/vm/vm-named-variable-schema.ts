@@ -4,6 +4,7 @@ import { SmallString } from '../../small-string.js';
 import { VmType } from './vm-type.js';
 import { VmVariableSchema } from './vm-variable-schema.js';
 
+/** The schema of one named field of a struct. */
 export class VmNamedVariableSchema implements CarbonBlobLike {
   name!: SmallString;
   schema!: VmVariableSchema;
@@ -16,7 +17,8 @@ export class VmNamedVariableSchema implements CarbonBlobLike {
         this.name = new SmallString(name);
       }
     }
-    if (schema) {
+    // VmType.Dynamic is 0, so a test for a truthy schema would drop a Dynamic field.
+    if (schema !== undefined) {
       if (schema instanceof VmVariableSchema) {
         this.schema = schema;
       } else {

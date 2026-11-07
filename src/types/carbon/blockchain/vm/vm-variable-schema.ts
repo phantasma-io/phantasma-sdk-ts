@@ -3,12 +3,14 @@ import { CarbonBinaryReader, CarbonBinaryWriter } from '../../../carbon-serializ
 import { VmType } from './vm-type.js';
 import { VmStructSchema } from './vm-struct-schema.js';
 
+/** The schema of one value: its VM type and, for a Struct or Array_Struct, the schema of the struct. */
 export class VmVariableSchema implements CarbonBlobLike {
   type!: VmType;
   structure!: VmStructSchema;
 
   constructor(type?: VmType, structure?: VmStructSchema) {
-    if (type) this.type = type;
+    // VmType.Dynamic is 0, so a test for a truthy type would drop it.
+    if (type !== undefined) this.type = type;
     if (structure) this.structure = structure;
   }
 
