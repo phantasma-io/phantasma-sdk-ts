@@ -25,9 +25,12 @@ export class MetadataField {
   value: MetadataValueInput = '';
 }
 
+/** A field of a token schema as `TokenSchemasBuilder.fromJson` reads it: its name and its VM type. */
 export class FieldType {
   name = '';
   type = VmType.Dynamic;
+  /** The fields of a Struct field, or of each struct of an Array_Struct field. Other types have none. */
+  fields?: FieldType[];
 }
 
 export const seriesDefaultMetadataFields: readonly FieldType[] = [

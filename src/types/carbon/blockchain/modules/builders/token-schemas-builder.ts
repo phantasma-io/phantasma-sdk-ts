@@ -3,6 +3,7 @@ import { CarbonBinaryWriter } from '../../../../carbon-serialization.js';
 import { VmNamedVariableSchema } from '../../vm/vm-named-variable-schema.js';
 import { VmStructSchema } from '../../vm/vm-struct-schema.js';
 import { vmTypeFromString, VmType } from '../../vm/vm-type.js';
+import { VmVariableSchema } from '../../vm/vm-variable-schema.js';
 import { TokenSchemas } from '../token-schemas.js';
 import {
   FieldType,
@@ -18,19 +19,18 @@ export class TokenSchemasJson {
   ram: FieldType[] = [];
 }
 
+/**
+ * Reads token schemas from JSON: three arrays of fields, `seriesMetadata`, `rom` and `ram`. A field is
+ * `{ "name", "type" }`, and a Struct or Array_Struct field also has `fields`, the fields of its struct
+ * in the same form.
+ */
 export function parseTokenSchemasJson(json: string): TokenSchemasJson {
   const raw = JSON.parse(json) as Record<string, unknown>;
 
   const pickArray = (k: 'seriesMetadata' | 'rom' | 'ram') => {
     const arr = raw[k];
     if (!Array.isArray(arr)) throw new Error(`${k} must be an array`);
-    return arr.map((it: unknown): FieldType => {
-      if (!it || typeof it !== 'object') throw new Error(`${k} field must be an object`);
-      const field = it as Record<string, unknown>;
-      if (typeof field.name !== 'string') throw new Error(`${k} field name must be string`);
-      if (typeof field.type !== 'string') throw new Error(`${k} field type must be string`);
-      return { name: field.name, type: vmTypeFromString(field.type) };
-    });
+    return arr.map((it: unknown) => parseFieldType(it, k));
   };
 
   return {
@@ -38,6 +38,45 @@ export function parseTokenSchemasJson(json: string): TokenSchemasJson {
     rom: pickArray('rom'),
     ram: pickArray('ram'),
   };
+}
+
+/** Reads one field of a token schema; `path` names the list it stands in, for the error messages. */
+function parseFieldType(it: unknown, path: string): FieldType {
+  if (!it || typeof it !== 'object') throw new Error(`${path} field must be an object`);
+  const field = it as Record<string, unknown>;
+  if (typeof field.name !== 'string') throw new Error(`${path} field name must be string`);
+  if (typeof field.type !== 'string') throw new Error(`${path} field type must be string`);
+  const type = vmTypeFromString(field.type);
+  const fieldPath = `${path}.${field.name}`;
+  const typeName = VmType[type];
+
+  // The chain keeps the schema of a struct inside the schema of a Struct or Array_Struct field, and
+  // writes the field's values by it. So such a field cannot be built without its fields.
+  if (type !== VmType.Struct && type !== VmType.Array_Struct) {
+    if (field.fields !== undefined) {
+      throw new Error(`${fieldPath} has the type ${typeName} and cannot have fields`);
+    }
+    return { name: field.name, type };
+  }
+  if (!Array.isArray(field.fields)) {
+    throw new Error(`${fieldPath} has the type ${typeName} and needs a fields array`);
+  }
+  if (field.fields.length === 0) {
+    throw new Error(`${fieldPath} has the type ${typeName} and needs at least one field`);
+  }
+  return {
+    name: field.name,
+    type,
+    fields: field.fields.map((child: unknown) => parseFieldType(child, fieldPath)),
+  };
+}
+
+/** Returns the schema of one field. A Struct or Array_Struct field gets the schema of its struct. */
+function namedSchemaFromFieldType(f: FieldType): VmNamedVariableSchema {
+  const structure = f.fields
+    ? new VmStructSchema(f.fields.map((child) => namedSchemaFromFieldType(child)))
+    : undefined;
+  return new VmNamedVariableSchema(f.name, new VmVariableSchema(f.type, structure));
 }
 
 export class TokenSchemasBuilder {
@@ -140,7 +179,7 @@ export class TokenSchemasBuilder {
       });
 
       fieldTypes.forEach((f) => {
-        schema.fields.push(new VmNamedVariableSchema(f.name, f.type));
+        schema.fields.push(namedSchemaFromFieldType(f));
       });
     }
 
@@ -158,7 +197,7 @@ export class TokenSchemasBuilder {
       });
 
       fieldTypes.forEach((f) => {
-        schema.fields.push(new VmNamedVariableSchema(f.name, f.type));
+        schema.fields.push(namedSchemaFromFieldType(f));
       });
     }
 
@@ -175,7 +214,7 @@ export class TokenSchemasBuilder {
     schema.fields = [];
     {
       fieldTypes.forEach((f) => {
-        schema.fields.push(new VmNamedVariableSchema(f.name, f.type));
+        schema.fields.push(namedSchemaFromFieldType(f));
       });
     }
 

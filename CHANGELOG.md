@@ -2,6 +2,13 @@
 
 ## 0.20.3
 
+### New
+
+- `TokenSchemasBuilder.fromJson` reads the fields of a `Struct` or `Array_Struct` field:
+  `{ "name": "stats", "type": "Struct", "fields": [...] }` (README, "NFT Token Schemas and Metadata
+  Values"). A Struct or Array_Struct field without `fields`, or with an empty list, is refused. So is
+  `fields` on a field of any other type. `FieldType` gets an optional `fields`.
+
 ### Fixes
 
 - A schema field of type Dynamic can be written. `VmVariableSchema` and `VmNamedVariableSchema` took

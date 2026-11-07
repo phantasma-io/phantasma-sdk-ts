@@ -203,6 +203,55 @@ the gas and data tokens are free, so for those tokens `recipientHoldsToken` chan
 - `parseUnits` and `formatUnits` convert between decimal amounts and atoms. KCAL has 10 decimals
   and SOUL has 8. `summarizeFeePlan` renders a plan in KCAL and SOUL for display.
 
+## NFT Token Schemas and Metadata Values
+
+An NFT token is created with three schemas: `seriesMetadata` (the data a series shares), `rom` (the
+data an NFT gets at its mint and keeps) and `ram` (the data of an NFT that can change). The schemas of
+a token cannot change after it is created. `TokenSchemasBuilder.fromJson` builds them from JSON. A
+field is `{ "name": ..., "type": ... }`, and the type is a name of `VmType`, such as `String`, `Int32`,
+`Bytes32` or `Array_Int64`. A `Struct` or `Array_Struct` field also lists the fields of its struct, in
+the same form:
+
+```json
+{
+  "seriesMetadata": [],
+  "rom": [
+    { "name": "name", "type": "String" },
+    { "name": "description", "type": "String" },
+    { "name": "imageURL", "type": "String" },
+    { "name": "infoURL", "type": "String" },
+    { "name": "royalties", "type": "Int32" },
+    {
+      "name": "stats",
+      "type": "Struct",
+      "fields": [
+        { "name": "level", "type": "Int32" },
+        { "name": "class", "type": "String" }
+      ]
+    }
+  ],
+  "ram": []
+}
+```
+
+The SDK adds its own fields: `_i` and `rom` to the `rom` schema, and `_i`, `mode` and `rom` to the
+`seriesMetadata` schema. The fields `name`, `description`, `imageURL`, `infoURL` and `royalties` must
+be in `rom` or in `seriesMetadata`.
+
+The builders of NFT data and series metadata (`PhantasmaNftRomBuilder`, `NftRomBuilder`,
+`TokenSeriesMetadataBuilder`, `SeriesInfoBuilder` and `pushMetadataField`) take each value as
+`MetadataField.value` and check it against the field's type:
+
+| Type                            | Value                                                                        |
+| ------------------------------- | ---------------------------------------------------------------------------- |
+| `String`                        | a string that is not blank                                                   |
+| `Int8`, `Int16`, `Int32`        | an integer number                                                            |
+| `Int64`, `Int256`               | a bigint or a safe integer number                                            |
+| `Bytes`                         | a `Uint8Array` or a hex string                                               |
+| `Bytes16`, `Bytes32`, `Bytes64` | the same, of exactly 16, 32 or 64 bytes                                      |
+| `Struct`                        | an object with a value for every field of the struct, or a `MetadataField[]` |
+| `Array_...`                     | an array of values of the item type                                          |
+
 ## Changing Token Metadata
 
 `UpdateTokenMetadataTxHelper` builds `Token.UpdateTokenMetadata`, signed by the token owner. The chain
