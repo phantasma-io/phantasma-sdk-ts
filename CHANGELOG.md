@@ -11,6 +11,10 @@
   schema, as the chain does. `VmDynamicStruct.readWithSchema` reads each field through it. Before, such
   a field was read as if it carried its own field names and types, so NFT data or series metadata with
   a struct field did not read back.
+- `vmStructSchemaFromRpcResult` keeps the struct flags and the schema of a Struct or Array_Struct field,
+  which the RPC returns with a token's schemas. It dropped both. NFT data or series metadata built by
+  such a schema could not hold a struct field. Such data also lacked the list of extra fields at the
+  end of a struct with dynamic extras.
 
 ## 0.20.2
 
