@@ -7,6 +7,10 @@
 - A schema field of type Dynamic can be written. `VmVariableSchema` and `VmNamedVariableSchema` took
   the type `VmType.Dynamic`, which is 0, for a missing type. Such token schemas could not be
   serialized, also when `TokenSchemasBuilder.fromJson` built them.
+- `VmDynamicVariable.readWithSchema` reads a Struct or Array_Struct field by that field's own struct
+  schema, as the chain does. `VmDynamicStruct.readWithSchema` reads each field through it. Before, such
+  a field was read as if it carried its own field names and types, so NFT data or series metadata with
+  a struct field did not read back.
 
 ## 0.20.2
 

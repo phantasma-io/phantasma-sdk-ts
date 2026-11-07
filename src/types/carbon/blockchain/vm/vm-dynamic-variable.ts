@@ -130,7 +130,9 @@ export class VmDynamicVariable implements CarbonBlobLike {
   }
   readWithSchema(schema: VmVariableSchema, r: CarbonBinaryReader): void {
     this.type = schema.type;
-    VmDynamicVariable.readStatic(schema.type, this, null, r);
+    // writeWithSchema writes a Struct or Array_Struct field by the struct's own schema, without field
+    // names or types, and the chain reads it that way. So the struct's schema is passed on here too.
+    VmDynamicVariable.readStatic(schema.type, this, schema.structure ?? null, r);
   }
 
   static readStatic(
