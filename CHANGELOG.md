@@ -8,6 +8,9 @@
   `{ "name": "stats", "type": "Struct", "fields": [...] }` (README, "NFT Token Schemas and Metadata
   Values"). A Struct or Array_Struct field without `fields`, or with an empty list, is refused. So is
   `fields` on a field of any other type. `FieldType` gets an optional `fields`.
+- An Int64 or Int256 metadata value can be a string of decimal digits, such as `"-12"` or
+  `"9007199254740993"`. JSON has no bigint, and a JSON number above 2^53 - 1 loses digits when it is
+  read, so a value read from JSON can now hold the whole range.
 
 ### Fixes
 

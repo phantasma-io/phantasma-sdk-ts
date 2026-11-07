@@ -98,14 +98,70 @@ describe('MetadataHelper.pushMetadataField', () => {
     );
   });
 
-  it('requires bigint for unsafe Int64 values', () => {
+  it('requires a bigint or a digit string for unsafe Int64 values', () => {
     const struct = new VmDynamicStruct();
     const schema = new VmNamedVariableSchema('supply', VmType.Int64);
     const unsafeNumber = Number.MAX_SAFE_INTEGER + 1;
     const metadata: MetadataField[] = [{ name: 'supply', value: unsafeNumber }];
 
     expect(() => pushMetadataField(schema, struct, metadata)).toThrow(
-      "Metadata field 'supply' must be provided as a bigint when it exceeds safe integer range"
+      "Metadata field 'supply' must be given as a bigint or a string of decimal digits when it exceeds the safe integer range"
+    );
+  });
+
+  // JSON has no bigint, and a JSON number above 2^53 - 1 loses digits when it is read. So a caller
+  // that reads JSON gives such an Int64 or Int256 value as a string of decimal digits.
+  it('accepts a string of decimal digits for Int64 above the safe integer range', () => {
+    const struct = new VmDynamicStruct();
+    const schema = new VmNamedVariableSchema('supply', VmType.Int64);
+    const metadata: MetadataField[] = [{ name: 'supply', value: '9007199254740993' }];
+
+    pushMetadataField(schema, struct, metadata);
+
+    expect(struct.fields[0].value.data).toBe(9007199254740993n);
+  });
+
+  it('accepts a negative string of decimal digits for Int256', () => {
+    const struct = new VmDynamicStruct();
+    const schema = new VmNamedVariableSchema('delta', VmType.Int256);
+    const metadata: MetadataField[] = [{ name: 'delta', value: '-123' }];
+
+    pushMetadataField(schema, struct, metadata);
+
+    expect(struct.fields[0].value.data).toBe(-123n);
+  });
+
+  it('accepts strings of decimal digits for the items of an Array_Int256', () => {
+    const struct = new VmDynamicStruct();
+    const schema = new VmNamedVariableSchema(
+      'ids',
+      new VmVariableSchema(VmType.Array | VmType.Int256)
+    );
+    const uint256Max = (1n << 256n) - 1n;
+    const metadata: MetadataField[] = [{ name: 'ids', value: ['1', uint256Max.toString()] }];
+
+    pushMetadataField(schema, struct, metadata);
+
+    expect(struct.fields[0].value.data).toEqual([1n, uint256Max]);
+  });
+
+  it('refuses a hex string for Int64', () => {
+    const struct = new VmDynamicStruct();
+    const schema = new VmNamedVariableSchema('supply', VmType.Int64);
+    const metadata: MetadataField[] = [{ name: 'supply', value: '0x10' }];
+
+    expect(() => pushMetadataField(schema, struct, metadata)).toThrow(
+      "Metadata field 'supply' must be a bigint, a safe integer number or a string of decimal digits"
+    );
+  });
+
+  it('refuses a string of decimal digits outside the Int64 range', () => {
+    const struct = new VmDynamicStruct();
+    const schema = new VmNamedVariableSchema('supply', VmType.Int64);
+    const metadata: MetadataField[] = [{ name: 'supply', value: (1n << 64n).toString() }];
+
+    expect(() => pushMetadataField(schema, struct, metadata)).toThrow(
+      "Metadata field 'supply' must be between -9223372036854775808 and 9223372036854775807 or between 0 and 18446744073709551615 (Int64)"
     );
   });
 

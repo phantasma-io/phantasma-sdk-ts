@@ -19,6 +19,9 @@ const UINT64_MAX = (1n << 64n) - 1n;
 const INT256_MIN = -(1n << 255n);
 const INT256_MAX = (1n << 255n) - 1n;
 const UINT256_MAX = (1n << 256n) - 1n;
+// Decimal digits with an optional minus sign. Hex and other number forms are refused for integer
+// metadata.
+const DECIMAL_INTEGER = /^-?[0-9]+$/;
 
 export class MetadataField {
   name = '';
@@ -336,6 +339,11 @@ function ensureIntegerInRange(
   return value;
 }
 
+/**
+ * Returns an Int64 or Int256 metadata value as a bigint, in its signed or unsigned range. The value is
+ * a bigint, a safe integer number or a string of decimal digits. The string form is for callers that
+ * read JSON, where a number above 2^53 - 1 has already lost digits.
+ */
 function ensureBigInt(
   fieldName: string,
   value: MetadataValueInput,
@@ -350,12 +358,16 @@ function ensureBigInt(
   } else if (typeof value === 'number' && Number.isInteger(value)) {
     if (!Number.isSafeInteger(value)) {
       throw Error(
-        `Metadata field '${fieldName}' must be provided as a bigint when it exceeds safe integer range`
+        `Metadata field '${fieldName}' must be given as a bigint or a string of decimal digits when it exceeds the safe integer range`
       );
     }
     bigintValue = BigInt(value);
+  } else if (typeof value === 'string' && DECIMAL_INTEGER.test(value)) {
+    bigintValue = BigInt(value);
   } else {
-    throw Error(`Metadata field '${fieldName}' must be a bigint or a safe integer number`);
+    throw Error(
+      `Metadata field '${fieldName}' must be a bigint, a safe integer number or a string of decimal digits`
+    );
   }
 
   const hasSignedRange = min !== undefined && max !== undefined;

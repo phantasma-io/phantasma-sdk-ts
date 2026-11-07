@@ -246,7 +246,7 @@ The builders of NFT data and series metadata (`PhantasmaNftRomBuilder`, `NftRomB
 | ------------------------------- | ---------------------------------------------------------------------------- |
 | `String`                        | a string that is not blank                                                   |
 | `Int8`, `Int16`, `Int32`        | an integer number                                                            |
-| `Int64`, `Int256`               | a bigint or a safe integer number                                            |
+| `Int64`, `Int256`               | a bigint, a safe integer number, or a string of decimal digits               |
 | `Bytes`                         | a `Uint8Array` or a hex string                                               |
 | `Bytes16`, `Bytes32`, `Bytes64` | the same, of exactly 16, 32 or 64 bytes                                      |
 | `Struct`                        | an object with a value for every field of the struct, or a `MetadataField[]` |
